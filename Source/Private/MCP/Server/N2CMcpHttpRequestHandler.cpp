@@ -5,6 +5,7 @@
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "Interfaces/IPluginManager.h"
 
 bool FN2CMcpHttpRequestHandler::ProcessMcpRequest(const FString& RequestBody, FString& OutResponseBody, int32& OutStatusCode)
 {
@@ -46,6 +47,9 @@ bool FN2CMcpHttpRequestHandler::ProcessMcpRequest(const FString& RequestBody, FS
 		
 		// Determine message type
 		FJsonRpcUtils::EJsonRpcMessageType MessageType = FJsonRpcUtils::GetMessageType(RequestObject);
+		
+		// Log the message type for debugging
+		FN2CLogger::Get().Log(FString::Printf(TEXT("Message type detected: %d"), (int32)MessageType), EN2CLogSeverity::Debug);
 		
 		if (MessageType == FJsonRpcUtils::EJsonRpcMessageType::Request)
 		{
@@ -136,7 +140,16 @@ bool FN2CMcpHttpRequestHandler::ProcessNotification(const FJsonRpcNotification& 
 {
 	FN2CLogger::Get().Log(FString::Printf(TEXT("Received JSON-RPC notification: %s"), *Notification.Method), EN2CLogSeverity::Info);
 	
-	// For now, just log notifications - specific handlers can be added later
+	// Handle specific notifications
+	if (Notification.Method == TEXT("notifications/initialized"))
+	{
+		FN2CLogger::Get().Log(TEXT("MCP connection fully established - client sent initialized notification"), EN2CLogSeverity::Info);
+		// TODO: Could trigger any post-initialization setup here if needed
+		return true;
+	}
+	
+	// For other notifications, just log them
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Unhandled notification: %s"), *Notification.Method), EN2CLogSeverity::Debug);
 	return true;
 }
 
@@ -145,7 +158,11 @@ bool FN2CMcpHttpRequestHandler::DispatchMethod(const FString& Method, const TSha
 	FN2CLogger::Get().Log(FString::Printf(TEXT("Dispatching JSON-RPC method: %s"), *Method), EN2CLogSeverity::Debug);
 
 	// Handle method calls that expect responses
-	if (Method == TEXT("ping"))
+	if (Method == TEXT("initialize"))
+	{
+		return HandleInitialize(Params, Id, OutResponse);
+	}
+	else if (Method == TEXT("ping"))
 	{
 		// Simple ping response
 		TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
@@ -159,4 +176,112 @@ bool FN2CMcpHttpRequestHandler::DispatchMethod(const FString& Method, const TSha
 		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::MethodNotFound, FString::Printf(TEXT("Method '%s' not found"), *Method));
 		return true;
 	}
+}
+
+bool FN2CMcpHttpRequestHandler::HandleInitialize(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse)
+{
+	FN2CLogger::Get().Log(TEXT("Processing MCP initialize request"), EN2CLogSeverity::Info);
+
+	// Parse InitializeClientRequestParams from the params
+	if (!Params.IsValid() || Params->IsNull())
+	{
+		FN2CLogger::Get().LogWarning(TEXT("Initialize request missing or null params"));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing or null params for initialize"));
+		return true;
+	}
+	
+	if (Params->Type != EJson::Object)
+	{
+		FN2CLogger::Get().LogWarning(TEXT("Initialize request params is not an object"));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Params must be an object for initialize"));
+		return true;
+	}
+
+	TSharedPtr<FJsonObject> ParamsObject = Params->AsObject();
+	
+	// Extract protocol version
+	FString ClientProtocolVersion;
+	if (!ParamsObject->TryGetStringField(TEXT("protocolVersion"), ClientProtocolVersion))
+	{
+		FN2CLogger::Get().LogWarning(TEXT("Initialize request missing protocolVersion"));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing required field: protocolVersion"));
+		return true;
+	}
+
+	// Log client info if provided
+	const TSharedPtr<FJsonObject>* ClientInfo = nullptr;
+	if (ParamsObject->TryGetObjectField(TEXT("clientInfo"), ClientInfo) && ClientInfo->IsValid())
+	{
+		FString ClientName, ClientVersion;
+		(*ClientInfo)->TryGetStringField(TEXT("name"), ClientName);
+		(*ClientInfo)->TryGetStringField(TEXT("version"), ClientVersion);
+		FN2CLogger::Get().Log(FString::Printf(TEXT("MCP Client: %s v%s"), *ClientName, *ClientVersion), EN2CLogSeverity::Info);
+	}
+
+	// Log client capabilities if provided
+	const TSharedPtr<FJsonObject>* ClientCapabilities = nullptr;
+	if (ParamsObject->TryGetObjectField(TEXT("capabilities"), ClientCapabilities) && ClientCapabilities->IsValid())
+	{
+		FN2CLogger::Get().Log(TEXT("Client capabilities received"), EN2CLogSeverity::Debug);
+		// For MVP, we just acknowledge capabilities without specific handling
+	}
+
+	// Protocol version negotiation
+	const FString SupportedProtocolVersion = TEXT("2025-03-26");
+	FString NegotiatedProtocolVersion = SupportedProtocolVersion;
+
+	// Check if we support the client's requested version
+	if (ClientProtocolVersion != SupportedProtocolVersion)
+	{
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Client requested unsupported protocol version: %s. Server supports: %s"), 
+			*ClientProtocolVersion, *SupportedProtocolVersion));
+		
+		// For MVP, we'll be strict about version matching
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, 
+			FString::Printf(TEXT("Unsupported protocol version: %s. Server supports: %s"), 
+				*ClientProtocolVersion, *SupportedProtocolVersion));
+		return true;
+	}
+
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Protocol version negotiated: %s"), *NegotiatedProtocolVersion), EN2CLogSeverity::Info);
+
+	// Build InitializeServerResult
+	TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
+	
+	// Set protocol version
+	Result->SetStringField(TEXT("protocolVersion"), NegotiatedProtocolVersion);
+	
+	// Set server capabilities
+	TSharedPtr<FJsonObject> ServerCapabilities = MakeShareable(new FJsonObject);
+	
+	// Tools capability
+	TSharedPtr<FJsonObject> ToolsCapability = MakeShareable(new FJsonObject);
+	ToolsCapability->SetBoolField(TEXT("listChanged"), true); // We support the tools/list_changed notification
+	ServerCapabilities->SetObjectField(TEXT("tools"), ToolsCapability);
+	
+	// Logging capability (for future use)
+	TSharedPtr<FJsonObject> LoggingCapability = MakeShareable(new FJsonObject);
+	ServerCapabilities->SetObjectField(TEXT("logging"), LoggingCapability);
+	
+	Result->SetObjectField(TEXT("capabilities"), ServerCapabilities);
+	
+	// Set server info
+	TSharedPtr<FJsonObject> ServerInfo = MakeShareable(new FJsonObject);
+	ServerInfo->SetStringField(TEXT("name"), TEXT("NodeToCodeMCPServer"));
+	
+	// Get plugin version dynamically
+	FString PluginVersion = TEXT("Unknown");
+	if (TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("NodeToCode")))
+	{
+		PluginVersion = Plugin->GetDescriptor().VersionName;
+	}
+	ServerInfo->SetStringField(TEXT("version"), PluginVersion);
+	Result->SetObjectField(TEXT("serverInfo"), ServerInfo);
+
+	// Create success response
+	OutResponse = FJsonRpcUtils::CreateSuccessResponse(Id, MakeShareable(new FJsonValueObject(Result)));
+	
+	FN2CLogger::Get().Log(TEXT("MCP connection initialized successfully"), EN2CLogSeverity::Info);
+	
+	return true;
 }

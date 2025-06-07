@@ -1,7 +1,7 @@
 {
     "FileVersion":  1,
     "Version":  2,
-    "VersionName":  "1.2.2",
+    "VersionName":  "1.3",
     "FriendlyName":  "Node to Code",
     "Description":  "Quickly translate any Unreal Engine Blueprint to C++",
     "Category":  "Code Plugins",
