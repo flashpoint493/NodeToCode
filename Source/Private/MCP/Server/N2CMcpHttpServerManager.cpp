@@ -38,18 +38,20 @@ bool FN2CMcpHttpServerManager::StartServer(int32 Port)
 	}
 
 	// Register MCP endpoint handler
-	HttpRouter->BindRoute(FHttpPath(TEXT("/mcp")), EHttpServerRequestVerbs::VERB_POST,
-		[this](const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete) -> bool
-		{
-			return HandleMcpRequest(Request, OnComplete);
-		});
+	FHttpRequestHandler McpHandler;
+	McpHandler.BindLambda([this](const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete) -> bool
+	{
+		return HandleMcpRequest(Request, OnComplete);
+	});
+	HttpRouter->BindRoute(FHttpPath(TEXT("/mcp")), EHttpServerRequestVerbs::VERB_POST, McpHandler);
 
 	// Register health check endpoint
-	HttpRouter->BindRoute(FHttpPath(TEXT("/mcp/health")), EHttpServerRequestVerbs::VERB_GET,
-		[this](const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete) -> bool
-		{
-			return HandleHealthRequest(Request, OnComplete);
-		});
+	FHttpRequestHandler HealthHandler;
+	HealthHandler.BindLambda([this](const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete) -> bool
+	{
+		return HandleHealthRequest(Request, OnComplete);
+	});
+	HttpRouter->BindRoute(FHttpPath(TEXT("/mcp/health")), EHttpServerRequestVerbs::VERB_GET, HealthHandler);
 
 	// Start listening
 	HttpServerModule->StartAllListeners();
@@ -92,7 +94,7 @@ bool FN2CMcpHttpServerManager::HandleMcpRequest(const FHttpServerRequest& Reques
 	FString ResponseBody;
 	int32 StatusCode = 200;
 
-	bool bSuccess = FN2CMcpHttpRequestHandler::ProcessMcpRequest(RequestBody, ResponseBody, StatusCode);
+	FN2CMcpHttpRequestHandler::ProcessMcpRequest(RequestBody, ResponseBody, StatusCode);
 
 	// Create response
 	TUniquePtr<FHttpServerResponse> Response = FHttpServerResponse::Create(ResponseBody, TEXT("application/json"));
