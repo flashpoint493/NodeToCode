@@ -475,6 +475,11 @@ public:
     /** Minimum severity level for logging */
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Node to Code | Logging")
     EN2CLogSeverity MinSeverity = EN2CLogSeverity::Info;
+
+    /** MCP server port (Model Context Protocol HTTP server) */
+    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Node to Code | MCP Server",
+        meta=(DisplayName="Server Port", ClampMin="1024", ClampMax="65535", UIMin="1024", UIMax="65535"))
+    int32 McpServerPort = 27000;
     
     /** Get the API key for the selected provider */
     FString GetActiveApiKey() const;

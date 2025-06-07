@@ -15,6 +15,7 @@
 #include "Models/N2CStyle.h"
 #include "Framework/Notifications/NotificationManager.h"
 #include "Widgets/Notifications/SNotificationList.h"
+#include "MCP/Server/N2CMcpHttpServerManager.h"
 #if WITH_EDITOR
 #include "UnrealEdMisc.h"
 #endif
@@ -88,10 +89,27 @@ void FNodeToCodeModule::StartupModule()
     {
         FN2CLogger::Get().Log(TEXT("Syntax definitions initialized successfully"), EN2CLogSeverity::Debug);
     }
+
+    // Start MCP HTTP server
+    const UN2CSettings* McpSettings = GetDefault<UN2CSettings>();
+    int32 McpPort = McpSettings ? McpSettings->McpServerPort : 27000;
+    
+    if (FN2CMcpHttpServerManager::Get().StartServer(McpPort))
+    {
+        FN2CLogger::Get().Log(TEXT("MCP HTTP server initialized successfully"), EN2CLogSeverity::Info);
+    }
+    else
+    {
+        FN2CLogger::Get().LogError(TEXT("Failed to start MCP HTTP server"), TEXT("NodeToCode"));
+    }
 }
 
 void FNodeToCodeModule::ShutdownModule()
 {
+    // Stop MCP HTTP server
+    FN2CMcpHttpServerManager::Get().StopServer();
+    FN2CLogger::Get().Log(TEXT("MCP HTTP server stopped"), EN2CLogSeverity::Info);
+
     // Unregister menu extensions
     UToolMenus::UnRegisterStartupCallback(this);
     UToolMenus::UnregisterOwner(this);
