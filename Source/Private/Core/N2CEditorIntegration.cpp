@@ -30,6 +30,132 @@ FN2CEditorIntegration& FN2CEditorIntegration::Get()
     return Instance;
 }
 
+void FN2CEditorIntegration::StoreActiveBlueprintEditor(TWeakPtr<FBlueprintEditor> Editor)
+{
+    ActiveBlueprintEditor = Editor;
+}
+
+TSharedPtr<FBlueprintEditor> FN2CEditorIntegration::GetActiveBlueprintEditor() const
+{
+    return ActiveBlueprintEditor.Pin();
+}
+
+UEdGraph* FN2CEditorIntegration::GetFocusedGraphFromActiveEditor() const
+{
+    TSharedPtr<FBlueprintEditor> Editor = GetActiveBlueprintEditor();
+    if (Editor.IsValid())
+    {
+        return Editor->GetFocusedGraph();
+    }
+    return nullptr;
+}
+
+bool FN2CEditorIntegration::CollectNodesFromGraph(UEdGraph* Graph, TArray<UK2Node*>& OutNodes) const
+{
+    if (!Graph)
+    {
+        FN2CLogger::Get().LogError(TEXT("CollectNodesFromGraph: Graph is null"));
+        return false;
+    }
+
+    FN2CNodeCollector& Collector = FN2CNodeCollector::Get();
+    bool bSuccess = Collector.CollectNodesFromGraph(Graph, OutNodes);
+    
+    if (bSuccess)
+    {
+        FN2CLogger::Get().Log(
+            FString::Printf(TEXT("CollectNodesFromGraph: Successfully collected %d nodes"), OutNodes.Num()),
+            EN2CLogSeverity::Info
+        );
+    }
+    else
+    {
+        FN2CLogger::Get().LogError(TEXT("CollectNodesFromGraph: Failed to collect nodes"));
+    }
+    
+    return bSuccess;
+}
+
+bool FN2CEditorIntegration::TranslateNodesToN2CBlueprint(const TArray<UK2Node*>& CollectedNodes, FN2CBlueprint& OutN2CBlueprint) const
+{
+    FN2CNodeTranslator& Translator = FN2CNodeTranslator::Get();
+    
+    if (Translator.GenerateN2CStruct(CollectedNodes))
+    {
+        // Get the translated blueprint structure
+        OutN2CBlueprint = Translator.GetN2CBlueprint();
+        
+        // Validate the result
+        bool bIsValid = OutN2CBlueprint.IsValid();
+        
+        if (bIsValid)
+        {
+            FN2CLogger::Get().Log(TEXT("TranslateNodesToN2CBlueprint: Translation validation successful"), EN2CLogSeverity::Info);
+        }
+        else
+        {
+            FN2CLogger::Get().LogError(TEXT("TranslateNodesToN2CBlueprint: Translation validation failed"));
+        }
+        
+        return bIsValid;
+    }
+    
+    FN2CLogger::Get().LogError(TEXT("TranslateNodesToN2CBlueprint: Failed to generate N2C structure"));
+    return false;
+}
+
+FString FN2CEditorIntegration::SerializeN2CBlueprintToJson(const FN2CBlueprint& Blueprint, bool bPrettyPrint) const
+{
+    FN2CSerializer::SetPrettyPrint(bPrettyPrint);
+    return FN2CSerializer::ToJson(Blueprint);
+}
+
+FString FN2CEditorIntegration::GetFocusedBlueprintAsJson(bool bPrettyPrint, FString& OutErrorMsg)
+{
+    // Get the active Blueprint editor
+    TSharedPtr<FBlueprintEditor> Editor = GetActiveBlueprintEditor();
+    if (!Editor.IsValid())
+    {
+        OutErrorMsg = TEXT("No active Blueprint Editor.");
+        return FString();
+    }
+    
+    // Get the focused graph
+    UEdGraph* FocusedGraph = GetFocusedGraphFromActiveEditor();
+    if (!FocusedGraph)
+    {
+        OutErrorMsg = TEXT("No focused graph in the active Blueprint Editor.");
+        return FString();
+    }
+    
+    // Collect nodes from the graph
+    TArray<UK2Node*> CollectedNodes;
+    if (!CollectNodesFromGraph(FocusedGraph, CollectedNodes) || CollectedNodes.IsEmpty())
+    {
+        OutErrorMsg = TEXT("Failed to collect nodes or no nodes found in the focused graph.");
+        return FString();
+    }
+    
+    // Translate nodes to N2CBlueprint structure
+    FN2CBlueprint N2CBlueprintData;
+    if (!TranslateNodesToN2CBlueprint(CollectedNodes, N2CBlueprintData))
+    {
+        OutErrorMsg = TEXT("Failed to translate collected nodes into N2CBlueprint structure.");
+        return FString();
+    }
+    
+    // Serialize to JSON
+    FString JsonOutput = SerializeN2CBlueprintToJson(N2CBlueprintData, bPrettyPrint);
+    if (JsonOutput.IsEmpty())
+    {
+        OutErrorMsg = TEXT("Failed to serialize N2CBlueprint to JSON.");
+        return FString();
+    }
+    
+    OutErrorMsg = TEXT("Success.");
+    return JsonOutput;
+}
+
 void FN2CEditorIntegration::ExecuteCopyJsonForEditor(TWeakPtr<FBlueprintEditor> InEditor)
 {
     FN2CLogger::Get().Log(TEXT("ExecuteCopyJsonForEditor called"), EN2CLogSeverity::Debug);
@@ -207,6 +333,9 @@ void FN2CEditorIntegration::HandleAssetEditorOpened(UObject* Asset, IAssetEditor
     TSharedPtr<FBlueprintEditor> BlueprintEditorShared = StaticCastSharedRef<FBlueprintEditor>(BlueprintEditorPtr->AsShared());
     if (BlueprintEditorShared.IsValid())
     {
+        // Store the active Blueprint editor
+        StoreActiveBlueprintEditor(BlueprintEditorShared);
+        
         // Check if we already have this editor registered
         TWeakPtr<FBlueprintEditor> WeakEditor(BlueprintEditorShared);
         if (!EditorCommandLists.Contains(WeakEditor))
