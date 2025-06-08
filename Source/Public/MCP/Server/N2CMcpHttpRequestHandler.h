@@ -72,6 +72,24 @@ private:
 	 */
 	static bool HandleInitialize(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse);
 
+	/**
+	 * Handles the MCP tools/list request.
+	 * @param Params The request parameters
+	 * @param Id The request ID
+	 * @param OutResponse The generated response
+	 * @return true if handled successfully
+	 */
+	static bool HandleToolsList(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse);
+
+	/**
+	 * Handles the MCP tools/call request.
+	 * @param Params The request parameters
+	 * @param Id The request ID
+	 * @param OutResponse The generated response
+	 * @return true if handled successfully
+	 */
+	static bool HandleToolsCall(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse);
+
 private:
 	// These methods are now handled by FJsonRpcUtils
 };

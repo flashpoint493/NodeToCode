@@ -62,6 +62,11 @@ private:
 	 */
 	bool HandleHealthRequest(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
 
+	/**
+	 * Registers MCP tools with the tool manager.
+	 */
+	void RegisterMcpTools();
+
 	/** Whether the server is currently running */
 	bool bIsServerRunning = false;
 

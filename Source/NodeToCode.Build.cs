@@ -10,6 +10,7 @@ public class NodeToCode : ModuleRules
         
 		PublicIncludePaths.AddRange(
 			new string[] {
+				"NodeToCode/Public/MCP/Tools"
 			}
 		);
         

@@ -6,6 +6,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Interfaces/IPluginManager.h"
+#include "MCP/Tools/N2CMcpToolManager.h"
 
 bool FN2CMcpHttpRequestHandler::ProcessMcpRequest(const FString& RequestBody, FString& OutResponseBody, int32& OutStatusCode)
 {
@@ -169,6 +170,14 @@ bool FN2CMcpHttpRequestHandler::DispatchMethod(const FString& Method, const TSha
 		OutResponse = FJsonRpcUtils::CreateSuccessResponse(Id, MakeShareable(new FJsonValueObject(Result)));
 		return true;
 	}
+	else if (Method == TEXT("tools/list"))
+	{
+		return HandleToolsList(Params, Id, OutResponse);
+	}
+	else if (Method == TEXT("tools/call"))
+	{
+		return HandleToolsCall(Params, Id, OutResponse);
+	}
 	else
 	{
 		// Method not found
@@ -283,5 +292,108 @@ bool FN2CMcpHttpRequestHandler::HandleInitialize(const TSharedPtr<FJsonValue>& P
 	
 	FN2CLogger::Get().Log(TEXT("MCP connection initialized successfully"), EN2CLogSeverity::Info);
 	
+	return true;
+}
+
+bool FN2CMcpHttpRequestHandler::HandleToolsList(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse)
+{
+	FN2CLogger::Get().Log(TEXT("Processing MCP tools/list request"), EN2CLogSeverity::Info);
+
+	// For MVP, we ignore pagination params (cursor) and return all tools
+	// TODO: In the future, implement pagination if tool list becomes large
+
+	// Get all registered tools from the manager
+	TArray<FMcpToolDefinition> Tools = FN2CMcpToolManager::Get().GetAllToolDefinitions();
+
+	// Build the result object
+	TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
+
+	// Create tools array
+	TArray<TSharedPtr<FJsonValue>> ToolsArray;
+	for (const FMcpToolDefinition& Tool : Tools)
+	{
+		TSharedPtr<FJsonObject> ToolJson = Tool.ToJson();
+		if (ToolJson.IsValid())
+		{
+			ToolsArray.Add(MakeShareable(new FJsonValueObject(ToolJson)));
+		}
+	}
+
+	Result->SetArrayField(TEXT("tools"), ToolsArray);
+
+	// For MVP, no pagination so no nextCursor field
+
+	// Create success response
+	OutResponse = FJsonRpcUtils::CreateSuccessResponse(Id, MakeShareable(new FJsonValueObject(Result)));
+
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Returned %d tools in tools/list response"), Tools.Num()), EN2CLogSeverity::Info);
+
+	return true;
+}
+
+bool FN2CMcpHttpRequestHandler::HandleToolsCall(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse)
+{
+	FN2CLogger::Get().Log(TEXT("Processing MCP tools/call request"), EN2CLogSeverity::Info);
+
+	// Validate params
+	if (!Params.IsValid() || Params->IsNull())
+	{
+		FN2CLogger::Get().LogWarning(TEXT("tools/call request missing or null params"));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing or null params for tools/call"));
+		return true;
+	}
+
+	if (Params->Type != EJson::Object)
+	{
+		FN2CLogger::Get().LogWarning(TEXT("tools/call request params is not an object"));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Params must be an object for tools/call"));
+		return true;
+	}
+
+	TSharedPtr<FJsonObject> ParamsObject = Params->AsObject();
+
+	// Extract tool name
+	FString ToolName;
+	if (!ParamsObject->TryGetStringField(TEXT("name"), ToolName))
+	{
+		FN2CLogger::Get().LogWarning(TEXT("tools/call request missing tool name"));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing required field: name"));
+		return true;
+	}
+
+	// Extract arguments (optional, can be null)
+	const TSharedPtr<FJsonObject>* ArgumentsObj = nullptr;
+	TSharedPtr<FJsonObject> Arguments;
+	if (ParamsObject->TryGetObjectField(TEXT("arguments"), ArgumentsObj) && ArgumentsObj->IsValid())
+	{
+		Arguments = *ArgumentsObj;
+	}
+	else
+	{
+		// If no arguments provided, use empty object
+		Arguments = MakeShareable(new FJsonObject);
+	}
+
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Calling tool: %s"), *ToolName), EN2CLogSeverity::Info);
+
+	// Check if tool exists
+	if (!FN2CMcpToolManager::Get().IsToolRegistered(ToolName))
+	{
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Tool not found: %s"), *ToolName));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::MethodNotFound, FString::Printf(TEXT("Tool not found: %s"), *ToolName));
+		return true;
+	}
+
+	// TODO: Validate arguments against tool's input schema (for MVP, skip validation)
+
+	// Execute the tool
+	FMcpToolCallResult ToolResult = FN2CMcpToolManager::Get().ExecuteTool(ToolName, Arguments);
+
+	// Convert tool result to JSON
+	TSharedPtr<FJsonObject> ResultJson = ToolResult.ToJson();
+
+	// Create success response
+	OutResponse = FJsonRpcUtils::CreateSuccessResponse(Id, MakeShareable(new FJsonValueObject(ResultJson)));
+
 	return true;
 }

@@ -6,6 +6,8 @@
 #include "HttpServerModule.h"
 #include "HttpServerResponse.h"
 #include "HttpPath.h"
+#include "MCP/Tools/N2CMcpToolManager.h"
+#include "Core/N2CSettings.h"
 
 FN2CMcpHttpServerManager& FN2CMcpHttpServerManager::Get()
 {
@@ -62,6 +64,9 @@ bool FN2CMcpHttpServerManager::StartServer(int32 Port)
 	FN2CLogger::Get().Log(FString::Printf(TEXT("MCP HTTP server started successfully on localhost:%d"), Port), EN2CLogSeverity::Info);
 	FN2CLogger::Get().Log(FString::Printf(TEXT("MCP endpoint available at: http://localhost:%d/mcp"), Port), EN2CLogSeverity::Info);
 	FN2CLogger::Get().Log(FString::Printf(TEXT("Health check available at: http://localhost:%d/mcp/health"), Port), EN2CLogSeverity::Info);
+
+	// Register tools
+	RegisterMcpTools();
 
 	return true;
 }
@@ -127,4 +132,102 @@ bool FN2CMcpHttpServerManager::HandleHealthRequest(const FHttpServerRequest& Req
 	FN2CLogger::Get().Log(TEXT("Health check request processed"), EN2CLogSeverity::Debug);
 
 	return true;
+}
+
+void FN2CMcpHttpServerManager::RegisterMcpTools()
+{
+	FN2CLogger::Get().Log(TEXT("Registering MCP tools for testing"), EN2CLogSeverity::Info);
+
+	// Register dummy echo tool for testing
+	{
+		FMcpToolDefinition EchoTool(TEXT("echo-test"), TEXT("A simple echo tool for testing MCP functionality"));
+		
+		// Create input schema
+		TSharedPtr<FJsonObject> InputSchema = MakeShareable(new FJsonObject);
+		InputSchema->SetStringField(TEXT("type"), TEXT("object"));
+		
+		TSharedPtr<FJsonObject> Properties = MakeShareable(new FJsonObject);
+		TSharedPtr<FJsonObject> MessageProp = MakeShareable(new FJsonObject);
+		MessageProp->SetStringField(TEXT("type"), TEXT("string"));
+		MessageProp->SetStringField(TEXT("description"), TEXT("The message to echo back"));
+		Properties->SetObjectField(TEXT("message"), MessageProp);
+		
+		InputSchema->SetObjectField(TEXT("properties"), Properties);
+		
+		EchoTool.InputSchema = InputSchema;
+
+		// Create handler
+		FMcpToolHandlerDelegate EchoHandler;
+		EchoHandler.BindLambda([](const TSharedPtr<FJsonObject>& Args) -> FMcpToolCallResult
+		{
+			FString Message = TEXT("Hello from echo tool!");
+			if (Args.IsValid())
+			{
+				Args->TryGetStringField(TEXT("message"), Message);
+			}
+
+			return FMcpToolCallResult::CreateTextResult(FString::Printf(TEXT("Echo: %s"), *Message));
+		});
+
+		FN2CMcpToolManager::Get().RegisterTool(EchoTool, EchoHandler);
+	}
+
+	// Register dummy math tool for testing
+	{
+		FMcpToolDefinition MathTool(TEXT("simple-math"), TEXT("Performs simple addition of two numbers"));
+		
+		// Create input schema
+		TSharedPtr<FJsonObject> InputSchema = MakeShareable(new FJsonObject);
+		InputSchema->SetStringField(TEXT("type"), TEXT("object"));
+		
+		TSharedPtr<FJsonObject> Properties = MakeShareable(new FJsonObject);
+		
+		TSharedPtr<FJsonObject> AProp = MakeShareable(new FJsonObject);
+		AProp->SetStringField(TEXT("type"), TEXT("number"));
+		AProp->SetStringField(TEXT("description"), TEXT("First number"));
+		Properties->SetObjectField(TEXT("a"), AProp);
+		
+		TSharedPtr<FJsonObject> BProp = MakeShareable(new FJsonObject);
+		BProp->SetStringField(TEXT("type"), TEXT("number"));
+		BProp->SetStringField(TEXT("description"), TEXT("Second number"));
+		Properties->SetObjectField(TEXT("b"), BProp);
+		
+		InputSchema->SetObjectField(TEXT("properties"), Properties);
+		
+		// Required fields
+		TArray<TSharedPtr<FJsonValue>> RequiredArray;
+		RequiredArray.Add(MakeShareable(new FJsonValueString(TEXT("a"))));
+		RequiredArray.Add(MakeShareable(new FJsonValueString(TEXT("b"))));
+		InputSchema->SetArrayField(TEXT("required"), RequiredArray);
+		
+		MathTool.InputSchema = InputSchema;
+
+		// Set read-only annotation
+		TSharedPtr<FJsonObject> Annotations = MakeShareable(new FJsonObject);
+		Annotations->SetBoolField(TEXT("readOnlyHint"), true);
+		MathTool.Annotations = Annotations;
+
+		// Create handler
+		FMcpToolHandlerDelegate MathHandler;
+		MathHandler.BindLambda([](const TSharedPtr<FJsonObject>& Args) -> FMcpToolCallResult
+		{
+			if (!Args.IsValid())
+			{
+				return FMcpToolCallResult::CreateErrorResult(TEXT("Arguments required"));
+			}
+
+			double A = 0, B = 0;
+			if (!Args->TryGetNumberField(TEXT("a"), A) || !Args->TryGetNumberField(TEXT("b"), B))
+			{
+				return FMcpToolCallResult::CreateErrorResult(TEXT("Both 'a' and 'b' must be numbers"));
+			}
+
+			double Result = A + B;
+			return FMcpToolCallResult::CreateTextResult(FString::Printf(TEXT("Result: %f + %f = %f"), A, B, Result));
+		});
+
+		FN2CMcpToolManager::Get().RegisterTool(MathTool, MathHandler);
+	}
+
+	FN2CLogger::Get().Log(TEXT("MCP tools registered successfully"), EN2CLogSeverity::Info);
 }
