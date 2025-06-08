@@ -160,95 +160,31 @@ void FN2CEditorIntegration::ExecuteCopyJsonForEditor(TWeakPtr<FBlueprintEditor> 
 {
     FN2CLogger::Get().Log(TEXT("ExecuteCopyJsonForEditor called"), EN2CLogSeverity::Debug);
 
-    // Get the editor pointer
-    TSharedPtr<FBlueprintEditor> Editor = InEditor.Pin();
-    if (!Editor.IsValid())
-    {
-        FN2CLogger::Get().LogError(TEXT("Invalid Blueprint Editor pointer"));
-        return;
-    }
-    FN2CLogger::Get().Log(TEXT("Successfully obtained Blueprint Editor pointer"), EN2CLogSeverity::Info);
+    // Store the editor as active
+    StoreActiveBlueprintEditor(InEditor);
 
-    // Get focused graph
-    UEdGraph* FocusedGraph = Editor->GetFocusedGraph();
-    if (!FocusedGraph)
+    // Use the new helper method to get JSON with pretty printing for clipboard
+    FString ErrorMsg;
+    FString JsonOutput = GetFocusedBlueprintAsJson(true /* pretty print for clipboard */, ErrorMsg);
+
+    if (JsonOutput.IsEmpty())
     {
-        FN2CLogger::Get().LogError(TEXT("No focused graph in Blueprint Editor"));
+        FN2CLogger::Get().LogError(FString::Printf(TEXT("Failed to get Blueprint JSON: %s"), *ErrorMsg));
         return;
     }
 
-    FString GraphName = FocusedGraph->GetName();
-    FString BlueprintName = TEXT("Unknown");
-    if (UBlueprint* Blueprint = Cast<UBlueprint>(FocusedGraph->GetOuter()))
-    {
-        BlueprintName = Blueprint->GetName();
-    }
-    FN2CLogger::Get().Log(
-        FString::Printf(TEXT("Found focused graph: %s in Blueprint: %s"), 
-        *GraphName, *BlueprintName), 
-        EN2CLogSeverity::Info
-    );
+    // Copy JSON to clipboard
+    FPlatformApplicationMisc::ClipboardCopy(*JsonOutput);
 
-    // Get collector instance
-    FN2CNodeCollector& Collector = FN2CNodeCollector::Get();
+    // Show notification
+    FNotificationInfo Info(NSLOCTEXT("NodeToCode", "BlueprintJsonCopied", "Blueprint JSON copied to clipboard"));
+    Info.bFireAndForget = true;
+    Info.FadeInDuration = 0.2f;
+    Info.FadeOutDuration = 0.5f;
+    Info.ExpireDuration = 2.0f;
+    FSlateNotificationManager::Get().AddNotification(Info);
 
-    // Collect nodes using the specific editor
-    TArray<UK2Node*> CollectedNodes;
-    if (Collector.CollectNodesFromGraph(FocusedGraph, CollectedNodes))
-    {
-        FString Context = FString::Printf(TEXT("Collected %d nodes"), CollectedNodes.Num());
-        FN2CLogger::Get().Log(TEXT("Node collection successful"), EN2CLogSeverity::Info, Context);
-
-        // Get translator instance                                                                                                                                                                        
-        FN2CNodeTranslator& Translator = FN2CNodeTranslator::Get();
-
-        // Generate N2CStruct from collected nodes
-        if (Translator.GenerateN2CStruct(CollectedNodes))
-        {
-            FN2CLogger::Get().Log(TEXT("Node translation successful"), EN2CLogSeverity::Info);
-
-            // Get the Blueprint structure
-            const FN2CBlueprint& Blueprint = FN2CNodeTranslator::Get().GetN2CBlueprint();
-
-            // Validate the generated Blueprint
-            if (Blueprint.IsValid())
-            {
-                FN2CLogger::Get().Log(TEXT("Node translation validation successful"), EN2CLogSeverity::Info);
-
-                // Serialize to JSON with pretty printing enabled for clipboard                                                                                                                                   
-                FN2CSerializer::SetPrettyPrint(true);
-                FString JsonOutput = FN2CSerializer::ToJson(Blueprint);                                                                                                                                       
-
-                // Copy JSON to clipboard if not empty                                                                                                                                                         
-                if (!JsonOutput.IsEmpty())                                                                                                                                                                    
-                {                                                                                                                                                                                             
-                    FPlatformApplicationMisc::ClipboardCopy(*JsonOutput);
-
-                    // Show notification
-                    FNotificationInfo Info(NSLOCTEXT("NodeToCode", "BlueprintJsonCopied", "Blueprint JSON copied to clipboard"));
-                    Info.bFireAndForget = true;
-                    Info.FadeInDuration = 0.2f;
-                    Info.FadeOutDuration = 0.5f;
-                    Info.ExpireDuration = 2.0f;
-                    FSlateNotificationManager::Get().AddNotification(Info);
-
-                    FN2CLogger::Get().Log(TEXT("Blueprint JSON copied to clipboard successfully"), EN2CLogSeverity::Info);
-                }
-                else
-                {
-                    FN2CLogger::Get().LogError(TEXT("JSON serialization failed"));
-                }
-            }
-            else
-            {
-                FN2CLogger::Get().LogError(TEXT("Node translation validation failed"));
-            }
-        }
-        else
-        {
-            FN2CLogger::Get().LogError(TEXT("Failed to translate nodes"));
-        }
-    }
+    FN2CLogger::Get().Log(TEXT("Blueprint JSON copied to clipboard successfully"), EN2CLogSeverity::Info);
 }
 
 void FN2CEditorIntegration::Initialize()
@@ -550,128 +486,64 @@ void FN2CEditorIntegration::ExecuteCollectNodesForEditor(TWeakPtr<FBlueprintEdit
     FGlobalTabmanager::Get()->TryInvokeTab(SN2CEditorWindow::TabId);
     FN2CLogger::Get().Log(TEXT("Node to Code window shown"), EN2CLogSeverity::Debug);
 
-    // Get the editor pointer
-    TSharedPtr<FBlueprintEditor> Editor = InEditor.Pin();
-    if (!Editor.IsValid())
-    {
-        FN2CLogger::Get().LogError(TEXT("Invalid Blueprint Editor pointer"));
-        return;
-    }
-    FN2CLogger::Get().Log(TEXT("Successfully obtained Blueprint Editor pointer"), EN2CLogSeverity::Info);
+    // Store the editor as active
+    StoreActiveBlueprintEditor(InEditor);
 
-    // Get focused graph
-    UEdGraph* FocusedGraph = Editor->GetFocusedGraph();
-    if (!FocusedGraph)
+    // Use the new helper method to get JSON
+    FString ErrorMsg;
+    FString JsonOutput = GetFocusedBlueprintAsJson(false /* no pretty print */, ErrorMsg);
+
+    if (JsonOutput.IsEmpty())
     {
-        FN2CLogger::Get().LogError(TEXT("No focused graph in Blueprint Editor"));
+        FN2CLogger::Get().LogError(FString::Printf(TEXT("Failed to get Blueprint JSON: %s"), *ErrorMsg));
         return;
     }
 
-    FString GraphName = FocusedGraph->GetName();
-    FString BlueprintName = TEXT("Unknown");
-    if (UBlueprint* Blueprint = Cast<UBlueprint>(FocusedGraph->GetOuter()))
+    // Log the JSON output
+    FN2CLogger::Get().Log(TEXT("JSON Output:"), EN2CLogSeverity::Debug);
+    FN2CLogger::Get().Log(JsonOutput, EN2CLogSeverity::Debug);
+
+    if (LLMModule->Initialize())
     {
-        BlueprintName = Blueprint->GetName();
-    }
-    FN2CLogger::Get().Log(
-        FString::Printf(TEXT("Found focused graph: %s in Blueprint: %s"), 
-        *GraphName, *BlueprintName), 
-        EN2CLogSeverity::Info
-    );
-
-    // Get collector instance
-    FN2CNodeCollector& Collector = FN2CNodeCollector::Get();
-    
-    // Collect nodes using the specific editor
-    TArray<UK2Node*> CollectedNodes;
-    if (Collector.CollectNodesFromGraph(FocusedGraph, CollectedNodes))
-    {
-        FString Context = FString::Printf(TEXT("Collected %d nodes"), CollectedNodes.Num());
-        FN2CLogger::Get().Log(TEXT("Node collection successful"), EN2CLogSeverity::Info, Context);
-        
-        // Get translator instance                                                                                                                                                                        
-        FN2CNodeTranslator& Translator = FN2CNodeTranslator::Get();
-
-        // Generate N2CStruct from collected nodes
-        if (Translator.GenerateN2CStruct(CollectedNodes))
-        {
-            FN2CLogger::Get().Log(TEXT("Node translation successful"), EN2CLogSeverity::Info);
-
-            // Get the Blueprint structure
-            const FN2CBlueprint& Blueprint = FN2CNodeTranslator::Get().GetN2CBlueprint();
-            
-            // Validate the generated Blueprint
-            if (Blueprint.IsValid())
+        // Send JSON to LLM service
+        LLMModule->ProcessN2CJson(JsonOutput, FOnLLMResponseReceived::CreateLambda(
+            [](const FString& Response)
             {
-                FN2CLogger::Get().Log(TEXT("Node translation validation successful"), EN2CLogSeverity::Info);
-
-                // Serialize to JSON with pretty printing enabled                                                                                                                                             
-                FN2CSerializer::SetPrettyPrint(false);
-                FString JsonOutput = FN2CSerializer::ToJson(Blueprint);                                                                                                                                       
-                                                                                                                                                                                                           
-                // Log the JSON output                                                                                                                                                                        
-                if (!JsonOutput.IsEmpty())                                                                                                                                                                    
-                {                                                                                                                                                                                             
-                    FN2CLogger::Get().Log(TEXT("JSON Output:"), EN2CLogSeverity::Debug);                                                                                                                       
-                    FN2CLogger::Get().Log(JsonOutput, EN2CLogSeverity::Debug);
-                    
-                    if (LLMModule->Initialize())
+                FN2CLogger::Get().Log(FString::Printf(TEXT("LLM Response:\n\n%s"), *Response), EN2CLogSeverity::Debug);
+            
+                // Create translation response struct
+                FN2CTranslationResponse TranslationResponse;
+            
+                // Get active service's response parser
+                TScriptInterface<IN2CLLMService> ActiveService = UN2CLLMModule::Get()->GetActiveService();
+                if (ActiveService.GetInterface())
+                {
+                    UN2CResponseParserBase* Parser = ActiveService->GetResponseParser();
+                    if (Parser)
                     {
-                        // Send JSON to LLM service                                                                                                                                                        
-                        LLMModule->ProcessN2CJson(JsonOutput, FOnLLMResponseReceived::CreateLambda(
-                            [](const FString& Response)                                                                                                                                                   
-                            {                                                                                                                                                                             
-                                FN2CLogger::Get().Log(FString::Printf(TEXT("LLM Response:\n\n%s"), *Response), EN2CLogSeverity::Debug);                                                                                                      
-                            
-                                // Create translation response struct
-                                FN2CTranslationResponse TranslationResponse;
-                            
-                                // Get active service's response parser
-                                TScriptInterface<IN2CLLMService> ActiveService = UN2CLLMModule::Get()->GetActiveService();
-                                if (ActiveService.GetInterface())
-                                {
-                                    UN2CResponseParserBase* Parser = ActiveService->GetResponseParser();
-                                    if (Parser)
-                                    {
-                                        if (Parser->ParseLLMResponse(Response, TranslationResponse))
-                                        {
-                                            // Log successful parsing
-                                            FN2CLogger::Get().Log(TEXT("Successfully parsed LLM response"), EN2CLogSeverity::Info);
-                                        }
-                                        else
-                                        {
-                                            FN2CLogger::Get().LogError(TEXT("Failed to parse LLM response"));
-                                        }
-                                    }
-                                    else
-                                    {
-                                        FN2CLogger::Get().LogError(TEXT("No response parser available"));
-                                    }
-                                }
-                                else
-                                {
-                                    FN2CLogger::Get().LogError(TEXT("No active LLM service"));
-                                }
-                            }));
+                        if (Parser->ParseLLMResponse(Response, TranslationResponse))
+                        {
+                            // Log successful parsing
+                            FN2CLogger::Get().Log(TEXT("Successfully parsed LLM response"), EN2CLogSeverity::Info);
+                        }
+                        else
+                        {
+                            FN2CLogger::Get().LogError(TEXT("Failed to parse LLM response"));
+                        }
                     }
                     else
                     {
-                        FN2CLogger::Get().LogError(TEXT("Failed to initialize LLM Module"));
+                        FN2CLogger::Get().LogError(TEXT("No response parser available"));
                     }
                 }
                 else
                 {
-                    FN2CLogger::Get().LogError(TEXT("JSON serialization failed"));
+                    FN2CLogger::Get().LogError(TEXT("No active LLM service"));
                 }
-            }
-            else
-            {
-                FN2CLogger::Get().LogError(TEXT("Node translation validation failed"));
-            }
-        }
-        else
-        {
-            FN2CLogger::Get().LogError(TEXT("Failed to translate nodes"));
-        }
+            }));
+    }
+    else
+    {
+        FN2CLogger::Get().LogError(TEXT("Failed to initialize LLM Module"));
     }
 }
