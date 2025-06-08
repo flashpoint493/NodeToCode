@@ -8,6 +8,9 @@
 #include "HttpPath.h"
 #include "MCP/Tools/N2CMcpToolManager.h"
 #include "Core/N2CSettings.h"
+#include "Core/N2CEditorIntegration.h"
+#include "Async/Async.h"
+#include "Async/TaskGraphInterfaces.h"
 
 FN2CMcpHttpServerManager& FN2CMcpHttpServerManager::Get()
 {
@@ -136,97 +139,112 @@ bool FN2CMcpHttpServerManager::HandleHealthRequest(const FHttpServerRequest& Req
 
 void FN2CMcpHttpServerManager::RegisterMcpTools()
 {
-	FN2CLogger::Get().Log(TEXT("Registering MCP tools for testing"), EN2CLogSeverity::Info);
+	FN2CLogger::Get().Log(TEXT("Registering NodeToCode MCP tools"), EN2CLogSeverity::Info);
 
-	// Register dummy echo tool for testing
+	// Register get-focused-blueprint tool
 	{
-		FMcpToolDefinition EchoTool(TEXT("echo-test"), TEXT("A simple echo tool for testing MCP functionality"));
+		FMcpToolDefinition GetFocusedBlueprintTool(
+			TEXT("get-focused-blueprint"), 
+			TEXT("Collects and serializes the currently focused Blueprint graph in the Unreal Editor into NodeToCode's N2CJSON format.")
+		);
 		
-		// Create input schema
+		// Create input schema - no input arguments needed
 		TSharedPtr<FJsonObject> InputSchema = MakeShareable(new FJsonObject);
 		InputSchema->SetStringField(TEXT("type"), TEXT("object"));
 		
+		// Empty properties object since no input arguments are required
 		TSharedPtr<FJsonObject> Properties = MakeShareable(new FJsonObject);
-		TSharedPtr<FJsonObject> MessageProp = MakeShareable(new FJsonObject);
-		MessageProp->SetStringField(TEXT("type"), TEXT("string"));
-		MessageProp->SetStringField(TEXT("description"), TEXT("The message to echo back"));
-		Properties->SetObjectField(TEXT("message"), MessageProp);
-		
 		InputSchema->SetObjectField(TEXT("properties"), Properties);
 		
-		EchoTool.InputSchema = InputSchema;
-
-		// Create handler
-		FMcpToolHandlerDelegate EchoHandler;
-		EchoHandler.BindLambda([](const TSharedPtr<FJsonObject>& Args) -> FMcpToolCallResult
-		{
-			FString Message = TEXT("Hello from echo tool!");
-			if (Args.IsValid())
-			{
-				Args->TryGetStringField(TEXT("message"), Message);
-			}
-
-			return FMcpToolCallResult::CreateTextResult(FString::Printf(TEXT("Echo: %s"), *Message));
-		});
-
-		FN2CMcpToolManager::Get().RegisterTool(EchoTool, EchoHandler);
-	}
-
-	// Register dummy math tool for testing
-	{
-		FMcpToolDefinition MathTool(TEXT("simple-math"), TEXT("Performs simple addition of two numbers"));
-		
-		// Create input schema
-		TSharedPtr<FJsonObject> InputSchema = MakeShareable(new FJsonObject);
-		InputSchema->SetStringField(TEXT("type"), TEXT("object"));
-		
-		TSharedPtr<FJsonObject> Properties = MakeShareable(new FJsonObject);
-		
-		TSharedPtr<FJsonObject> AProp = MakeShareable(new FJsonObject);
-		AProp->SetStringField(TEXT("type"), TEXT("number"));
-		AProp->SetStringField(TEXT("description"), TEXT("First number"));
-		Properties->SetObjectField(TEXT("a"), AProp);
-		
-		TSharedPtr<FJsonObject> BProp = MakeShareable(new FJsonObject);
-		BProp->SetStringField(TEXT("type"), TEXT("number"));
-		BProp->SetStringField(TEXT("description"), TEXT("Second number"));
-		Properties->SetObjectField(TEXT("b"), BProp);
-		
-		InputSchema->SetObjectField(TEXT("properties"), Properties);
-		
-		// Required fields
+		// No required fields (empty array)
 		TArray<TSharedPtr<FJsonValue>> RequiredArray;
-		RequiredArray.Add(MakeShareable(new FJsonValueString(TEXT("a"))));
-		RequiredArray.Add(MakeShareable(new FJsonValueString(TEXT("b"))));
 		InputSchema->SetArrayField(TEXT("required"), RequiredArray);
 		
-		MathTool.InputSchema = InputSchema;
-
+		GetFocusedBlueprintTool.InputSchema = InputSchema;
+		
 		// Set read-only annotation
 		TSharedPtr<FJsonObject> Annotations = MakeShareable(new FJsonObject);
 		Annotations->SetBoolField(TEXT("readOnlyHint"), true);
-		MathTool.Annotations = Annotations;
-
-		// Create handler
-		FMcpToolHandlerDelegate MathHandler;
-		MathHandler.BindLambda([](const TSharedPtr<FJsonObject>& Args) -> FMcpToolCallResult
+		GetFocusedBlueprintTool.Annotations = Annotations;
+		
+		// Create handler that executes on the Game Thread
+		FMcpToolHandlerDelegate GetFocusedBlueprintHandler;
+		GetFocusedBlueprintHandler.BindLambda([](const TSharedPtr<FJsonObject>& Args) -> FMcpToolCallResult
 		{
-			if (!Args.IsValid())
+			// Check if we're already on the Game Thread
+			if (IsInGameThread())
 			{
-				return FMcpToolCallResult::CreateErrorResult(TEXT("Arguments required"));
+				FN2CLogger::Get().Log(TEXT("get-focused-blueprint: Already on Game Thread, executing directly"), EN2CLogSeverity::Debug);
+				
+				FString ErrorMsg;
+				FString JsonOutput = FN2CEditorIntegration::Get().GetFocusedBlueprintAsJson(false /* no pretty print */, ErrorMsg);
+				
+				if (!JsonOutput.IsEmpty())
+				{
+					FN2CLogger::Get().Log(TEXT("get-focused-blueprint tool successfully retrieved Blueprint JSON"), EN2CLogSeverity::Info);
+					return FMcpToolCallResult::CreateTextResult(JsonOutput);
+				}
+				else
+				{
+					FN2CLogger::Get().LogWarning(FString::Printf(TEXT("get-focused-blueprint tool failed: %s"), *ErrorMsg));
+					return FMcpToolCallResult::CreateErrorResult(ErrorMsg);
+				}
 			}
-
-			double A = 0, B = 0;
-			if (!Args->TryGetNumberField(TEXT("a"), A) || !Args->TryGetNumberField(TEXT("b"), B))
+			
+			// We're on a worker thread, need to dispatch to Game Thread
+			FN2CLogger::Get().Log(TEXT("get-focused-blueprint: On worker thread, dispatching to Game Thread"), EN2CLogSeverity::Debug);
+			
+			// Use a simple event for synchronization
+			FEvent* TaskEvent = FPlatformProcess::GetSynchEventFromPool();
+			FString ResultJson;
+			FString ResultError;
+			
+			// Create a task to run on the Game Thread
+			FGraphEventRef Task = FFunctionGraphTask::CreateAndDispatchWhenReady([&ResultJson, &ResultError, TaskEvent]()
 			{
-				return FMcpToolCallResult::CreateErrorResult(TEXT("Both 'a' and 'b' must be numbers"));
+				FN2CLogger::Get().Log(TEXT("get-focused-blueprint: Game Thread task executing"), EN2CLogSeverity::Debug);
+				
+				FString ErrorMsg;
+				FString JsonOutput = FN2CEditorIntegration::Get().GetFocusedBlueprintAsJson(false /* no pretty print */, ErrorMsg);
+				
+				ResultJson = JsonOutput;
+				ResultError = ErrorMsg;
+				
+				FN2CLogger::Get().Log(FString::Printf(TEXT("get-focused-blueprint: Game Thread task completed. Success: %s"), 
+					JsonOutput.IsEmpty() ? TEXT("No") : TEXT("Yes")), EN2CLogSeverity::Debug);
+				
+				// Signal completion
+				TaskEvent->Trigger();
+			}, TStatId(), nullptr, ENamedThreads::GameThread);
+			
+			// Wait for completion with timeout
+			const uint32 TimeoutMs = 10000; // 10 seconds timeout
+			bool bCompleted = TaskEvent->Wait(TimeoutMs);
+			
+			// Return event to pool
+			FPlatformProcess::ReturnSynchEventToPool(TaskEvent);
+			
+			if (bCompleted)
+			{
+				if (!ResultJson.IsEmpty())
+				{
+					FN2CLogger::Get().Log(TEXT("get-focused-blueprint tool successfully retrieved Blueprint JSON"), EN2CLogSeverity::Info);
+					return FMcpToolCallResult::CreateTextResult(ResultJson);
+				}
+				else
+				{
+					FN2CLogger::Get().LogWarning(FString::Printf(TEXT("get-focused-blueprint tool failed: %s"), *ResultError));
+					return FMcpToolCallResult::CreateErrorResult(ResultError);
+				}
 			}
-
-			double Result = A + B;
-			return FMcpToolCallResult::CreateTextResult(FString::Printf(TEXT("Result: %f + %f = %f"), A, B, Result));
+			else
+			{
+				FN2CLogger::Get().LogError(TEXT("get-focused-blueprint tool timed out waiting for Game Thread"));
+				return FMcpToolCallResult::CreateErrorResult(TEXT("Timeout waiting for Blueprint processing on Game Thread."));
+			}
 		});
-
-		FN2CMcpToolManager::Get().RegisterTool(MathTool, MathHandler);
+		
+		FN2CMcpToolManager::Get().RegisterTool(GetFocusedBlueprintTool, GetFocusedBlueprintHandler);
 	}
 
 	FN2CLogger::Get().Log(TEXT("MCP tools registered successfully"), EN2CLogSeverity::Info);
