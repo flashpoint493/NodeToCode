@@ -7,10 +7,8 @@
 #include "HttpServerResponse.h"
 #include "HttpPath.h"
 #include "MCP/Tools/N2CMcpToolManager.h"
+#include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "Core/N2CSettings.h"
-#include "Core/N2CEditorIntegration.h"
-#include "Async/Async.h"
-#include "Async/TaskGraphInterfaces.h"
 
 FN2CMcpHttpServerManager& FN2CMcpHttpServerManager::Get()
 {
@@ -140,112 +138,9 @@ bool FN2CMcpHttpServerManager::HandleHealthRequest(const FHttpServerRequest& Req
 void FN2CMcpHttpServerManager::RegisterMcpTools()
 {
 	FN2CLogger::Get().Log(TEXT("Registering NodeToCode MCP tools"), EN2CLogSeverity::Info);
-
-	// Register get-focused-blueprint tool
-	{
-		FMcpToolDefinition GetFocusedBlueprintTool(
-			TEXT("get-focused-blueprint"), 
-			TEXT("Collects and serializes the currently focused Blueprint graph in the Unreal Editor into NodeToCode's N2CJSON format.")
-		);
-		
-		// Create input schema - no input arguments needed
-		TSharedPtr<FJsonObject> InputSchema = MakeShareable(new FJsonObject);
-		InputSchema->SetStringField(TEXT("type"), TEXT("object"));
-		
-		// Empty properties object since no input arguments are required
-		TSharedPtr<FJsonObject> Properties = MakeShareable(new FJsonObject);
-		InputSchema->SetObjectField(TEXT("properties"), Properties);
-		
-		// No required fields (empty array)
-		TArray<TSharedPtr<FJsonValue>> RequiredArray;
-		InputSchema->SetArrayField(TEXT("required"), RequiredArray);
-		
-		GetFocusedBlueprintTool.InputSchema = InputSchema;
-		
-		// Set read-only annotation
-		TSharedPtr<FJsonObject> Annotations = MakeShareable(new FJsonObject);
-		Annotations->SetBoolField(TEXT("readOnlyHint"), true);
-		GetFocusedBlueprintTool.Annotations = Annotations;
-		
-		// Create handler that executes on the Game Thread
-		FMcpToolHandlerDelegate GetFocusedBlueprintHandler;
-		GetFocusedBlueprintHandler.BindLambda([](const TSharedPtr<FJsonObject>& Args) -> FMcpToolCallResult
-		{
-			// Check if we're already on the Game Thread
-			if (IsInGameThread())
-			{
-				FN2CLogger::Get().Log(TEXT("get-focused-blueprint: Already on Game Thread, executing directly"), EN2CLogSeverity::Debug);
-				
-				FString ErrorMsg;
-				FString JsonOutput = FN2CEditorIntegration::Get().GetFocusedBlueprintAsJson(false /* no pretty print */, ErrorMsg);
-				
-				if (!JsonOutput.IsEmpty())
-				{
-					FN2CLogger::Get().Log(TEXT("get-focused-blueprint tool successfully retrieved Blueprint JSON"), EN2CLogSeverity::Info);
-					return FMcpToolCallResult::CreateTextResult(JsonOutput);
-				}
-				else
-				{
-					FN2CLogger::Get().LogWarning(FString::Printf(TEXT("get-focused-blueprint tool failed: %s"), *ErrorMsg));
-					return FMcpToolCallResult::CreateErrorResult(ErrorMsg);
-				}
-			}
-			
-			// We're on a worker thread, need to dispatch to Game Thread
-			FN2CLogger::Get().Log(TEXT("get-focused-blueprint: On worker thread, dispatching to Game Thread"), EN2CLogSeverity::Debug);
-			
-			// Use a simple event for synchronization
-			FEvent* TaskEvent = FPlatformProcess::GetSynchEventFromPool();
-			FString ResultJson;
-			FString ResultError;
-			
-			// Create a task to run on the Game Thread
-			FGraphEventRef Task = FFunctionGraphTask::CreateAndDispatchWhenReady([&ResultJson, &ResultError, TaskEvent]()
-			{
-				FN2CLogger::Get().Log(TEXT("get-focused-blueprint: Game Thread task executing"), EN2CLogSeverity::Debug);
-				
-				FString ErrorMsg;
-				FString JsonOutput = FN2CEditorIntegration::Get().GetFocusedBlueprintAsJson(false /* no pretty print */, ErrorMsg);
-				
-				ResultJson = JsonOutput;
-				ResultError = ErrorMsg;
-				
-				FN2CLogger::Get().Log(FString::Printf(TEXT("get-focused-blueprint: Game Thread task completed. Success: %s"), 
-					JsonOutput.IsEmpty() ? TEXT("No") : TEXT("Yes")), EN2CLogSeverity::Debug);
-				
-				// Signal completion
-				TaskEvent->Trigger();
-			}, TStatId(), nullptr, ENamedThreads::GameThread);
-			
-			// Wait for completion with timeout
-			const uint32 TimeoutMs = 10000; // 10 seconds timeout
-			bool bCompleted = TaskEvent->Wait(TimeoutMs);
-			
-			// Return event to pool
-			FPlatformProcess::ReturnSynchEventToPool(TaskEvent);
-			
-			if (bCompleted)
-			{
-				if (!ResultJson.IsEmpty())
-				{
-					FN2CLogger::Get().Log(TEXT("get-focused-blueprint tool successfully retrieved Blueprint JSON"), EN2CLogSeverity::Info);
-					return FMcpToolCallResult::CreateTextResult(ResultJson);
-				}
-				else
-				{
-					FN2CLogger::Get().LogWarning(FString::Printf(TEXT("get-focused-blueprint tool failed: %s"), *ResultError));
-					return FMcpToolCallResult::CreateErrorResult(ResultError);
-				}
-			}
-			else
-			{
-				FN2CLogger::Get().LogError(TEXT("get-focused-blueprint tool timed out waiting for Game Thread"));
-				return FMcpToolCallResult::CreateErrorResult(TEXT("Timeout waiting for Blueprint processing on Game Thread."));
-			}
-		});
-		
-		FN2CMcpToolManager::Get().RegisterTool(GetFocusedBlueprintTool, GetFocusedBlueprintHandler);
-	}
-
+	
+	// Register all tools via the registry
+	FN2CMcpToolRegistry::Get().RegisterAllToolsWithManager();
+	
 	FN2CLogger::Get().Log(TEXT("MCP tools registered successfully"), EN2CLogSeverity::Info);
 }
