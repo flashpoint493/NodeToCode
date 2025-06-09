@@ -18,9 +18,10 @@ public:
 	 * @param RequestBody The raw HTTP request body containing JSON-RPC message(s)
 	 * @param OutResponseBody The generated JSON-RPC response body
 	 * @param OutStatusCode The HTTP status code to return
+	 * @param OutWasInitializeCall Set to true if the request was an 'initialize' method call
 	 * @return true if the request was processed successfully, false otherwise
 	 */
-	static bool ProcessMcpRequest(const FString& RequestBody, FString& OutResponseBody, int32& OutStatusCode);
+	static bool ProcessMcpRequest(const FString& RequestBody, FString& OutResponseBody, int32& OutStatusCode, bool& OutWasInitializeCall);
 
 private:
 	/**

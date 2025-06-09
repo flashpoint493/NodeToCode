@@ -78,4 +78,7 @@ private:
 
 	/** HTTP router for handling requests */
 	TSharedPtr<IHttpRouter> HttpRouter;
+
+	/** Current session ID for the MCP connection */
+	FString CurrentSessionId;
 };

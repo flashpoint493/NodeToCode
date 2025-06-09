@@ -8,10 +8,11 @@
 #include "Interfaces/IPluginManager.h"
 #include "MCP/Tools/N2CMcpToolManager.h"
 
-bool FN2CMcpHttpRequestHandler::ProcessMcpRequest(const FString& RequestBody, FString& OutResponseBody, int32& OutStatusCode)
+bool FN2CMcpHttpRequestHandler::ProcessMcpRequest(const FString& RequestBody, FString& OutResponseBody, int32& OutStatusCode, bool& OutWasInitializeCall)
 {
 	// Default to success
 	OutStatusCode = 200;
+	OutWasInitializeCall = false;
 
 	// Parse the request body as JSON
 	TSharedPtr<FJsonValue> JsonValue;
@@ -56,6 +57,12 @@ bool FN2CMcpHttpRequestHandler::ProcessMcpRequest(const FString& RequestBody, FS
 		{
 			FJsonRpcRequest Request(RequestObject);
 			FJsonRpcResponse Response;
+			
+			// Check if this is an initialize request
+			if (Request.Method == TEXT("initialize"))
+			{
+				OutWasInitializeCall = true;
+			}
 			
 			if (ProcessRequest(Request, Response))
 			{
