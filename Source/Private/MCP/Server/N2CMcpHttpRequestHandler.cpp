@@ -7,6 +7,8 @@
 #include "Serialization/JsonWriter.h"
 #include "Interfaces/IPluginManager.h"
 #include "MCP/Tools/N2CMcpToolManager.h"
+#include "MCP/Resources/N2CMcpResourceManager.h"
+#include "MCP/Prompts/N2CMcpPromptManager.h"
 
 // Define supported protocol versions in order of preference (newest first)
 const TArray<FString> FN2CMcpHttpRequestHandler::SUPPORTED_PROTOCOL_VERSIONS = {
@@ -196,6 +198,22 @@ bool FN2CMcpHttpRequestHandler::DispatchMethod(const FString& Method, const TSha
 	{
 		return HandleToolsCall(Params, Id, OutResponse);
 	}
+	else if (Method == TEXT("resources/list"))
+	{
+		return HandleResourcesList(Params, Id, OutResponse);
+	}
+	else if (Method == TEXT("resources/read"))
+	{
+		return HandleResourcesRead(Params, Id, OutResponse);
+	}
+	else if (Method == TEXT("prompts/list"))
+	{
+		return HandlePromptsList(Params, Id, OutResponse);
+	}
+	else if (Method == TEXT("prompts/get"))
+	{
+		return HandlePromptsGet(Params, Id, OutResponse);
+	}
 	else
 	{
 		// Method not found
@@ -294,6 +312,17 @@ bool FN2CMcpHttpRequestHandler::HandleInitialize(const TSharedPtr<FJsonValue>& P
 	TSharedPtr<FJsonObject> ToolsCapability = MakeShareable(new FJsonObject);
 	ToolsCapability->SetBoolField(TEXT("listChanged"), true); // We support the tools/list_changed notification
 	ServerCapabilities->SetObjectField(TEXT("tools"), ToolsCapability);
+	
+	// Resources capability
+	TSharedPtr<FJsonObject> ResourcesCapability = MakeShareable(new FJsonObject);
+	ResourcesCapability->SetBoolField(TEXT("subscribe"), false); // Subscriptions not implemented yet
+	ResourcesCapability->SetBoolField(TEXT("listChanged"), false); // List change notifications not implemented yet
+	ServerCapabilities->SetObjectField(TEXT("resources"), ResourcesCapability);
+	
+	// Prompts capability
+	TSharedPtr<FJsonObject> PromptsCapability = MakeShareable(new FJsonObject);
+	PromptsCapability->SetBoolField(TEXT("listChanged"), false); // List change notifications not implemented yet
+	ServerCapabilities->SetObjectField(TEXT("prompts"), PromptsCapability);
 	
 	// Logging capability (for future use)
 	TSharedPtr<FJsonObject> LoggingCapability = MakeShareable(new FJsonObject);
@@ -524,5 +553,244 @@ bool FN2CMcpHttpRequestHandler::ProcessBatchRequest(const TArray<TSharedPtr<FJso
 		FN2CLogger::Get().Log(TEXT("Batch request contained only notifications - returning 202"), EN2CLogSeverity::Info);
 	}
 	
+	return true;
+}
+
+bool FN2CMcpHttpRequestHandler::HandleResourcesList(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse)
+{
+	FN2CLogger::Get().Log(TEXT("Processing MCP resources/list request"), EN2CLogSeverity::Info);
+
+	// For MVP, we ignore pagination params (cursor) and return all resources
+	// TODO: In the future, implement pagination if resource list becomes large
+
+	// Get all registered resources from the manager
+	TArray<FMcpResourceDefinition> Resources = FN2CMcpResourceManager::Get().ListResources();
+
+	// Build the result object
+	TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
+
+	// Create resources array
+	TArray<TSharedPtr<FJsonValue>> ResourcesArray;
+	for (const FMcpResourceDefinition& Resource : Resources)
+	{
+		TSharedPtr<FJsonObject> ResourceJson = Resource.ToJson();
+		if (ResourceJson.IsValid())
+		{
+			ResourcesArray.Add(MakeShareable(new FJsonValueObject(ResourceJson)));
+		}
+	}
+
+	Result->SetArrayField(TEXT("resources"), ResourcesArray);
+
+	// Also include resource templates  
+	TArray<FMcpResourceTemplate> Templates = FN2CMcpResourceManager::Get().ListResourceTemplates();
+	if (Templates.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> TemplatesArray;
+		for (const FMcpResourceTemplate& Template : Templates)
+		{
+			TSharedPtr<FJsonObject> TemplateJson = Template.ToJson();
+			if (TemplateJson.IsValid())
+			{
+				TemplatesArray.Add(MakeShareable(new FJsonValueObject(TemplateJson)));
+			}
+		}
+		Result->SetArrayField(TEXT("resourceTemplates"), TemplatesArray);
+	}
+
+	// For MVP, no pagination so no nextCursor field
+
+	// Create success response
+	OutResponse = FJsonRpcUtils::CreateSuccessResponse(Id, MakeShareable(new FJsonValueObject(Result)));
+
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Returned %d resources and %d templates in resources/list response"), 
+		Resources.Num(), Templates.Num()), EN2CLogSeverity::Info);
+
+	return true;
+}
+
+bool FN2CMcpHttpRequestHandler::HandleResourcesRead(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse)
+{
+	FN2CLogger::Get().Log(TEXT("Processing MCP resources/read request"), EN2CLogSeverity::Info);
+
+	// Validate params
+	if (!Params.IsValid() || Params->IsNull())
+	{
+		FN2CLogger::Get().LogWarning(TEXT("resources/read request missing or null params"));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing or null params for resources/read"));
+		return true;
+	}
+
+	if (Params->Type != EJson::Object)
+	{
+		FN2CLogger::Get().LogWarning(TEXT("resources/read request params is not an object"));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Params must be an object for resources/read"));
+		return true;
+	}
+
+	TSharedPtr<FJsonObject> ParamsObject = Params->AsObject();
+
+	// Extract resource URI
+	FString ResourceUri;
+	if (!ParamsObject->TryGetStringField(TEXT("uri"), ResourceUri))
+	{
+		FN2CLogger::Get().LogWarning(TEXT("resources/read request missing uri"));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing required field: uri"));
+		return true;
+	}
+
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Reading resource: %s"), *ResourceUri), EN2CLogSeverity::Info);
+
+	// Check if resource exists
+	if (!FN2CMcpResourceManager::Get().IsResourceRegistered(ResourceUri))
+	{
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Resource not found: %s"), *ResourceUri));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::MethodNotFound, FString::Printf(TEXT("Resource not found: %s"), *ResourceUri));
+		return true;
+	}
+
+	// Read the resource
+	FMcpResourceContents ResourceContents = FN2CMcpResourceManager::Get().ReadResource(ResourceUri);
+
+	// Build result object
+	TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
+	
+	// Create contents array (MCP expects an array of content items)
+	TArray<TSharedPtr<FJsonValue>> ContentsArray;
+	
+	TSharedPtr<FJsonObject> ContentItem = ResourceContents.ToJson();
+	if (ContentItem.IsValid())
+	{
+		ContentsArray.Add(MakeShareable(new FJsonValueObject(ContentItem)));
+	}
+	
+	Result->SetArrayField(TEXT("contents"), ContentsArray);
+
+	// Create success response
+	OutResponse = FJsonRpcUtils::CreateSuccessResponse(Id, MakeShareable(new FJsonValueObject(Result)));
+
+	return true;
+}
+
+bool FN2CMcpHttpRequestHandler::HandlePromptsList(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse)
+{
+	FN2CLogger::Get().Log(TEXT("Processing MCP prompts/list request"), EN2CLogSeverity::Info);
+
+	// For MVP, we ignore pagination params (cursor) and return all prompts
+	// TODO: In the future, implement pagination if prompt list becomes large
+
+	// Get all registered prompts from the manager
+	TArray<FMcpPromptDefinition> Prompts = FN2CMcpPromptManager::Get().ListPrompts();
+
+	// Build the result object
+	TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
+
+	// Create prompts array
+	TArray<TSharedPtr<FJsonValue>> PromptsArray;
+	for (const FMcpPromptDefinition& Prompt : Prompts)
+	{
+		TSharedPtr<FJsonObject> PromptJson = Prompt.ToJson();
+		if (PromptJson.IsValid())
+		{
+			PromptsArray.Add(MakeShareable(new FJsonValueObject(PromptJson)));
+		}
+	}
+
+	Result->SetArrayField(TEXT("prompts"), PromptsArray);
+
+	// For MVP, no pagination so no nextCursor field
+
+	// Create success response
+	OutResponse = FJsonRpcUtils::CreateSuccessResponse(Id, MakeShareable(new FJsonValueObject(Result)));
+
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Returned %d prompts in prompts/list response"), Prompts.Num()), EN2CLogSeverity::Info);
+
+	return true;
+}
+
+bool FN2CMcpHttpRequestHandler::HandlePromptsGet(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse)
+{
+	FN2CLogger::Get().Log(TEXT("Processing MCP prompts/get request"), EN2CLogSeverity::Info);
+
+	// Validate params
+	if (!Params.IsValid() || Params->IsNull())
+	{
+		FN2CLogger::Get().LogWarning(TEXT("prompts/get request missing or null params"));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing or null params for prompts/get"));
+		return true;
+	}
+
+	if (Params->Type != EJson::Object)
+	{
+		FN2CLogger::Get().LogWarning(TEXT("prompts/get request params is not an object"));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Params must be an object for prompts/get"));
+		return true;
+	}
+
+	TSharedPtr<FJsonObject> ParamsObject = Params->AsObject();
+
+	// Extract prompt name
+	FString PromptName;
+	if (!ParamsObject->TryGetStringField(TEXT("name"), PromptName))
+	{
+		FN2CLogger::Get().LogWarning(TEXT("prompts/get request missing prompt name"));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing required field: name"));
+		return true;
+	}
+
+	// Extract arguments (optional)
+	TMap<FString, FString> Arguments;
+	const TSharedPtr<FJsonObject>* ArgumentsObj = nullptr;
+	if (ParamsObject->TryGetObjectField(TEXT("arguments"), ArgumentsObj) && ArgumentsObj->IsValid())
+	{
+		// Convert JSON object to string map
+		for (const auto& Pair : (*ArgumentsObj)->Values)
+		{
+			if (Pair.Value.IsValid() && Pair.Value->Type == EJson::String)
+			{
+				Arguments.Add(Pair.Key, Pair.Value->AsString());
+			}
+			else if (Pair.Value.IsValid())
+			{
+				// Try to convert non-string values to string
+				FString StringValue;
+				if (Pair.Value->Type == EJson::Number)
+				{
+					StringValue = FString::Printf(TEXT("%f"), Pair.Value->AsNumber());
+				}
+				else if (Pair.Value->Type == EJson::Boolean)
+				{
+					StringValue = Pair.Value->AsBool() ? TEXT("true") : TEXT("false");
+				}
+				else
+				{
+					// For complex types, serialize to JSON string
+					TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&StringValue);
+					FJsonSerializer::Serialize(Pair.Value, Pair.Key, Writer);
+				}
+				Arguments.Add(Pair.Key, StringValue);
+			}
+		}
+	}
+
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Getting prompt: %s with %d arguments"), *PromptName, Arguments.Num()), EN2CLogSeverity::Info);
+
+	// Check if prompt exists
+	if (!FN2CMcpPromptManager::Get().IsPromptRegistered(PromptName))
+	{
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Prompt not found: %s"), *PromptName));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::MethodNotFound, FString::Printf(TEXT("Prompt not found: %s"), *PromptName));
+		return true;
+	}
+
+	// Get the prompt
+	FMcpPromptResult PromptResult = FN2CMcpPromptManager::Get().GetPrompt(PromptName, Arguments);
+
+	// Convert result to JSON
+	TSharedPtr<FJsonObject> ResultJson = PromptResult.ToJson();
+
+	// Create success response
+	OutResponse = FJsonRpcUtils::CreateSuccessResponse(Id, MakeShareable(new FJsonValueObject(ResultJson)));
+
 	return true;
 }

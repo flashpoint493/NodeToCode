@@ -8,6 +8,10 @@
 #include "HttpPath.h"
 #include "MCP/Tools/N2CMcpToolManager.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
+#include "MCP/Resources/N2CMcpResourceManager.h"
+#include "MCP/Resources/Implementations/N2CMcpBlueprintResource.h"
+#include "MCP/Prompts/N2CMcpPromptManager.h"
+#include "MCP/Prompts/Implementations/N2CMcpCodeGenerationPrompt.h"
 #include "Core/N2CSettings.h"
 
 FN2CMcpHttpServerManager& FN2CMcpHttpServerManager::Get()
@@ -68,6 +72,12 @@ bool FN2CMcpHttpServerManager::StartServer(int32 Port)
 
 	// Register tools
 	RegisterMcpTools();
+	
+	// Register resources
+	RegisterMcpResources();
+	
+	// Register prompts
+	RegisterMcpPrompts();
 
 	return true;
 }
@@ -243,4 +253,113 @@ void FN2CMcpHttpServerManager::RegisterMcpTools()
 	FN2CMcpToolRegistry::Get().RegisterAllToolsWithManager();
 	
 	FN2CLogger::Get().Log(TEXT("MCP tools registered successfully"), EN2CLogSeverity::Info);
+}
+
+void FN2CMcpHttpServerManager::RegisterMcpResources()
+{
+	FN2CLogger::Get().Log(TEXT("Registering NodeToCode MCP resources"), EN2CLogSeverity::Info);
+	
+	// Clear any existing resources first
+	FN2CMcpResourceManager::Get().ClearAllResources();
+	
+	// Register current blueprint resource
+	{
+		FMcpResourceDefinition CurrentBlueprintDef;
+		CurrentBlueprintDef.Uri = TEXT("nodetocode://blueprint/current");
+		CurrentBlueprintDef.Name = TEXT("Current Blueprint");
+		CurrentBlueprintDef.Description = TEXT("The currently focused Blueprint in N2CJSON format");
+		CurrentBlueprintDef.MimeType = TEXT("application/json");
+		
+		auto Handler = FMcpResourceReadDelegate::CreateLambda([](const FString& Uri) -> FMcpResourceContents
+		{
+			FN2CMcpCurrentBlueprintResource Resource;
+			return Resource.Read(Uri);
+		});
+		
+		FN2CMcpResourceManager::Get().RegisterStaticResource(CurrentBlueprintDef, Handler, true);
+	}
+	
+	// Register all blueprints resource
+	{
+		FMcpResourceDefinition AllBlueprintsDef;
+		AllBlueprintsDef.Uri = TEXT("nodetocode://blueprints/all");
+		AllBlueprintsDef.Name = TEXT("All Open Blueprints");
+		AllBlueprintsDef.Description = TEXT("List of all currently open Blueprints");
+		AllBlueprintsDef.MimeType = TEXT("application/json");
+		
+		auto Handler = FMcpResourceReadDelegate::CreateLambda([](const FString& Uri) -> FMcpResourceContents
+		{
+			FN2CMcpAllBlueprintsResource Resource;
+			return Resource.Read(Uri);
+		});
+		
+		FN2CMcpResourceManager::Get().RegisterStaticResource(AllBlueprintsDef, Handler, true);
+	}
+	
+	// Register blueprint by name template
+	{
+		FMcpResourceTemplate BlueprintByNameTemplate = FN2CMcpBlueprintByNameResource::GetResourceTemplate();
+		
+		auto Handler = FMcpResourceTemplateHandler::CreateLambda([](const FString& Uri) -> FMcpResourceContents
+		{
+			FN2CMcpBlueprintByNameResource Resource;
+			return Resource.Read(Uri);
+		});
+		
+		FN2CMcpResourceManager::Get().RegisterDynamicResource(BlueprintByNameTemplate, Handler, true);
+	}
+	
+	FN2CLogger::Get().Log(TEXT("MCP resources registered successfully"), EN2CLogSeverity::Info);
+}
+
+void FN2CMcpHttpServerManager::RegisterMcpPrompts()
+{
+	FN2CLogger::Get().Log(TEXT("Registering NodeToCode MCP prompts"), EN2CLogSeverity::Info);
+	
+	// Clear any existing prompts first
+	FN2CMcpPromptManager::Get().ClearAllPrompts();
+	
+	// Register generate-code prompt
+	{
+		FN2CMcpCodeGenerationPrompt TempPrompt;
+		FMcpPromptDefinition CodeGenDef = TempPrompt.GetDefinition();
+		
+		auto Handler = FMcpPromptGetDelegate::CreateLambda([](const TMap<FString, FString>& Arguments) -> FMcpPromptResult
+		{
+			FN2CMcpCodeGenerationPrompt Prompt;
+			return Prompt.GetPrompt(Arguments);
+		});
+		
+		FN2CMcpPromptManager::Get().RegisterPrompt(CodeGenDef, Handler, true);
+	}
+	
+	// Register analyze-blueprint prompt
+	{
+		FN2CMcpBlueprintAnalysisPrompt TempPrompt;
+		FMcpPromptDefinition AnalysisDef = TempPrompt.GetDefinition();
+		
+		auto Handler = FMcpPromptGetDelegate::CreateLambda([](const TMap<FString, FString>& Arguments) -> FMcpPromptResult
+		{
+			FN2CMcpBlueprintAnalysisPrompt Prompt;
+			return Prompt.GetPrompt(Arguments);
+		});
+		
+		FN2CMcpPromptManager::Get().RegisterPrompt(AnalysisDef, Handler, true);
+	}
+	
+	// Register refactor-blueprint prompt
+	{
+		FN2CMcpRefactorPrompt TempPrompt;
+		FMcpPromptDefinition RefactorDef = TempPrompt.GetDefinition();
+		
+		auto Handler = FMcpPromptGetDelegate::CreateLambda([](const TMap<FString, FString>& Arguments) -> FMcpPromptResult
+		{
+			FN2CMcpRefactorPrompt Prompt;
+			return Prompt.GetPrompt(Arguments);
+		});
+		
+		FN2CMcpPromptManager::Get().RegisterPrompt(RefactorDef, Handler, true);
+	}
+	
+	FN2CLogger::Get().Log(TEXT("MCP prompts registered successfully"), EN2CLogSeverity::Info);
 }

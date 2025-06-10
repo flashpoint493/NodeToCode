@@ -92,6 +92,42 @@ private:
 	static bool HandleToolsCall(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse);
 
 	/**
+	 * Handles the MCP resources/list request.
+	 * @param Params The request parameters
+	 * @param Id The request ID
+	 * @param OutResponse The generated response
+	 * @return true if handled successfully
+	 */
+	static bool HandleResourcesList(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse);
+
+	/**
+	 * Handles the MCP resources/read request.
+	 * @param Params The request parameters
+	 * @param Id The request ID
+	 * @param OutResponse The generated response
+	 * @return true if handled successfully
+	 */
+	static bool HandleResourcesRead(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse);
+
+	/**
+	 * Handles the MCP prompts/list request.
+	 * @param Params The request parameters
+	 * @param Id The request ID
+	 * @param OutResponse The generated response
+	 * @return true if handled successfully
+	 */
+	static bool HandlePromptsList(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse);
+
+	/**
+	 * Handles the MCP prompts/get request.
+	 * @param Params The request parameters
+	 * @param Id The request ID
+	 * @param OutResponse The generated response
+	 * @return true if handled successfully
+	 */
+	static bool HandlePromptsGet(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse);
+
+	/**
 	 * Processes a batch of JSON-RPC requests.
 	 * @param BatchArray The array of JSON-RPC requests
 	 * @param OutResponseBody The generated response body (empty for all-notifications)

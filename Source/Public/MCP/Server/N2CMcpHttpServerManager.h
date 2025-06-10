@@ -67,6 +67,16 @@ private:
 	 */
 	void RegisterMcpTools();
 
+	/**
+	 * Registers MCP resources with the resource manager.
+	 */
+	void RegisterMcpResources();
+
+	/**
+	 * Registers MCP prompts with the prompt manager.
+	 */
+	void RegisterMcpPrompts();
+
 	/** Whether the server is currently running */
 	bool bIsServerRunning = false;
 
