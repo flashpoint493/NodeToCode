@@ -9,6 +9,7 @@
 #include "MCP/Tools/N2CMcpToolManager.h"
 #include "MCP/Resources/N2CMcpResourceManager.h"
 #include "MCP/Prompts/N2CMcpPromptManager.h"
+#include "MCP/Validation/N2CMcpRequestValidator.h"
 
 // Define supported protocol versions in order of preference (newest first)
 const TArray<FString> FN2CMcpHttpRequestHandler::SUPPORTED_PROTOCOL_VERSIONS = {
@@ -391,33 +392,29 @@ bool FN2CMcpHttpRequestHandler::HandleToolsCall(const TSharedPtr<FJsonValue>& Pa
 {
 	FN2CLogger::Get().Log(TEXT("Processing MCP tools/call request"), EN2CLogSeverity::Info);
 
-	// Validate params
-	if (!Params.IsValid() || Params->IsNull())
+	// Validate params using the validation framework
+	TSharedPtr<FJsonObject> ParamsObject;
+	FString ValidationError;
+	if (!FN2CMcpRequestValidator::ValidateParamsIsObject(Params, ParamsObject, ValidationError))
 	{
-		FN2CLogger::Get().LogWarning(TEXT("tools/call request missing or null params"));
-		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing or null params for tools/call"));
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("tools/call validation failed: %s"), *ValidationError));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, ValidationError);
 		return true;
 	}
 
-	if (Params->Type != EJson::Object)
+	// Validate tools/call specific requirements
+	if (!FN2CMcpRequestValidator::ValidateToolsCallRequest(ParamsObject, ValidationError))
 	{
-		FN2CLogger::Get().LogWarning(TEXT("tools/call request params is not an object"));
-		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Params must be an object for tools/call"));
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("tools/call validation failed: %s"), *ValidationError));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, ValidationError);
 		return true;
 	}
 
-	TSharedPtr<FJsonObject> ParamsObject = Params->AsObject();
-
-	// Extract tool name
+	// Extract validated fields
 	FString ToolName;
-	if (!ParamsObject->TryGetStringField(TEXT("name"), ToolName))
-	{
-		FN2CLogger::Get().LogWarning(TEXT("tools/call request missing tool name"));
-		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing required field: name"));
-		return true;
-	}
+	ParamsObject->TryGetStringField(TEXT("name"), ToolName);  // Already validated as required
 
-	// Extract arguments (optional, can be null)
+	// Extract arguments (optional, already validated)
 	const TSharedPtr<FJsonObject>* ArgumentsObj = nullptr;
 	TSharedPtr<FJsonObject> Arguments;
 	if (ParamsObject->TryGetObjectField(TEXT("arguments"), ArgumentsObj) && ArgumentsObj->IsValid())
@@ -613,31 +610,27 @@ bool FN2CMcpHttpRequestHandler::HandleResourcesRead(const TSharedPtr<FJsonValue>
 {
 	FN2CLogger::Get().Log(TEXT("Processing MCP resources/read request"), EN2CLogSeverity::Info);
 
-	// Validate params
-	if (!Params.IsValid() || Params->IsNull())
+	// Validate params using the validation framework
+	TSharedPtr<FJsonObject> ParamsObject;
+	FString ValidationError;
+	if (!FN2CMcpRequestValidator::ValidateParamsIsObject(Params, ParamsObject, ValidationError))
 	{
-		FN2CLogger::Get().LogWarning(TEXT("resources/read request missing or null params"));
-		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing or null params for resources/read"));
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("resources/read validation failed: %s"), *ValidationError));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, ValidationError);
 		return true;
 	}
 
-	if (Params->Type != EJson::Object)
+	// Validate resources/read specific requirements
+	if (!FN2CMcpRequestValidator::ValidateResourcesReadRequest(ParamsObject, ValidationError))
 	{
-		FN2CLogger::Get().LogWarning(TEXT("resources/read request params is not an object"));
-		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Params must be an object for resources/read"));
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("resources/read validation failed: %s"), *ValidationError));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, ValidationError);
 		return true;
 	}
 
-	TSharedPtr<FJsonObject> ParamsObject = Params->AsObject();
-
-	// Extract resource URI
+	// Extract validated fields
 	FString ResourceUri;
-	if (!ParamsObject->TryGetStringField(TEXT("uri"), ResourceUri))
-	{
-		FN2CLogger::Get().LogWarning(TEXT("resources/read request missing uri"));
-		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing required field: uri"));
-		return true;
-	}
+	ParamsObject->TryGetStringField(TEXT("uri"), ResourceUri);  // Already validated as required
 
 	FN2CLogger::Get().Log(FString::Printf(TEXT("Reading resource: %s"), *ResourceUri), EN2CLogSeverity::Info);
 
@@ -712,31 +705,27 @@ bool FN2CMcpHttpRequestHandler::HandlePromptsGet(const TSharedPtr<FJsonValue>& P
 {
 	FN2CLogger::Get().Log(TEXT("Processing MCP prompts/get request"), EN2CLogSeverity::Info);
 
-	// Validate params
-	if (!Params.IsValid() || Params->IsNull())
+	// Validate params using the validation framework
+	TSharedPtr<FJsonObject> ParamsObject;
+	FString ValidationError;
+	if (!FN2CMcpRequestValidator::ValidateParamsIsObject(Params, ParamsObject, ValidationError))
 	{
-		FN2CLogger::Get().LogWarning(TEXT("prompts/get request missing or null params"));
-		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing or null params for prompts/get"));
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("prompts/get validation failed: %s"), *ValidationError));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, ValidationError);
 		return true;
 	}
 
-	if (Params->Type != EJson::Object)
+	// Validate prompts/get specific requirements
+	if (!FN2CMcpRequestValidator::ValidatePromptsGetRequest(ParamsObject, ValidationError))
 	{
-		FN2CLogger::Get().LogWarning(TEXT("prompts/get request params is not an object"));
-		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Params must be an object for prompts/get"));
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("prompts/get validation failed: %s"), *ValidationError));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, ValidationError);
 		return true;
 	}
 
-	TSharedPtr<FJsonObject> ParamsObject = Params->AsObject();
-
-	// Extract prompt name
+	// Extract validated fields
 	FString PromptName;
-	if (!ParamsObject->TryGetStringField(TEXT("name"), PromptName))
-	{
-		FN2CLogger::Get().LogWarning(TEXT("prompts/get request missing prompt name"));
-		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing required field: name"));
-		return true;
-	}
+	ParamsObject->TryGetStringField(TEXT("name"), PromptName);  // Already validated as required
 
 	// Extract arguments (optional)
 	TMap<FString, FString> Arguments;

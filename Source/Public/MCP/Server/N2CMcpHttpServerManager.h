@@ -7,6 +7,9 @@
 #include "Interfaces/IHttpResponse.h"
 #include "HttpServerModule.h"
 #include "IHttpRouter.h"
+#include "HAL/CriticalSection.h"
+#include "MCP/Server/IN2CMcpNotificationChannel.h"
+#include "MCP/Server/N2CMcpJsonRpcTypes.h"
 
 /**
  * Manages the HTTP server for Model Context Protocol (MCP) communication.
@@ -43,6 +46,45 @@ public:
 	 * @return The server port, or -1 if not running
 	 */
 	int32 GetServerPort() const { return ServerPort; }
+
+	/**
+	 * Registers a client channel for receiving notifications.
+	 * @param SessionId The session ID to associate with this channel
+	 * @param Channel The notification channel implementation
+	 */
+	void RegisterClient(const FString& SessionId, TSharedPtr<IN2CMcpNotificationChannel> Channel);
+
+	/**
+	 * Unregisters a client channel.
+	 * @param SessionId The session ID to unregister
+	 */
+	void UnregisterClient(const FString& SessionId);
+
+	/**
+	 * Broadcasts a notification to all connected clients.
+	 * @param Notification The notification to broadcast
+	 */
+	void BroadcastNotification(const FJsonRpcNotification& Notification);
+
+	/**
+	 * Sends a notification to a specific client.
+	 * @param SessionId The session ID of the client
+	 * @param Notification The notification to send
+	 */
+	void SendNotificationToClient(const FString& SessionId, const FJsonRpcNotification& Notification);
+
+	/**
+	 * Gets the current session ID for the active connection.
+	 * @return The current session ID, or empty string if none
+	 */
+	FString GetCurrentSessionId() const { return CurrentSessionId; }
+
+	/**
+	 * Sets the protocol version for a session.
+	 * @param SessionId The session ID
+	 * @param ProtocolVersion The negotiated protocol version
+	 */
+	void SetSessionProtocolVersion(const FString& SessionId, const FString& ProtocolVersion);
 
 private:
 	// Private constructor for singleton
@@ -91,4 +133,13 @@ private:
 
 	/** Current session ID for the MCP connection */
 	FString CurrentSessionId;
+
+	/** Map of session IDs to notification channels */
+	TMap<FString, TSharedPtr<IN2CMcpNotificationChannel>> ClientChannels;
+
+	/** Thread safety for client channel access */
+	mutable FCriticalSection ClientChannelLock;
+
+	/** Map of session IDs to their negotiated protocol versions */
+	TMap<FString, FString> SessionProtocolVersions;
 };

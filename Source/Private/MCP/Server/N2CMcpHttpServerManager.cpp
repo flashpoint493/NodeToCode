@@ -363,3 +363,117 @@ void FN2CMcpHttpServerManager::RegisterMcpPrompts()
 	
 	FN2CLogger::Get().Log(TEXT("MCP prompts registered successfully"), EN2CLogSeverity::Info);
 }
+
+void FN2CMcpHttpServerManager::RegisterClient(const FString& SessionId, TSharedPtr<IN2CMcpNotificationChannel> Channel)
+{
+	if (!Channel.IsValid())
+	{
+		FN2CLogger::Get().LogWarning(TEXT("Cannot register null notification channel"));
+		return;
+	}
+
+	FScopeLock Lock(&ClientChannelLock);
+	
+	// Unregister any existing channel for this session
+	if (ClientChannels.Contains(SessionId))
+	{
+		FN2CLogger::Get().Log(FString::Printf(TEXT("Replacing existing notification channel for session: %s"), *SessionId), EN2CLogSeverity::Debug);
+	}
+	
+	ClientChannels.Add(SessionId, Channel);
+	
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Registered notification channel for session: %s"), *SessionId), EN2CLogSeverity::Info);
+}
+
+void FN2CMcpHttpServerManager::UnregisterClient(const FString& SessionId)
+{
+	FScopeLock Lock(&ClientChannelLock);
+	
+	if (ClientChannels.Remove(SessionId) > 0)
+	{
+		FN2CLogger::Get().Log(FString::Printf(TEXT("Unregistered notification channel for session: %s"), *SessionId), EN2CLogSeverity::Info);
+	}
+	
+	// Also remove protocol version info
+	SessionProtocolVersions.Remove(SessionId);
+}
+
+void FN2CMcpHttpServerManager::BroadcastNotification(const FJsonRpcNotification& Notification)
+{
+	FScopeLock Lock(&ClientChannelLock);
+	
+	TArray<FString> InactiveChannels;
+	
+	// Send to all registered clients
+	for (const auto& Pair : ClientChannels)
+	{
+		const FString& SessionId = Pair.Key;
+		const TSharedPtr<IN2CMcpNotificationChannel>& Channel = Pair.Value;
+		
+		if (Channel.IsValid() && Channel->IsActive())
+		{
+			if (!Channel->SendNotification(Notification))
+			{
+				FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Failed to send notification to session: %s"), *SessionId));
+			}
+		}
+		else
+		{
+			// Mark inactive channels for removal
+			InactiveChannels.Add(SessionId);
+		}
+	}
+	
+	// Clean up inactive channels
+	for (const FString& SessionId : InactiveChannels)
+	{
+		ClientChannels.Remove(SessionId);
+		SessionProtocolVersions.Remove(SessionId);
+		FN2CLogger::Get().Log(FString::Printf(TEXT("Removed inactive notification channel for session: %s"), *SessionId), EN2CLogSeverity::Debug);
+	}
+	
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Broadcast notification '%s' to %d active clients"), 
+		*Notification.Method, ClientChannels.Num() - InactiveChannels.Num()), EN2CLogSeverity::Debug);
+}
+
+void FN2CMcpHttpServerManager::SendNotificationToClient(const FString& SessionId, const FJsonRpcNotification& Notification)
+{
+	FScopeLock Lock(&ClientChannelLock);
+	
+	TSharedPtr<IN2CMcpNotificationChannel>* ChannelPtr = ClientChannels.Find(SessionId);
+	if (!ChannelPtr || !ChannelPtr->IsValid())
+	{
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("No active notification channel for session: %s"), *SessionId));
+		return;
+	}
+	
+	TSharedPtr<IN2CMcpNotificationChannel>& Channel = *ChannelPtr;
+	if (Channel->IsActive())
+	{
+		if (!Channel->SendNotification(Notification))
+		{
+			FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Failed to send notification to session: %s"), *SessionId));
+		}
+		else
+		{
+			FN2CLogger::Get().Log(FString::Printf(TEXT("Sent notification '%s' to session: %s"), 
+				*Notification.Method, *SessionId), EN2CLogSeverity::Debug);
+		}
+	}
+	else
+	{
+		// Remove inactive channel
+		ClientChannels.Remove(SessionId);
+		SessionProtocolVersions.Remove(SessionId);
+		FN2CLogger::Get().Log(FString::Printf(TEXT("Removed inactive notification channel for session: %s"), *SessionId), EN2CLogSeverity::Debug);
+	}
+}
+
+void FN2CMcpHttpServerManager::SetSessionProtocolVersion(const FString& SessionId, const FString& ProtocolVersion)
+{
+	FScopeLock Lock(&ClientChannelLock);
+	SessionProtocolVersions.Add(SessionId, ProtocolVersion);
+	
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Set protocol version '%s' for session: %s"), 
+		*ProtocolVersion, *SessionId), EN2CLogSeverity::Debug);
+}
