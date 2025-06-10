@@ -8,6 +8,12 @@
 #include "Interfaces/IPluginManager.h"
 #include "MCP/Tools/N2CMcpToolManager.h"
 
+// Define supported protocol versions in order of preference (newest first)
+const TArray<FString> FN2CMcpHttpRequestHandler::SUPPORTED_PROTOCOL_VERSIONS = {
+	TEXT("2025-03-26"),  // Latest version
+	TEXT("2024-11-05")   // Previous version for compatibility
+};
+
 bool FN2CMcpHttpRequestHandler::ProcessMcpRequest(const FString& RequestBody, FString& OutResponseBody, int32& OutStatusCode, bool& OutWasInitializeCall)
 {
 	// Default to success
@@ -33,14 +39,19 @@ bool FN2CMcpHttpRequestHandler::ProcessMcpRequest(const FString& RequestBody, FS
 	// Handle batch requests (array) or single requests (object)
 	if (JsonValue->Type == EJson::Array)
 	{
-		// Batch request - not implemented for MVP
-		FN2CLogger::Get().LogWarning(TEXT("Batch JSON-RPC requests not supported in MVP"));
+		// Batch request - process array of requests
+		const TArray<TSharedPtr<FJsonValue>>& BatchArray = JsonValue->AsArray();
 		
-		FJsonRpcResponse ErrorResponse = FJsonRpcUtils::CreateErrorResponse(nullptr, JsonRpcErrorCodes::InternalError, TEXT("Batch requests not supported"));
-		OutResponseBody = FJsonRpcUtils::SerializeResponse(ErrorResponse);
+		if (BatchArray.Num() == 0)
+		{
+			FN2CLogger::Get().LogWarning(TEXT("Empty batch request received"));
+			FJsonRpcResponse ErrorResponse = FJsonRpcUtils::CreateErrorResponse(nullptr, JsonRpcErrorCodes::InvalidRequest, TEXT("Batch request cannot be empty"));
+			OutResponseBody = FJsonRpcUtils::SerializeResponse(ErrorResponse);
+			OutStatusCode = 400; // Bad Request
+			return false;
+		}
 		
-		OutStatusCode = 501; // Not Implemented
-		return false;
+		return ProcessBatchRequest(BatchArray, OutResponseBody, OutStatusCode);
 	}
 	else if (JsonValue->Type == EJson::Object)
 	{
@@ -243,20 +254,29 @@ bool FN2CMcpHttpRequestHandler::HandleInitialize(const TSharedPtr<FJsonValue>& P
 	}
 
 	// Protocol version negotiation
-	const FString SupportedProtocolVersion = TEXT("2025-03-26");
-	FString NegotiatedProtocolVersion = SupportedProtocolVersion;
-
-	// Check if we support the client's requested version
-	if (ClientProtocolVersion != SupportedProtocolVersion)
+	FString NegotiatedProtocolVersion;
+	
+	// First, check if we support the exact version requested
+	if (SUPPORTED_PROTOCOL_VERSIONS.Contains(ClientProtocolVersion))
 	{
-		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Client requested unsupported protocol version: %s. Server supports: %s"), 
-			*ClientProtocolVersion, *SupportedProtocolVersion));
+		NegotiatedProtocolVersion = ClientProtocolVersion;
+		FN2CLogger::Get().Log(
+			FString::Printf(TEXT("Using client's requested protocol version: %s"), 
+			*NegotiatedProtocolVersion), EN2CLogSeverity::Info);
+	}
+	else
+	{
+		// We don't support their version - use our latest
+		NegotiatedProtocolVersion = SUPPORTED_PROTOCOL_VERSIONS[0];
+		FN2CLogger::Get().LogWarning(
+			FString::Printf(TEXT("Client requested unsupported version '%s'. Negotiating to '%s'"), 
+			*ClientProtocolVersion, *NegotiatedProtocolVersion));
 		
-		// For MVP, we'll be strict about version matching
-		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, 
-			FString::Printf(TEXT("Unsupported protocol version: %s. Server supports: %s"), 
-				*ClientProtocolVersion, *SupportedProtocolVersion));
-		return true;
+		// Log all supported versions for debugging
+		FString SupportedVersionsList = FString::Join(SUPPORTED_PROTOCOL_VERSIONS, TEXT(", "));
+		FN2CLogger::Get().Log(
+			FString::Printf(TEXT("Server supports protocol versions: %s"), 
+			*SupportedVersionsList), EN2CLogSeverity::Debug);
 	}
 
 	FN2CLogger::Get().Log(FString::Printf(TEXT("Protocol version negotiated: %s"), *NegotiatedProtocolVersion), EN2CLogSeverity::Info);
@@ -402,5 +422,107 @@ bool FN2CMcpHttpRequestHandler::HandleToolsCall(const TSharedPtr<FJsonValue>& Pa
 	// Create success response
 	OutResponse = FJsonRpcUtils::CreateSuccessResponse(Id, MakeShareable(new FJsonValueObject(ResultJson)));
 
+	return true;
+}
+
+bool FN2CMcpHttpRequestHandler::ProcessBatchRequest(const TArray<TSharedPtr<FJsonValue>>& BatchArray, FString& OutResponseBody, int32& OutStatusCode)
+{
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Processing JSON-RPC batch request with %d items"), BatchArray.Num()), EN2CLogSeverity::Info);
+	
+	TArray<TSharedPtr<FJsonValue>> ResponseArray;
+	bool bHasResponses = false;
+	bool bHasErrors = false;
+	
+	// Process each item in the batch
+	for (const TSharedPtr<FJsonValue>& Item : BatchArray)
+	{
+		if (!Item.IsValid() || Item->Type != EJson::Object)
+		{
+			// Invalid item in batch - add error response
+			FJsonRpcResponse ErrorResponse = FJsonRpcUtils::CreateErrorResponse(nullptr, JsonRpcErrorCodes::InvalidRequest, TEXT("Invalid item in batch"));
+			ResponseArray.Add(MakeShareable(new FJsonValueObject(ErrorResponse.ToJson())));
+			bHasResponses = true;
+			bHasErrors = true;
+			continue;
+		}
+		
+		TSharedPtr<FJsonObject> RequestObject = Item->AsObject();
+		FJsonRpcUtils::EJsonRpcMessageType MessageType = FJsonRpcUtils::GetMessageType(RequestObject);
+		
+		if (MessageType == FJsonRpcUtils::EJsonRpcMessageType::Request)
+		{
+			FJsonRpcRequest Request(RequestObject);
+			FJsonRpcResponse Response;
+			
+			// Process the request
+			if (ProcessRequest(Request, Response))
+			{
+				ResponseArray.Add(MakeShareable(new FJsonValueObject(Response.ToJson())));
+				bHasResponses = true;
+				
+				// Check if this is an error response
+				if (Response.Error.IsValid())
+				{
+					bHasErrors = true;
+				}
+			}
+			else
+			{
+				// Failed to process request - add internal error
+				FJsonRpcResponse ErrorResponse = FJsonRpcUtils::CreateErrorResponse(Request.Id, JsonRpcErrorCodes::InternalError, TEXT("Failed to process request"));
+				ResponseArray.Add(MakeShareable(new FJsonValueObject(ErrorResponse.ToJson())));
+				bHasResponses = true;
+				bHasErrors = true;
+			}
+		}
+		else if (MessageType == FJsonRpcUtils::EJsonRpcMessageType::Notification)
+		{
+			FJsonRpcNotification Notification(RequestObject);
+			
+			// Process the notification - no response added
+			if (!ProcessNotification(Notification))
+			{
+				FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Failed to process notification in batch: %s"), *Notification.Method));
+			}
+			// Notifications don't contribute to the response array
+		}
+		else
+		{
+			// Invalid JSON-RPC message
+			FN2CLogger::Get().LogWarning(TEXT("Invalid JSON-RPC message in batch"));
+			FJsonRpcResponse ErrorResponse = FJsonRpcUtils::CreateErrorResponse(nullptr, JsonRpcErrorCodes::InvalidRequest, TEXT("Invalid JSON-RPC message"));
+			ResponseArray.Add(MakeShareable(new FJsonValueObject(ErrorResponse.ToJson())));
+			bHasResponses = true;
+			bHasErrors = true;
+		}
+	}
+	
+	// Determine response based on what we processed
+	if (bHasResponses)
+	{
+		// Serialize the response array
+		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutResponseBody);
+		if (!FJsonSerializer::Serialize(ResponseArray, Writer))
+		{
+			FN2CLogger::Get().LogError(TEXT("Failed to serialize batch response array"));
+			OutStatusCode = 500; // Internal Server Error
+			return false;
+		}
+		
+		// Use 200 for successful batch processing, even if individual requests had errors
+		OutStatusCode = 200;
+		
+		FN2CLogger::Get().Log(FString::Printf(TEXT("Batch request processed: %d responses, has errors: %s"), 
+			ResponseArray.Num(), bHasErrors ? TEXT("true") : TEXT("false")), EN2CLogSeverity::Info);
+	}
+	else
+	{
+		// All were notifications - return 202 Accepted with no body
+		OutResponseBody = TEXT("");
+		OutStatusCode = 202;
+		
+		FN2CLogger::Get().Log(TEXT("Batch request contained only notifications - returning 202"), EN2CLogSeverity::Info);
+	}
+	
 	return true;
 }

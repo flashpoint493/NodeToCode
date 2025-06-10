@@ -91,6 +91,18 @@ private:
 	 */
 	static bool HandleToolsCall(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse);
 
+	/**
+	 * Processes a batch of JSON-RPC requests.
+	 * @param BatchArray The array of JSON-RPC requests
+	 * @param OutResponseBody The generated response body (empty for all-notifications)
+	 * @param OutStatusCode The HTTP status code to return
+	 * @return true if the batch was processed successfully
+	 */
+	static bool ProcessBatchRequest(const TArray<TSharedPtr<FJsonValue>>& BatchArray, FString& OutResponseBody, int32& OutStatusCode);
+
 private:
+	// Supported protocol versions in order of preference (newest first)
+	static const TArray<FString> SUPPORTED_PROTOCOL_VERSIONS;
+	
 	// These methods are now handled by FJsonRpcUtils
 };
