@@ -13,7 +13,7 @@ class NODETOCODE_API FN2CMcpCodeGenerationPrompt : public IN2CMcpPrompt
 {
 public:
 	virtual FMcpPromptDefinition GetDefinition() const override;
-	virtual FMcpPromptResult GetPrompt(const TMap<FString, FString>& Arguments) override;
+	virtual FMcpPromptResult GetPrompt(const FMcpPromptArguments& Arguments) override;
 	virtual bool RequiresGameThread() const override { return true; }
 
 protected:
@@ -47,7 +47,7 @@ class NODETOCODE_API FN2CMcpBlueprintAnalysisPrompt : public IN2CMcpPrompt
 {
 public:
 	virtual FMcpPromptDefinition GetDefinition() const override;
-	virtual FMcpPromptResult GetPrompt(const TMap<FString, FString>& Arguments) override;
+	virtual FMcpPromptResult GetPrompt(const FMcpPromptArguments& Arguments) override;
 	virtual bool RequiresGameThread() const override { return true; }
 
 protected:
@@ -78,7 +78,7 @@ class NODETOCODE_API FN2CMcpRefactorPrompt : public IN2CMcpPrompt
 {
 public:
 	virtual FMcpPromptDefinition GetDefinition() const override;
-	virtual FMcpPromptResult GetPrompt(const TMap<FString, FString>& Arguments) override;
+	virtual FMcpPromptResult GetPrompt(const FMcpPromptArguments& Arguments) override;
 	virtual bool RequiresGameThread() const override { return true; }
 
 protected:

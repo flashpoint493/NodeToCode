@@ -728,7 +728,7 @@ bool FN2CMcpHttpRequestHandler::HandlePromptsGet(const TSharedPtr<FJsonValue>& P
 	ParamsObject->TryGetStringField(TEXT("name"), PromptName);  // Already validated as required
 
 	// Extract arguments (optional)
-	TMap<FString, FString> Arguments;
+	FMcpPromptArguments Arguments;
 	const TSharedPtr<FJsonObject>* ArgumentsObj = nullptr;
 	if (ParamsObject->TryGetObjectField(TEXT("arguments"), ArgumentsObj) && ArgumentsObj->IsValid())
 	{

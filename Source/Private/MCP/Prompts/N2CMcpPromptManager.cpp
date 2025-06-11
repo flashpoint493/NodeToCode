@@ -75,7 +75,7 @@ TArray<FMcpPromptDefinition> FN2CMcpPromptManager::ListPrompts(const FString& Cu
 	return PromptList;
 }
 
-FMcpPromptResult FN2CMcpPromptManager::GetPrompt(const FString& Name, const TMap<FString, FString>& Arguments)
+FMcpPromptResult FN2CMcpPromptManager::GetPrompt(const FString& Name, const FMcpPromptArguments& Arguments)
 {
 	FMcpPromptResult Result;
 
@@ -148,7 +148,7 @@ bool FN2CMcpPromptManager::IsPromptRegistered(const FString& Name) const
 	return Prompts.Contains(Name);
 }
 
-bool FN2CMcpPromptManager::ValidatePromptArguments(const FString& Name, const TMap<FString, FString>& Arguments, FString& OutError) const
+bool FN2CMcpPromptManager::ValidatePromptArguments(const FString& Name, const FMcpPromptArguments& Arguments, FString& OutError) const
 {
 	FScopeLock Lock(&PromptLock);
 	

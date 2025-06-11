@@ -324,7 +324,7 @@ void FN2CMcpHttpServerManager::RegisterMcpPrompts()
 		FN2CMcpCodeGenerationPrompt TempPrompt;
 		FMcpPromptDefinition CodeGenDef = TempPrompt.GetDefinition();
 		
-		auto Handler = FMcpPromptGetDelegate::CreateLambda([](const TMap<FString, FString>& Arguments) -> FMcpPromptResult
+		auto Handler = FMcpPromptGetDelegate::CreateLambda([](const FMcpPromptArguments& Arguments) -> FMcpPromptResult
 		{
 			FN2CMcpCodeGenerationPrompt Prompt;
 			return Prompt.GetPrompt(Arguments);
@@ -338,7 +338,7 @@ void FN2CMcpHttpServerManager::RegisterMcpPrompts()
 		FN2CMcpBlueprintAnalysisPrompt TempPrompt;
 		FMcpPromptDefinition AnalysisDef = TempPrompt.GetDefinition();
 		
-		auto Handler = FMcpPromptGetDelegate::CreateLambda([](const TMap<FString, FString>& Arguments) -> FMcpPromptResult
+		auto Handler = FMcpPromptGetDelegate::CreateLambda([](const FMcpPromptArguments& Arguments) -> FMcpPromptResult
 		{
 			FN2CMcpBlueprintAnalysisPrompt Prompt;
 			return Prompt.GetPrompt(Arguments);
@@ -352,7 +352,7 @@ void FN2CMcpHttpServerManager::RegisterMcpPrompts()
 		FN2CMcpRefactorPrompt TempPrompt;
 		FMcpPromptDefinition RefactorDef = TempPrompt.GetDefinition();
 		
-		auto Handler = FMcpPromptGetDelegate::CreateLambda([](const TMap<FString, FString>& Arguments) -> FMcpPromptResult
+		auto Handler = FMcpPromptGetDelegate::CreateLambda([](const FMcpPromptArguments& Arguments) -> FMcpPromptResult
 		{
 			FN2CMcpRefactorPrompt Prompt;
 			return Prompt.GetPrompt(Arguments);

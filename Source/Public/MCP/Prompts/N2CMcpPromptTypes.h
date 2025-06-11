@@ -129,9 +129,14 @@ struct NODETOCODE_API FMcpPromptResult
 };
 
 /**
+ * Type alias for prompt arguments map
+ */
+using FMcpPromptArguments = TMap<FString, FString>;
+
+/**
  * Delegate for handling prompt get requests
  */
-DECLARE_DELEGATE_RetVal_OneParam(FMcpPromptResult, FMcpPromptGetDelegate, const TMap<FString, FString>& /* Arguments */);
+DECLARE_DELEGATE_RetVal_OneParam(FMcpPromptResult, FMcpPromptGetDelegate, const FMcpPromptArguments& /* Arguments */);
 
 /**
  * Interface for implementing MCP prompts
@@ -149,7 +154,7 @@ public:
 	/**
 	 * Gets the prompt with the provided arguments
 	 */
-	virtual FMcpPromptResult GetPrompt(const TMap<FString, FString>& Arguments) = 0;
+	virtual FMcpPromptResult GetPrompt(const FMcpPromptArguments& Arguments) = 0;
 
 	/**
 	 * Checks if this prompt requires Game Thread execution

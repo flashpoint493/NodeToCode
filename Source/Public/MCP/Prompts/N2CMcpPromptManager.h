@@ -58,7 +58,7 @@ public:
 	 * @param Arguments The arguments to pass to the prompt
 	 * @return The prompt result
 	 */
-	FMcpPromptResult GetPrompt(const FString& Name, const TMap<FString, FString>& Arguments);
+	FMcpPromptResult GetPrompt(const FString& Name, const FMcpPromptArguments& Arguments);
 
 	/**
 	 * Checks if a prompt exists
@@ -74,7 +74,7 @@ public:
 	 * @param OutError Error message if validation fails
 	 * @return true if arguments are valid
 	 */
-	bool ValidatePromptArguments(const FString& Name, const TMap<FString, FString>& Arguments, FString& OutError) const;
+	bool ValidatePromptArguments(const FString& Name, const FMcpPromptArguments& Arguments, FString& OutError) const;
 
 	/**
 	 * Clears all registered prompts

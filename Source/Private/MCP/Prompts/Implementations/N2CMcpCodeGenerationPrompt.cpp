@@ -34,7 +34,7 @@ FMcpPromptDefinition FN2CMcpCodeGenerationPrompt::GetDefinition() const
 	return Definition;
 }
 
-FMcpPromptResult FN2CMcpCodeGenerationPrompt::GetPrompt(const TMap<FString, FString>& Arguments)
+FMcpPromptResult FN2CMcpCodeGenerationPrompt::GetPrompt(const FMcpPromptArguments& Arguments)
 {
 	return ExecuteOnGameThread<FMcpPromptResult>([Arguments]() -> FMcpPromptResult
 	{
@@ -116,7 +116,7 @@ FMcpPromptDefinition FN2CMcpBlueprintAnalysisPrompt::GetDefinition() const
 	return Definition;
 }
 
-FMcpPromptResult FN2CMcpBlueprintAnalysisPrompt::GetPrompt(const TMap<FString, FString>& Arguments)
+FMcpPromptResult FN2CMcpBlueprintAnalysisPrompt::GetPrompt(const FMcpPromptArguments& Arguments)
 {
 	return ExecuteOnGameThread<FMcpPromptResult>([Arguments]() -> FMcpPromptResult
 	{
@@ -192,7 +192,7 @@ FMcpPromptDefinition FN2CMcpRefactorPrompt::GetDefinition() const
 	return Definition;
 }
 
-FMcpPromptResult FN2CMcpRefactorPrompt::GetPrompt(const TMap<FString, FString>& Arguments)
+FMcpPromptResult FN2CMcpRefactorPrompt::GetPrompt(const FMcpPromptArguments& Arguments)
 {
 	return ExecuteOnGameThread<FMcpPromptResult>([Arguments]() -> FMcpPromptResult
 	{
