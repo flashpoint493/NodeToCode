@@ -17,6 +17,24 @@ FN2CNodeTranslator& FN2CNodeTranslator::Get()
     return Instance;
 }
 
+bool FN2CNodeTranslator::ProcessSingleNode(UK2Node* Node, FN2CNodeDefinition& OutNodeDef)
+{
+    if (!Node)
+    {
+        FN2CLogger::Get().LogWarning(TEXT("ProcessSingleNode called with null node"));
+        return false;
+    }
+    
+    // Generate a node ID if not already present
+    if (OutNodeDef.ID.IsEmpty())
+    {
+        OutNodeDef.ID = GenerateNodeID();
+    }
+    
+    // Use the existing ProcessNode method
+    return ProcessNode(Node, OutNodeDef);
+}
+
 bool FN2CNodeTranslator::GenerateN2CStruct(const TArray<UK2Node*>& CollectedNodes)
 {
     // Clear any existing data

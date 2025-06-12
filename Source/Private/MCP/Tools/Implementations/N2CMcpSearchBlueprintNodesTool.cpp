@@ -9,7 +9,6 @@
 #include "Core/N2CNodeTranslator.h"
 #include "Core/N2CSerializer.h"
 #include "Utils/N2CNodeTypeRegistry.h"
-#include "Utils/Processors/N2CNodeProcessorFactory.h"
 #include "K2Node.h"
 #include "EdGraphSchema_K2.h"
 #include "Engine/BlueprintGeneratedClass.h"
@@ -396,26 +395,20 @@ TSharedPtr<FJsonObject> FN2CMcpSearchBlueprintNodesTool::ConvertActionToJson(
         NodeJson = FN2CSerializer::NodeToJsonObject(NodeDef);
     }
     
-    // Add search-specific metadata
-    if (NodeJson.IsValid())
+    // Add minimal spawning metadata for future node creation
+    if (NodeJson.IsValid() && Action.Actions.Num() > 0)
     {
-        TSharedPtr<FJsonObject> MetadataObj = MakeShareable(new FJsonObject);
-        MetadataObj->SetBoolField(TEXT("isContextSensitiveMatch"), bIsContextSensitive);
-        MetadataObj->SetStringField(TEXT("searchText"), Action.GetSearchTextForFirstAction());
+        TSharedPtr<FJsonObject> SpawnMetadata = MakeShareable(new FJsonObject);
         
-        // Add category path for additional context
-        TArray<FString> CategoryPath = ExtractCategoryPath(Action);
-        if (CategoryPath.Num() > 0)
-        {
-            TArray<TSharedPtr<FJsonValue>> CategoryArray;
-            for (const FString& Category : CategoryPath)
-            {
-                CategoryArray.Add(MakeShareable(new FJsonValueString(Category)));
-            }
-            MetadataObj->SetArrayField(TEXT("categoryPath"), CategoryArray);
-        }
+        // Store the action's unique identifier
+        // This can be used to search for and spawn the exact same action
+        FString ActionIdentifier = Action.GetSearchTextForFirstAction();
+        SpawnMetadata->SetStringField(TEXT("actionIdentifier"), ActionIdentifier);
         
-        NodeJson->SetObjectField(TEXT("searchMetadata"), MetadataObj);
+        // Store whether this action requires specific context
+        SpawnMetadata->SetBoolField(TEXT("isContextSensitive"), bIsContextSensitive);
+        
+        NodeJson->SetObjectField(TEXT("spawnMetadata"), SpawnMetadata);
     }
     
     return NodeJson;
@@ -459,79 +452,21 @@ TSharedPtr<FJsonObject> FN2CMcpSearchBlueprintNodesTool::ConvertNodeToN2CJson(UK
         return nullptr;
     }
     
-    // Create a node definition
+    // Create a node definition with the specified ID
     FN2CNodeDefinition NodeDef;
     NodeDef.ID = NodeId;
     
-    // Determine node type using the registry
-    NodeDef.NodeType = FN2CNodeTypeRegistry::Get().GetNodeType(Node);
-    
-    // Get the appropriate processor for this node type
-    TSharedPtr<IN2CNodeProcessor> Processor = FN2CNodeProcessorFactory::Get().GetProcessor(NodeDef.NodeType);
-    if (Processor.IsValid())
+    // Use the NodeTranslator to properly process the node
+    // This reuses all the existing node processing logic including:
+    // - Node type determination
+    // - Node processor selection
+    // - Pin processing
+    // - Property extraction
+    if (!FN2CNodeTranslator::Get().ProcessSingleNode(Node, NodeDef))
     {
-        // Process the node using the processor
-        Processor->Process(Node, NodeDef);
-    }
-    else
-    {
-        // Fallback: set basic properties
-        NodeDef.Name = Node->GetNodeTitle(ENodeTitleType::MenuTitle).ToString();
-        NodeDef.bPure = Node->IsNodePure();
-        NodeDef.bLatent = false; // Cannot determine without more context
-        
-        // Set member parent if available
-        if (UClass* NodeClass = Node->GetClass())
-        {
-            NodeDef.MemberParent = NodeClass->GetName();
-        }
-    }
-    
-    // Process pins
-    int32 PinCount = 0;
-    for (UEdGraphPin* Pin : Node->Pins)
-    {
-        if (!Pin || Pin->bHidden) continue;
-        
-        FN2CPinDefinition PinDef;
-        PinDef.ID = FString::Printf(TEXT("P%d"), ++PinCount);
-        PinDef.Name = Pin->GetDisplayName().ToString();
-        PinDef.bConnected = false; // Search results aren't connected
-        
-        // Determine pin type
-        const FName& PinCategory = Pin->PinType.PinCategory;
-        if (PinCategory == UEdGraphSchema_K2::PC_Exec)
-            PinDef.Type = EN2CPinType::Exec;
-        else if (PinCategory == UEdGraphSchema_K2::PC_Boolean)
-            PinDef.Type = EN2CPinType::Boolean;
-        else if (PinCategory == UEdGraphSchema_K2::PC_Int)
-            PinDef.Type = EN2CPinType::Integer;
-        else if (PinCategory == UEdGraphSchema_K2::PC_Float)
-            PinDef.Type = EN2CPinType::Float;
-        else if (PinCategory == UEdGraphSchema_K2::PC_String)
-            PinDef.Type = EN2CPinType::String;
-        else if (PinCategory == UEdGraphSchema_K2::PC_Object)
-            PinDef.Type = EN2CPinType::Object;
-        else if (PinCategory == UEdGraphSchema_K2::PC_Struct)
-            PinDef.Type = EN2CPinType::Struct;
-        else
-            PinDef.Type = EN2CPinType::Wildcard;
-        
-        // Set subtype if available
-        if (Pin->PinType.PinSubCategoryObject.IsValid())
-        {
-            PinDef.SubType = Pin->PinType.PinSubCategoryObject->GetName();
-        }
-        
-        // Add to appropriate array based on direction
-        if (Pin->Direction == EGPD_Input)
-        {
-            NodeDef.InputPins.Add(PinDef);
-        }
-        else
-        {
-            NodeDef.OutputPins.Add(PinDef);
-        }
+        FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Failed to process node %s for search results"), 
+            *Node->GetNodeTitle(ENodeTitleType::ListView).ToString()));
+        return nullptr;
     }
     
     // Convert to JSON using the serializer
@@ -552,7 +487,7 @@ FN2CNodeDefinition FN2CMcpSearchBlueprintNodesTool::CreateNodeDefinitionFromActi
     NodeDef.NodeType = EN2CNodeType::CallFunction; // Default to function call
     
     // Extract category information for potential node type hints
-    TArray<FString> Categories = FN2CMcpSearchBlueprintNodesTool::ExtractCategoryPath(Action);
+    TArray<FString> Categories = ExtractCategoryPath(Action);
     if (Categories.Num() > 0)
     {
         const FString& FirstCategory = Categories[0].ToLower();

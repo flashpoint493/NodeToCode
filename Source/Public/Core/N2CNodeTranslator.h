@@ -35,6 +35,17 @@ public:
      */
     const FN2CBlueprint& GetN2CBlueprint() const { return N2CBlueprint; }
 
+    /**
+     * @brief Process a single K2Node into an N2CNodeDefinition
+     * @param Node The K2Node to process
+     * @param OutNodeDef The resulting node definition
+     * @return True if processing succeeded
+     * 
+     * This method is useful for tools that need to convert individual nodes
+     * without processing an entire graph.
+     */
+    bool ProcessSingleNode(UK2Node* Node, FN2CNodeDefinition& OutNodeDef);
+
 private:
     /** Constructor */
     FN2CNodeTranslator() = default;
