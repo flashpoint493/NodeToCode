@@ -403,6 +403,12 @@ TSharedPtr<FJsonObject> FN2CMcpSearchBlueprintNodesTool::ConvertActionToJson(
         // Use the raw search text as the unique action identifier
         // This is the most precise way to identify a specific action
         FString ActionIdentifier = Action.GetSearchTextForFirstAction();
+        
+        // Replace newlines with a delimiter that's easier for LLMs to handle
+        // This makes the identifier a single line that's easier to copy/paste
+        // Use > as delimiter since it's unique and won't be confused with existing content
+        ActionIdentifier = ActionIdentifier.Replace(TEXT("\n"), TEXT(">"));
+        
         SpawnMetadata->SetStringField(TEXT("actionIdentifier"), ActionIdentifier);
         
         // Store whether this action requires specific context
