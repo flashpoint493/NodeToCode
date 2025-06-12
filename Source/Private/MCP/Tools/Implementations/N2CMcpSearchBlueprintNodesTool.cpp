@@ -400,8 +400,8 @@ TSharedPtr<FJsonObject> FN2CMcpSearchBlueprintNodesTool::ConvertActionToJson(
     {
         TSharedPtr<FJsonObject> SpawnMetadata = MakeShareable(new FJsonObject);
         
-        // Store the action's unique identifier
-        // This can be used to search for and spawn the exact same action
+        // Use the raw search text as the unique action identifier
+        // This is the most precise way to identify a specific action
         FString ActionIdentifier = Action.GetSearchTextForFirstAction();
         SpawnMetadata->SetStringField(TEXT("actionIdentifier"), ActionIdentifier);
         
