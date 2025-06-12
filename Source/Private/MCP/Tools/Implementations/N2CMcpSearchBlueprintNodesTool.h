@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "MCP/Tools/N2CMcpToolBase.h"
 #include "Engine/Blueprint.h"
+#include "Models/N2CNode.h"
 // Forward declarations
 
 class UEdGraph;
@@ -37,8 +38,16 @@ private:
     
     TSharedPtr<FJsonObject> ConvertActionToJson(
         const FGraphActionListBuilderBase::ActionGroup& Action,
-        bool bIsContextSensitive);
+        bool bIsContextSensitive,
+        UBlueprint* ContextBlueprint,
+        UEdGraph* ContextGraph);
     
-    FString ExtractInternalName(const FGraphActionListBuilderBase::ActionGroup& Action);
-    TArray<FString> ExtractCategoryPath(const FGraphActionListBuilderBase::ActionGroup& Action);
+    static FString ExtractInternalName(const FGraphActionListBuilderBase::ActionGroup& Action);
+    static TArray<FString> ExtractCategoryPath(const FGraphActionListBuilderBase::ActionGroup& Action);
+    
+    // New helper method to convert UK2Node to N2CJSON format
+    static TSharedPtr<FJsonObject> ConvertNodeToN2CJson(UK2Node* Node, const FString& NodeId);
+    
+    // Helper to create a template node definition from action metadata
+    static FN2CNodeDefinition CreateNodeDefinitionFromAction(const FGraphActionListBuilderBase::ActionGroup& Action, const FString& NodeId);
 };

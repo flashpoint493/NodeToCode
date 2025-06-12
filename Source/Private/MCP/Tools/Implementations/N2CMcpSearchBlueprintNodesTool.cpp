@@ -6,6 +6,15 @@
 #include "BlueprintActionMenuBuilder.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "Core/N2CNodeTranslator.h"
+#include "Core/N2CSerializer.h"
+#include "Utils/N2CNodeTypeRegistry.h"
+#include "Utils/Processors/N2CNodeProcessorFactory.h"
+#include "K2Node.h"
+#include "EdGraphSchema_K2.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "EdGraph/EdGraphNode.h"
+#include "EdGraph/EdGraph.h"
 
 // Register the tool
 REGISTER_MCP_TOOL(FN2CMcpSearchBlueprintNodesTool)
@@ -192,7 +201,7 @@ FMcpToolCallResult FN2CMcpSearchBlueprintNodesTool::Execute(const TSharedPtr<FJs
         
         if (bMatchesAllTerms)
         {
-            TSharedPtr<FJsonObject> NodeJson = ConvertActionToJson(Action, bContextSensitive);
+            TSharedPtr<FJsonObject> NodeJson = ConvertActionToJson(Action, bContextSensitive, ContextBlueprint, ContextGraph);
             if (NodeJson.IsValid())
             {
                 ResultNodes.Add(MakeShareable(new FJsonValueObject(NodeJson)));
@@ -339,40 +348,75 @@ bool FN2CMcpSearchBlueprintNodesTool::GetContextFromPaths(
 
 TSharedPtr<FJsonObject> FN2CMcpSearchBlueprintNodesTool::ConvertActionToJson(
     const FGraphActionListBuilderBase::ActionGroup& Action,
-    bool bIsContextSensitive)
+    bool bIsContextSensitive,
+    UBlueprint* ContextBlueprint,
+    UEdGraph* ContextGraph)
 {
-    TSharedPtr<FJsonObject> NodeJson = MakeShareable(new FJsonObject);
+    // Generate a unique node ID for this search result
+    static int32 SearchNodeCounter = 0;
+    FString NodeId = FString::Printf(TEXT("SearchNode_%d"), ++SearchNodeCounter);
     
-    // Get search text which contains most of the info we need
-    FString SearchText = Action.GetSearchTextForFirstAction();
+    TSharedPtr<FJsonObject> NodeJson;
     
-    // For display name, we'll use the search text
-    NodeJson->SetStringField(TEXT("displayName"), SearchText);
-    
-    // Keywords (from search text)
-    if (!SearchText.IsEmpty())
+    // Try to spawn the actual node if we have a context
+    if (ContextGraph && Action.Actions.Num() > 0)
     {
-        NodeJson->SetStringField(TEXT("keywords"), SearchText);
+        TSharedPtr<FEdGraphSchemaAction> SchemaAction = Action.Actions[0];
+        if (SchemaAction.IsValid())
+        {
+            // Perform the action to spawn the node in the context graph
+            FVector2D SpawnLocation(0, 0);
+            UEdGraphNode* SpawnedNode = SchemaAction->PerformAction(ContextGraph, nullptr, SpawnLocation);
+            
+            // Try to cast to K2Node
+            UK2Node* K2Node = Cast<UK2Node>(SpawnedNode);
+            if (K2Node)
+            {
+                // Convert the actual spawned node to N2CJSON
+                NodeJson = ConvertNodeToN2CJson(K2Node, NodeId);
+                
+                // Remove the node from the graph immediately
+                ContextGraph->RemoveNode(SpawnedNode);
+            }
+            else if (SpawnedNode)
+            {
+                // Clean up non-K2 nodes
+                ContextGraph->RemoveNode(SpawnedNode);
+            }
+        }
     }
     
-    // Extract category path if possible
-    TArray<FString> CategoryPath = ExtractCategoryPath(Action);
-    TArray<TSharedPtr<FJsonValue>> CategoryArray;
-    for (const FString& Category : CategoryPath)
+    // Fallback if we couldn't spawn the node
+    if (!NodeJson.IsValid())
     {
-        CategoryArray.Add(MakeShareable(new FJsonValueString(Category)));
-    }
-    NodeJson->SetArrayField(TEXT("categoryPath"), CategoryArray);
-    
-    // Internal name
-    FString InternalName = ExtractInternalName(Action);
-    if (!InternalName.IsEmpty())
-    {
-        NodeJson->SetStringField(TEXT("internalName"), InternalName);
+        // Create a template node definition from the action metadata
+        FN2CNodeDefinition NodeDef = CreateNodeDefinitionFromAction(Action, NodeId);
+        
+        // Convert to JSON using the standard N2C serializer
+        NodeJson = FN2CSerializer::NodeToJsonObject(NodeDef);
     }
     
-    // Context sensitivity flag
-    NodeJson->SetBoolField(TEXT("isContextSensitiveMatch"), bIsContextSensitive);
+    // Add search-specific metadata
+    if (NodeJson.IsValid())
+    {
+        TSharedPtr<FJsonObject> MetadataObj = MakeShareable(new FJsonObject);
+        MetadataObj->SetBoolField(TEXT("isContextSensitiveMatch"), bIsContextSensitive);
+        MetadataObj->SetStringField(TEXT("searchText"), Action.GetSearchTextForFirstAction());
+        
+        // Add category path for additional context
+        TArray<FString> CategoryPath = ExtractCategoryPath(Action);
+        if (CategoryPath.Num() > 0)
+        {
+            TArray<TSharedPtr<FJsonValue>> CategoryArray;
+            for (const FString& Category : CategoryPath)
+            {
+                CategoryArray.Add(MakeShareable(new FJsonValueString(Category)));
+            }
+            MetadataObj->SetArrayField(TEXT("categoryPath"), CategoryArray);
+        }
+        
+        NodeJson->SetObjectField(TEXT("searchMetadata"), MetadataObj);
+    }
     
     return NodeJson;
 }
@@ -406,4 +450,138 @@ TArray<FString> FN2CMcpSearchBlueprintNodesTool::ExtractCategoryPath(const FGrap
     }
     
     return CategoryPath;
+}
+
+TSharedPtr<FJsonObject> FN2CMcpSearchBlueprintNodesTool::ConvertNodeToN2CJson(UK2Node* Node, const FString& NodeId)
+{
+    if (!Node)
+    {
+        return nullptr;
+    }
+    
+    // Create a node definition
+    FN2CNodeDefinition NodeDef;
+    NodeDef.ID = NodeId;
+    
+    // Determine node type using the registry
+    NodeDef.NodeType = FN2CNodeTypeRegistry::Get().GetNodeType(Node);
+    
+    // Get the appropriate processor for this node type
+    TSharedPtr<IN2CNodeProcessor> Processor = FN2CNodeProcessorFactory::Get().GetProcessor(NodeDef.NodeType);
+    if (Processor.IsValid())
+    {
+        // Process the node using the processor
+        Processor->Process(Node, NodeDef);
+    }
+    else
+    {
+        // Fallback: set basic properties
+        NodeDef.Name = Node->GetNodeTitle(ENodeTitleType::MenuTitle).ToString();
+        NodeDef.bPure = Node->IsNodePure();
+        NodeDef.bLatent = false; // Cannot determine without more context
+        
+        // Set member parent if available
+        if (UClass* NodeClass = Node->GetClass())
+        {
+            NodeDef.MemberParent = NodeClass->GetName();
+        }
+    }
+    
+    // Process pins
+    int32 PinCount = 0;
+    for (UEdGraphPin* Pin : Node->Pins)
+    {
+        if (!Pin || Pin->bHidden) continue;
+        
+        FN2CPinDefinition PinDef;
+        PinDef.ID = FString::Printf(TEXT("P%d"), ++PinCount);
+        PinDef.Name = Pin->GetDisplayName().ToString();
+        PinDef.bConnected = false; // Search results aren't connected
+        
+        // Determine pin type
+        const FName& PinCategory = Pin->PinType.PinCategory;
+        if (PinCategory == UEdGraphSchema_K2::PC_Exec)
+            PinDef.Type = EN2CPinType::Exec;
+        else if (PinCategory == UEdGraphSchema_K2::PC_Boolean)
+            PinDef.Type = EN2CPinType::Boolean;
+        else if (PinCategory == UEdGraphSchema_K2::PC_Int)
+            PinDef.Type = EN2CPinType::Integer;
+        else if (PinCategory == UEdGraphSchema_K2::PC_Float)
+            PinDef.Type = EN2CPinType::Float;
+        else if (PinCategory == UEdGraphSchema_K2::PC_String)
+            PinDef.Type = EN2CPinType::String;
+        else if (PinCategory == UEdGraphSchema_K2::PC_Object)
+            PinDef.Type = EN2CPinType::Object;
+        else if (PinCategory == UEdGraphSchema_K2::PC_Struct)
+            PinDef.Type = EN2CPinType::Struct;
+        else
+            PinDef.Type = EN2CPinType::Wildcard;
+        
+        // Set subtype if available
+        if (Pin->PinType.PinSubCategoryObject.IsValid())
+        {
+            PinDef.SubType = Pin->PinType.PinSubCategoryObject->GetName();
+        }
+        
+        // Add to appropriate array based on direction
+        if (Pin->Direction == EGPD_Input)
+        {
+            NodeDef.InputPins.Add(PinDef);
+        }
+        else
+        {
+            NodeDef.OutputPins.Add(PinDef);
+        }
+    }
+    
+    // Convert to JSON using the serializer
+    return FN2CSerializer::NodeToJsonObject(NodeDef);
+}
+
+FN2CNodeDefinition FN2CMcpSearchBlueprintNodesTool::CreateNodeDefinitionFromAction(const FGraphActionListBuilderBase::ActionGroup& Action, const FString& NodeId)
+{
+    FN2CNodeDefinition NodeDef;
+    NodeDef.ID = NodeId;
+    
+    // Get search text as the node name
+    FString SearchText = Action.GetSearchTextForFirstAction();
+    NodeDef.Name = SearchText;
+    
+    // Try to determine node type from the action
+    // This is a simplified approach since we don't have the actual node yet
+    NodeDef.NodeType = EN2CNodeType::CallFunction; // Default to function call
+    
+    // Extract category information for potential node type hints
+    TArray<FString> Categories = FN2CMcpSearchBlueprintNodesTool::ExtractCategoryPath(Action);
+    if (Categories.Num() > 0)
+    {
+        const FString& FirstCategory = Categories[0].ToLower();
+        
+        // Try to guess node type from category
+        if (FirstCategory.Contains(TEXT("variable")))
+        {
+            NodeDef.NodeType = EN2CNodeType::VariableGet;
+        }
+        else if (FirstCategory.Contains(TEXT("event")))
+        {
+            NodeDef.NodeType = EN2CNodeType::Event;
+        }
+        else if (FirstCategory.Contains(TEXT("flow")))
+        {
+            NodeDef.NodeType = EN2CNodeType::Branch;
+        }
+        else if (FirstCategory.Contains(TEXT("struct")))
+        {
+            NodeDef.NodeType = EN2CNodeType::MakeStruct;
+        }
+    }
+    
+    // Set default flags
+    NodeDef.bPure = false;
+    NodeDef.bLatent = false;
+    
+    // Note: We can't populate pins without the actual node instance
+    // This would require spawning the node which is more complex
+    
+    return NodeDef;
 }

@@ -28,11 +28,13 @@ public:
     static void SetPrettyPrint(bool bEnabled);
     static void SetIndentLevel(int32 Level);
 
+    /** Convert a single node to JSON object - useful for tools */
+    static TSharedPtr<FJsonObject> NodeToJsonObject(const FN2CNodeDefinition& Node);
+
 private:
     /** Internal JSON conversion helpers */
     static TSharedPtr<FJsonObject> BlueprintToJsonObject(const FN2CBlueprint& Blueprint);
     static TSharedPtr<FJsonObject> GraphToJsonObject(const FN2CGraph& Graph);
-    static TSharedPtr<FJsonObject> NodeToJsonObject(const FN2CNodeDefinition& Node);
     static TSharedPtr<FJsonObject> PinToJsonObject(const FN2CPinDefinition& Pin);
     static TSharedPtr<FJsonObject> FlowsToJsonObject(const FN2CFlows& Flows);
     static TSharedPtr<FJsonObject> StructToJsonObject(const FN2CStruct& Struct);
