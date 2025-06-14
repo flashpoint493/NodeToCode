@@ -3,6 +3,7 @@
 #include "N2CMcpListBlueprintFunctionsTool.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpToolTypes.h"
+#include "MCP/Tools/N2CMcpFunctionGuidUtils.h"
 #include "Utils/N2CLogger.h"
 #include "Core/N2CEditorIntegration.h"
 #include "Engine/Blueprint.h"
@@ -475,17 +476,8 @@ FGuid FN2CMcpListBlueprintFunctionsTool::GetFunctionGuid(const UEdGraph* Functio
 		return FGuid();
 	}
 	
-	// Try to find the function entry node which might store a GUID
-	for (const UEdGraphNode* Node : FunctionGraph->Nodes)
-	{
-		if (const UK2Node_FunctionEntry* EntryNode = Cast<UK2Node_FunctionEntry>(Node))
-		{
-			// In UE5, function GUIDs are typically stored in the FunctionReference
-			// For now, we'll generate a consistent GUID based on the graph name
-			// In a production implementation, you might store this in metadata
-			return FGuid::NewGuid();
-		}
-	}
-	
-	return FGuid();
+	// Use the utility to get or create a consistent GUID for this function
+	// Cast away const since GetOrCreateFunctionGuid may need to store the GUID
+	UEdGraph* MutableGraph = const_cast<UEdGraph*>(FunctionGraph);
+	return FN2CMcpFunctionGuidUtils::GetOrCreateFunctionGuid(MutableGraph);
 }

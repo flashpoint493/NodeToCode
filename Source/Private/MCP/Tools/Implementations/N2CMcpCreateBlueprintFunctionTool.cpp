@@ -3,6 +3,7 @@
 #include "N2CMcpCreateBlueprintFunctionTool.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpToolTypes.h"
+#include "MCP/Tools/N2CMcpFunctionGuidUtils.h"
 #include "Utils/N2CLogger.h"
 #include "Core/N2CEditorIntegration.h"
 #include "Engine/Blueprint.h"
@@ -507,21 +508,8 @@ FGuid FN2CMcpCreateBlueprintFunctionTool::GetOrCreateFunctionGuid(UEdGraph* Func
 		return FGuid();
 	}
 	
-	// For now, we'll use the graph's unique ID as a GUID
-	// In a real implementation, you might store this in the entry node's metadata
-	// or in a separate data structure
-	FGuid FunctionGuid = FGuid::NewGuid();
-	
-	// Store in the entry node if we have one
-	TArray<UK2Node_FunctionEntry*> EntryNodes;
-	FunctionGraph->GetNodesOfClass<UK2Node_FunctionEntry>(EntryNodes);
-	if (EntryNodes.Num() > 0 && EntryNodes[0])
-	{
-		// Could store in node metadata or custom property
-		// For now, just return the generated GUID
-	}
-	
-	return FunctionGuid;
+	// Use the utility to get or create a consistent GUID for this function
+	return FN2CMcpFunctionGuidUtils::GetOrCreateFunctionGuid(FunctionGraph);
 }
 
 bool FN2CMcpCreateBlueprintFunctionTool::ConvertToPinType(const FParameterDefinition& ParamDef, 
