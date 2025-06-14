@@ -46,6 +46,18 @@ public:
      */
     bool ProcessSingleNode(UK2Node* Node, FN2CNodeDefinition& OutNodeDef);
 
+    /**
+     * @brief Get the NodeID to GUID mapping
+     * @return Map of NodeGUIDs to simplified NodeIDs
+     */
+    const TMap<FGuid, FString>& GetNodeIDMap() const { return NodeIDMap; }
+
+    /**
+     * @brief Get the PinID to GUID mapping  
+     * @return Map of PinGUIDs to simplified PinIDs
+     */
+    const TMap<FGuid, FString>& GetPinIDMap() const { return PinIDMap; }
+
 private:
     /** Constructor */
     FN2CNodeTranslator() = default;
