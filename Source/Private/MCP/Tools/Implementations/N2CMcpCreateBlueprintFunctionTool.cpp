@@ -527,7 +527,58 @@ FGuid FN2CMcpCreateBlueprintFunctionTool::GetOrCreateFunctionGuid(UEdGraph* Func
 bool FN2CMcpCreateBlueprintFunctionTool::ConvertToPinType(const FParameterDefinition& ParamDef, 
 	FEdGraphPinType& OutPinType, FString& OutError) const
 {
-	// First, resolve the base type
+	// First check if this is a full path (e.g., /Script/CoreUObject.Vector2D)
+	if (ParamDef.Type.StartsWith(TEXT("/Script/")))
+	{
+		// Try to resolve as a full object path
+		UObject* TypeObject = nullptr;
+		
+		// Try as struct first (most common for paths)
+		TypeObject = FindObject<UScriptStruct>(nullptr, *ParamDef.Type);
+		
+		if (!TypeObject)
+		{
+			// Try as class
+			TypeObject = FindObject<UClass>(nullptr, *ParamDef.Type);
+		}
+		
+		if (!TypeObject)
+		{
+			// Try as enum
+			TypeObject = FindObject<UEnum>(nullptr, *ParamDef.Type);
+		}
+		
+		if (!TypeObject)
+		{
+			// Try loading it
+			TypeObject = LoadObject<UObject>(nullptr, *ParamDef.Type);
+		}
+		
+		if (TypeObject)
+		{
+			// Determine the category based on the object type
+			if (UScriptStruct* Struct = Cast<UScriptStruct>(TypeObject))
+			{
+				OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+				OutPinType.PinSubCategoryObject = Struct;
+				return true;
+			}
+			else if (UClass* Class = Cast<UClass>(TypeObject))
+			{
+				OutPinType.PinCategory = UEdGraphSchema_K2::PC_Object;
+				OutPinType.PinSubCategoryObject = Class;
+				return true;
+			}
+			else if (UEnum* Enum = Cast<UEnum>(TypeObject))
+			{
+				OutPinType.PinCategory = UEdGraphSchema_K2::PC_Enum;
+				OutPinType.PinSubCategoryObject = Enum;
+				return true;
+			}
+		}
+	}
+	
+	// Otherwise, try the existing resolution methods
 	if (!ResolvePrimitiveType(ParamDef.Type, OutPinType) &&
 		!ResolveMathType(ParamDef.Type, OutPinType) &&
 		!ResolveSpecialType(ParamDef.Type, OutPinType))
@@ -822,6 +873,39 @@ bool FN2CMcpCreateBlueprintFunctionTool::ResolveSpecialType(const FString& Type,
 
 UObject* FN2CMcpCreateBlueprintFunctionTool::ResolveSubType(const FString& Type, const FString& SubType) const
 {
+	// Handle full paths (e.g., /Script/CoreUObject.Vector2D)
+	if (SubType.StartsWith(TEXT("/Script/")))
+	{
+		// Try to find the object by full path
+		UObject* FoundObject = nullptr;
+		
+		if (Type == TEXT("object") || Type == TEXT("class"))
+		{
+			FoundObject = FindObject<UClass>(nullptr, *SubType);
+		}
+		else if (Type == TEXT("struct"))
+		{
+			FoundObject = FindObject<UScriptStruct>(nullptr, *SubType);
+		}
+		else if (Type == TEXT("enum"))
+		{
+			FoundObject = FindObject<UEnum>(nullptr, *SubType);
+		}
+		else
+		{
+			// Try generic UObject
+			FoundObject = FindObject<UObject>(nullptr, *SubType);
+		}
+		
+		if (!FoundObject)
+		{
+			// Try loading it
+			FoundObject = LoadObject<UObject>(nullptr, *SubType);
+		}
+		
+		return FoundObject;
+	}
+	
 	// Try to find the object by path
 	UObject* FoundObject = FindObject<UObject>(nullptr, *SubType);
 	
