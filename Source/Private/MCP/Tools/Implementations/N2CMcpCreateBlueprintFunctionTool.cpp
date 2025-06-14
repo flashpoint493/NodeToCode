@@ -1,0 +1,1015 @@
+// Copyright Protospatial 2025. All Rights Reserved.
+
+#include "N2CMcpCreateBlueprintFunctionTool.h"
+#include "MCP/Tools/N2CMcpToolRegistry.h"
+#include "MCP/Tools/N2CMcpToolTypes.h"
+#include "Utils/N2CLogger.h"
+#include "Core/N2CEditorIntegration.h"
+#include "Engine/Blueprint.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/UserDefinedEnum.h"
+#include "Engine/UserDefinedStruct.h"
+#include "BlueprintEditorModule.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "K2Node_FunctionEntry.h"
+#include "K2Node_FunctionResult.h"
+#include "EdGraphSchema_K2.h"
+#include "Framework/Notifications/NotificationManager.h"
+#include "Widgets/Notifications/SNotificationList.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+
+REGISTER_MCP_TOOL(FN2CMcpCreateBlueprintFunctionTool)
+
+FMcpToolDefinition FN2CMcpCreateBlueprintFunctionTool::GetDefinition() const
+{
+	FMcpToolDefinition Definition(
+		TEXT("create-blueprint-function"),
+		TEXT("Creates a new Blueprint function with specified parameters and opens it in the editor")
+	);
+
+	// Build input schema
+	TSharedPtr<FJsonObject> Schema = MakeShareable(new FJsonObject);
+	Schema->SetStringField(TEXT("type"), TEXT("object"));
+	
+	TSharedPtr<FJsonObject> Properties = MakeShareable(new FJsonObject);
+	
+	// functionName property
+	TSharedPtr<FJsonObject> FunctionNameProp = MakeShareable(new FJsonObject);
+	FunctionNameProp->SetStringField(TEXT("type"), TEXT("string"));
+	FunctionNameProp->SetStringField(TEXT("description"), TEXT("Name of the function to create"));
+	Properties->SetObjectField(TEXT("functionName"), FunctionNameProp);
+
+	// blueprintPath property (optional)
+	TSharedPtr<FJsonObject> BlueprintPathProp = MakeShareable(new FJsonObject);
+	BlueprintPathProp->SetStringField(TEXT("type"), TEXT("string"));
+	BlueprintPathProp->SetStringField(TEXT("description"), TEXT("Asset path of the Blueprint (e.g., '/Game/Blueprints/MyActor.MyActor'). If not provided, uses focused Blueprint."));
+	Properties->SetObjectField(TEXT("blueprintPath"), BlueprintPathProp);
+
+	// parameters property (optional)
+	TSharedPtr<FJsonObject> ParametersProp = MakeShareable(new FJsonObject);
+	ParametersProp->SetStringField(TEXT("type"), TEXT("array"));
+	ParametersProp->SetStringField(TEXT("description"), TEXT("Array of parameter definitions"));
+	
+	TSharedPtr<FJsonObject> ParameterItemSchema = MakeShareable(new FJsonObject);
+	ParameterItemSchema->SetStringField(TEXT("type"), TEXT("object"));
+	
+	TSharedPtr<FJsonObject> ParamProperties = MakeShareable(new FJsonObject);
+	
+	// Parameter properties
+	TSharedPtr<FJsonObject> ParamNameProp = MakeShareable(new FJsonObject);
+	ParamNameProp->SetStringField(TEXT("type"), TEXT("string"));
+	ParamProperties->SetObjectField(TEXT("name"), ParamNameProp);
+	
+	TSharedPtr<FJsonObject> DirectionProp = MakeShareable(new FJsonObject);
+	DirectionProp->SetStringField(TEXT("type"), TEXT("string"));
+	TArray<TSharedPtr<FJsonValue>> DirectionEnum;
+	DirectionEnum.Add(MakeShareable(new FJsonValueString(TEXT("input"))));
+	DirectionEnum.Add(MakeShareable(new FJsonValueString(TEXT("output"))));
+	DirectionProp->SetArrayField(TEXT("enum"), DirectionEnum);
+	DirectionProp->SetStringField(TEXT("default"), TEXT("input"));
+	ParamProperties->SetObjectField(TEXT("direction"), DirectionProp);
+	
+	TSharedPtr<FJsonObject> TypeProp = MakeShareable(new FJsonObject);
+	TypeProp->SetStringField(TEXT("type"), TEXT("string"));
+	ParamProperties->SetObjectField(TEXT("type"), TypeProp);
+	
+	TSharedPtr<FJsonObject> SubTypeProp = MakeShareable(new FJsonObject);
+	SubTypeProp->SetStringField(TEXT("type"), TEXT("string"));
+	ParamProperties->SetObjectField(TEXT("subType"), SubTypeProp);
+	
+	TSharedPtr<FJsonObject> ContainerProp = MakeShareable(new FJsonObject);
+	ContainerProp->SetStringField(TEXT("type"), TEXT("string"));
+	TArray<TSharedPtr<FJsonValue>> ContainerEnum;
+	ContainerEnum.Add(MakeShareable(new FJsonValueString(TEXT("none"))));
+	ContainerEnum.Add(MakeShareable(new FJsonValueString(TEXT("array"))));
+	ContainerEnum.Add(MakeShareable(new FJsonValueString(TEXT("set"))));
+	ContainerEnum.Add(MakeShareable(new FJsonValueString(TEXT("map"))));
+	ContainerProp->SetArrayField(TEXT("enum"), ContainerEnum);
+	ContainerProp->SetStringField(TEXT("default"), TEXT("none"));
+	ParamProperties->SetObjectField(TEXT("container"), ContainerProp);
+	
+	TSharedPtr<FJsonObject> KeyTypeProp = MakeShareable(new FJsonObject);
+	KeyTypeProp->SetStringField(TEXT("type"), TEXT("string"));
+	ParamProperties->SetObjectField(TEXT("keyType"), KeyTypeProp);
+	
+	TSharedPtr<FJsonObject> IsReferenceProp = MakeShareable(new FJsonObject);
+	IsReferenceProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	IsReferenceProp->SetBoolField(TEXT("default"), false);
+	ParamProperties->SetObjectField(TEXT("isReference"), IsReferenceProp);
+	
+	TSharedPtr<FJsonObject> IsConstProp = MakeShareable(new FJsonObject);
+	IsConstProp->SetStringField(TEXT("type"), TEXT("boolean"));
+	IsConstProp->SetBoolField(TEXT("default"), false);
+	ParamProperties->SetObjectField(TEXT("isConst"), IsConstProp);
+	
+	TSharedPtr<FJsonObject> DefaultValueProp = MakeShareable(new FJsonObject);
+	DefaultValueProp->SetStringField(TEXT("type"), TEXT("string"));
+	ParamProperties->SetObjectField(TEXT("defaultValue"), DefaultValueProp);
+	
+	ParameterItemSchema->SetObjectField(TEXT("properties"), ParamProperties);
+	
+	TArray<TSharedPtr<FJsonValue>> ParamRequiredArray;
+	ParamRequiredArray.Add(MakeShareable(new FJsonValueString(TEXT("name"))));
+	ParamRequiredArray.Add(MakeShareable(new FJsonValueString(TEXT("type"))));
+	ParameterItemSchema->SetArrayField(TEXT("required"), ParamRequiredArray);
+	
+	ParametersProp->SetObjectField(TEXT("items"), ParameterItemSchema);
+	Properties->SetObjectField(TEXT("parameters"), ParametersProp);
+
+	// functionFlags property (optional)
+	TSharedPtr<FJsonObject> FunctionFlagsProp = MakeShareable(new FJsonObject);
+	FunctionFlagsProp->SetStringField(TEXT("type"), TEXT("object"));
+	FunctionFlagsProp->SetStringField(TEXT("description"), TEXT("Function configuration flags"));
+	Properties->SetObjectField(TEXT("functionFlags"), FunctionFlagsProp);
+	
+	Schema->SetObjectField(TEXT("properties"), Properties);
+	
+	// Required fields
+	TArray<TSharedPtr<FJsonValue>> RequiredArray;
+	RequiredArray.Add(MakeShareable(new FJsonValueString(TEXT("functionName"))));
+	Schema->SetArrayField(TEXT("required"), RequiredArray);
+	
+	Definition.InputSchema = Schema;
+	
+	return Definition;
+}
+
+FMcpToolCallResult FN2CMcpCreateBlueprintFunctionTool::Execute(const TSharedPtr<FJsonObject>& Arguments)
+{
+	return ExecuteOnGameThread([this, Arguments]() -> FMcpToolCallResult
+	{
+		// Parse arguments
+		FString FunctionName;
+		if (!Arguments->TryGetStringField(TEXT("functionName"), FunctionName))
+		{
+			return FMcpToolCallResult::CreateErrorResult(TEXT("Missing required field: functionName"));
+		}
+		
+		FString BlueprintPath;
+		Arguments->TryGetStringField(TEXT("blueprintPath"), BlueprintPath);
+		
+		// Parse parameters if provided
+		TArray<FParameterDefinition> Parameters;
+		FString ParseError;
+		const TArray<TSharedPtr<FJsonValue>>* ParametersArray = nullptr;
+		if (Arguments->TryGetArrayField(TEXT("parameters"), ParametersArray) && ParametersArray)
+		{
+			TSharedPtr<FJsonValue> ParametersValue = MakeShareable(new FJsonValueArray(*ParametersArray));
+			if (!ParseParameters(ParametersValue, Parameters, ParseError))
+			{
+				return FMcpToolCallResult::CreateErrorResult(ParseError);
+			}
+		}
+		
+		// Parse function flags if provided
+		FFunctionFlags Flags;
+		const TSharedPtr<FJsonObject>* FlagsObject = nullptr;
+		if (Arguments->TryGetObjectField(TEXT("functionFlags"), FlagsObject) && FlagsObject)
+		{
+			ParseFunctionFlags(*FlagsObject, Flags);
+		}
+		
+		// Resolve target Blueprint
+		UBlueprint* TargetBlueprint = ResolveTargetBlueprint(BlueprintPath);
+		if (!TargetBlueprint)
+		{
+			if (BlueprintPath.IsEmpty())
+			{
+				return FMcpToolCallResult::CreateErrorResult(TEXT("NO_ACTIVE_BLUEPRINT: No blueprint path provided and no focused editor"));
+			}
+			else
+			{
+				return FMcpToolCallResult::CreateErrorResult(FString::Printf(TEXT("ASSET_NOT_FOUND: Blueprint not found at path: %s"), *BlueprintPath));
+			}
+		}
+		
+		// Validate function name
+		FString ValidationError;
+		if (!ValidateFunctionName(TargetBlueprint, FunctionName, ValidationError))
+		{
+			return FMcpToolCallResult::CreateErrorResult(ValidationError);
+		}
+		
+		// Begin transaction for undo/redo support
+		FScopedTransaction Transaction(NSLOCTEXT("NodeToCode", "CreateFunction", "Create Blueprint Function"));
+		TargetBlueprint->Modify();
+		
+		// Create the function graph
+		UEdGraph* FunctionGraph = CreateFunctionGraph(TargetBlueprint, FunctionName);
+		if (!FunctionGraph)
+		{
+			Transaction.Cancel();
+			return FMcpToolCallResult::CreateErrorResult(TEXT("INTERNAL_ERROR: Failed to create function graph"));
+		}
+		
+		// Find the function entry and result nodes
+		TArray<UK2Node_FunctionEntry*> EntryNodes;
+		FunctionGraph->GetNodesOfClass<UK2Node_FunctionEntry>(EntryNodes);
+		
+		if (EntryNodes.Num() != 1)
+		{
+			Transaction.Cancel();
+			return FMcpToolCallResult::CreateErrorResult(TEXT("INTERNAL_ERROR: Invalid function graph structure"));
+		}
+		
+		UK2Node_FunctionEntry* EntryNode = EntryNodes[0];
+		UK2Node_FunctionResult* ResultNode = nullptr;
+		
+		// Check if we need a result node (if there are output parameters)
+		bool bNeedsResultNode = false;
+		for (const FParameterDefinition& Param : Parameters)
+		{
+			if (Param.Direction == TEXT("output"))
+			{
+				bNeedsResultNode = true;
+				break;
+			}
+		}
+		
+		if (bNeedsResultNode)
+		{
+			ResultNode = FindOrCreateResultNode(EntryNode);
+		}
+		
+		// Create function parameters
+		CreateFunctionParameters(EntryNode, ResultNode, Parameters);
+		
+		// Set function metadata
+		SetFunctionMetadata(EntryNode, Flags);
+		
+		// Get or create function GUID
+		FGuid FunctionGuid = GetOrCreateFunctionGuid(FunctionGraph);
+		
+		// Mark Blueprint as modified
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(TargetBlueprint);
+		
+		// Open the function in the editor
+		OpenFunctionInEditor(TargetBlueprint, FunctionGraph);
+		
+		// Show notification
+		FNotificationInfo Info(FText::Format(
+			NSLOCTEXT("NodeToCode", "FunctionCreated", "Function '{0}' created successfully"),
+			FText::FromString(FunctionName)
+		));
+		Info.ExpireDuration = 3.0f;
+		FSlateNotificationManager::Get().AddNotification(Info);
+		
+		// Build and return success result
+		TSharedPtr<FJsonObject> Result = BuildSuccessResult(TargetBlueprint, FunctionName, FunctionGuid, FunctionGraph);
+		
+		// Convert JSON object to string
+		FString ResultString;
+		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultString);
+		FJsonSerializer::Serialize(Result.ToSharedRef(), Writer);
+		
+		return FMcpToolCallResult::CreateTextResult(ResultString);
+	});
+}
+
+UBlueprint* FN2CMcpCreateBlueprintFunctionTool::ResolveTargetBlueprint(const FString& BlueprintPath) const
+{
+	// If blueprint path is provided, load it
+	if (!BlueprintPath.IsEmpty())
+	{
+		// Try to find the asset
+		FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+		IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+		
+		FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(BlueprintPath));
+		if (AssetData.IsValid())
+		{
+			UObject* LoadedAsset = AssetData.GetAsset();
+			return Cast<UBlueprint>(LoadedAsset);
+		}
+		
+		// Try alternate loading method
+		UObject* LoadedObject = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
+		return Cast<UBlueprint>(LoadedObject);
+	}
+	
+	// Otherwise, try to get the focused Blueprint
+	FBlueprintEditorModule& BPEditorModule = FModuleManager::LoadModuleChecked<FBlueprintEditorModule>("Kismet");
+	TArray<TSharedRef<IBlueprintEditor>> BlueprintEditors = BPEditorModule.GetBlueprintEditors();
+	
+	// Find the most recently activated Blueprint editor
+	TSharedPtr<IBlueprintEditor> ActiveEditor;
+	double LatestActivationTime = 0.0;
+	
+	for (const TSharedRef<IBlueprintEditor>& Editor : BlueprintEditors)
+	{
+		double ActivationTime = Editor->GetLastActivationTime();
+		if (ActivationTime > LatestActivationTime)
+		{
+			LatestActivationTime = ActivationTime;
+			ActiveEditor = Editor;
+		}
+	}
+	
+	if (ActiveEditor.IsValid())
+	{
+		// Cast IBlueprintEditor to FBlueprintEditor to access GetBlueprintObj
+		if (TSharedPtr<FBlueprintEditor> BPEditor = StaticCastSharedPtr<FBlueprintEditor>(ActiveEditor))
+		{
+			return BPEditor->GetBlueprintObj();
+		}
+	}
+	
+	// Alternative: Get from focused graph
+	if (UEdGraph* FocusedGraph = FN2CEditorIntegration::Get().GetFocusedGraphFromActiveEditor())
+	{
+		return FBlueprintEditorUtils::FindBlueprintForGraph(FocusedGraph);
+	}
+	
+	return nullptr;
+}
+
+bool FN2CMcpCreateBlueprintFunctionTool::ValidateFunctionName(const UBlueprint* Blueprint, const FString& FunctionName, FString& OutError) const
+{
+	if (FunctionName.IsEmpty())
+	{
+		OutError = TEXT("Function name cannot be empty");
+		return false;
+	}
+	
+	// Check for valid identifier characters
+	if (!FName::IsValidXName(FunctionName, INVALID_OBJECTNAME_CHARACTERS))
+	{
+		OutError = TEXT("Function name contains invalid characters");
+		return false;
+	}
+	
+	// Check if function already exists
+	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+	{
+		if (Graph && Graph->GetFName() == *FunctionName)
+		{
+			OutError = FString::Printf(TEXT("NAME_COLLISION: Function '%s' already exists"), *FunctionName);
+			return false;
+		}
+	}
+	
+	// Check against parent class functions
+	if (Blueprint->ParentClass)
+	{
+		UFunction* ExistingFunction = Blueprint->ParentClass->FindFunctionByName(*FunctionName);
+		if (ExistingFunction && !ExistingFunction->HasAnyFunctionFlags(FUNC_BlueprintEvent))
+		{
+			OutError = FString::Printf(TEXT("NAME_COLLISION: Cannot override non-BlueprintEvent function '%s'"), *FunctionName);
+			return false;
+		}
+	}
+	
+	return true;
+}
+
+UEdGraph* FN2CMcpCreateBlueprintFunctionTool::CreateFunctionGraph(UBlueprint* Blueprint, const FString& FunctionName)
+{
+	// Create a new graph for the function
+	UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
+		Blueprint,
+		FName(*FunctionName),
+		UEdGraph::StaticClass(),
+		UEdGraphSchema_K2::StaticClass()
+	);
+	
+	if (!NewGraph)
+	{
+		FN2CLogger::Get().LogError(TEXT("Failed to create new graph for function"));
+		return nullptr;
+	}
+	
+	// Add the function graph to the blueprint
+	// This creates the entry/exit nodes and sets up the graph properly
+	FBlueprintEditorUtils::AddFunctionGraph<UClass>(Blueprint, NewGraph, true, nullptr);
+	
+	FN2CLogger::Get().Log(FString::Printf(
+		TEXT("Created function '%s' in Blueprint '%s'"), 
+		*FunctionName, *Blueprint->GetName()), EN2CLogSeverity::Info);
+	
+	return NewGraph;
+}
+
+void FN2CMcpCreateBlueprintFunctionTool::CreateFunctionParameters(UK2Node_FunctionEntry* EntryNode, 
+	UK2Node_FunctionResult* ResultNode, const TArray<FParameterDefinition>& Parameters)
+{
+	for (const FParameterDefinition& Param : Parameters)
+	{
+		FEdGraphPinType PinType;
+		FString ConversionError;
+		
+		if (!ConvertToPinType(Param, PinType, ConversionError))
+		{
+			FN2CLogger::Get().LogError(FString::Printf(
+				TEXT("Failed to convert parameter '%s': %s"), *Param.Name, *ConversionError));
+			continue;
+		}
+		
+		CreateParameter(EntryNode, ResultNode, Param, PinType);
+	}
+	
+	// Reconstruct and refresh the nodes
+	EntryNode->ReconstructNode();
+	if (ResultNode)
+	{
+		ResultNode->ReconstructNode();
+	}
+}
+
+void FN2CMcpCreateBlueprintFunctionTool::SetFunctionMetadata(UK2Node_FunctionEntry* EntryNode, const FFunctionFlags& Flags)
+{
+	if (!EntryNode)
+	{
+		return;
+	}
+	
+	// Set function flags
+	int32 ExtraFlags = EntryNode->GetExtraFlags();
+	
+	if (Flags.bIsPure)
+	{
+		ExtraFlags |= FUNC_BlueprintPure;
+	}
+	
+	if (Flags.bIsCallInEditor)
+	{
+		// Note: FUNC_CallInEditor is not a standard function flag in UE5
+		// This would typically be set via metadata instead
+		EntryNode->MetaData.bCallInEditor = true;
+	}
+	
+	if (Flags.bIsStatic)
+	{
+		ExtraFlags |= FUNC_Static;
+	}
+	
+	if (Flags.bIsConst)
+	{
+		ExtraFlags |= FUNC_Const;
+	}
+	
+	// Set the extra flags
+	EntryNode->SetExtraFlags(ExtraFlags);
+	
+	// Set metadata
+	EntryNode->MetaData.Category = FText::FromString(Flags.Category);
+	
+	if (!Flags.Keywords.IsEmpty())
+	{
+		EntryNode->MetaData.Keywords = FText::FromString(Flags.Keywords);
+	}
+	
+	if (!Flags.Tooltip.IsEmpty())
+	{
+		EntryNode->MetaData.ToolTip = FText::FromString(Flags.Tooltip);
+	}
+	
+	// Set access specifier
+	if (Flags.AccessSpecifier == TEXT("private"))
+	{
+		EntryNode->SetExtraFlags(EntryNode->GetExtraFlags() | FUNC_Private);
+	}
+	else if (Flags.AccessSpecifier == TEXT("protected"))
+	{
+		EntryNode->SetExtraFlags(EntryNode->GetExtraFlags() | FUNC_Protected);
+	}
+	// public is default, no flag needed
+	
+	// Handle replication flags
+	if (Flags.bIsReliableReplication || Flags.bIsMulticast)
+	{
+		int32 NetFlags = EntryNode->GetExtraFlags();
+		
+		if (Flags.bIsReliableReplication)
+		{
+			NetFlags |= FUNC_NetReliable;
+			if (!Flags.bIsMulticast)
+			{
+				NetFlags |= FUNC_NetServer;  // Server RPC
+			}
+		}
+		
+		if (Flags.bIsMulticast)
+		{
+			NetFlags |= FUNC_NetMulticast;
+		}
+		
+		EntryNode->SetExtraFlags(NetFlags);
+	}
+}
+
+FGuid FN2CMcpCreateBlueprintFunctionTool::GetOrCreateFunctionGuid(UEdGraph* FunctionGraph) const
+{
+	if (!FunctionGraph)
+	{
+		return FGuid();
+	}
+	
+	// For now, we'll use the graph's unique ID as a GUID
+	// In a real implementation, you might store this in the entry node's metadata
+	// or in a separate data structure
+	FGuid FunctionGuid = FGuid::NewGuid();
+	
+	// Store in the entry node if we have one
+	TArray<UK2Node_FunctionEntry*> EntryNodes;
+	FunctionGraph->GetNodesOfClass<UK2Node_FunctionEntry>(EntryNodes);
+	if (EntryNodes.Num() > 0 && EntryNodes[0])
+	{
+		// Could store in node metadata or custom property
+		// For now, just return the generated GUID
+	}
+	
+	return FunctionGuid;
+}
+
+bool FN2CMcpCreateBlueprintFunctionTool::ConvertToPinType(const FParameterDefinition& ParamDef, 
+	FEdGraphPinType& OutPinType, FString& OutError) const
+{
+	// First, resolve the base type
+	if (!ResolvePrimitiveType(ParamDef.Type, OutPinType) &&
+		!ResolveMathType(ParamDef.Type, OutPinType) &&
+		!ResolveSpecialType(ParamDef.Type, OutPinType))
+	{
+		// Try reference type
+		if (!ResolveReferenceType(ParamDef.Type, ParamDef.SubType, OutPinType, OutError))
+		{
+			OutError = FString::Printf(TEXT("INVALID_PARAMETER_TYPE: Unknown type '%s'"), *ParamDef.Type);
+			return false;
+		}
+	}
+	
+	// Handle containers
+	if (ParamDef.Container != TEXT("none"))
+	{
+		if (ParamDef.Container == TEXT("array"))
+		{
+			OutPinType.ContainerType = EPinContainerType::Array;
+		}
+		else if (ParamDef.Container == TEXT("set"))
+		{
+			OutPinType.ContainerType = EPinContainerType::Set;
+		}
+		else if (ParamDef.Container == TEXT("map"))
+		{
+			OutPinType.ContainerType = EPinContainerType::Map;
+			
+			// For maps, we need to resolve the key type
+			if (!ParamDef.KeyType.IsEmpty())
+			{
+				FEdGraphPinType KeyPinType;
+				FParameterDefinition KeyParam;
+				KeyParam.Type = ParamDef.KeyType;
+				
+				if (ConvertToPinType(KeyParam, KeyPinType, OutError))
+				{
+					OutPinType.PinValueType = FEdGraphTerminalType::FromPinType(KeyPinType);
+				}
+			}
+		}
+	}
+	
+	// Handle reference flag
+	OutPinType.bIsReference = ParamDef.bIsReference;
+	OutPinType.bIsConst = ParamDef.bIsConst;
+	
+	return true;
+}
+
+bool FN2CMcpCreateBlueprintFunctionTool::ResolvePrimitiveType(const FString& Type, FEdGraphPinType& OutPinType) const
+{
+	// Boolean types
+	if (Type == TEXT("bool") || Type == TEXT("boolean"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+		return true;
+	}
+	// Byte
+	else if (Type == TEXT("byte") || Type == TEXT("uint8"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+		return true;
+	}
+	// Integer
+	else if (Type == TEXT("int") || Type == TEXT("int32"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Int;
+		return true;
+	}
+	// Integer64
+	else if (Type == TEXT("int64"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Int64;
+		return true;
+	}
+	// Float
+	else if (Type == TEXT("float"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+		OutPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+		return true;
+	}
+	// Double
+	else if (Type == TEXT("double"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+		OutPinType.PinSubCategory = UEdGraphSchema_K2::PC_Double;
+		return true;
+	}
+	// String
+	else if (Type == TEXT("string") || Type == TEXT("FString"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_String;
+		return true;
+	}
+	// Text
+	else if (Type == TEXT("text") || Type == TEXT("FText"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Text;
+		return true;
+	}
+	// Name
+	else if (Type == TEXT("name") || Type == TEXT("FName"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Name;
+		return true;
+	}
+	
+	return false;
+}
+
+bool FN2CMcpCreateBlueprintFunctionTool::ResolveMathType(const FString& Type, FEdGraphPinType& OutPinType) const
+{
+	// Vector types
+	if (Type == TEXT("vector") || Type == TEXT("vector3") || Type == TEXT("FVector"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+		OutPinType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
+		return true;
+	}
+	else if (Type == TEXT("vector2d") || Type == TEXT("FVector2D"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+		OutPinType.PinSubCategoryObject = TBaseStructure<FVector2D>::Get();
+		return true;
+	}
+	else if (Type == TEXT("vector4") || Type == TEXT("FVector4"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+		OutPinType.PinSubCategoryObject = TBaseStructure<FVector4>::Get();
+		return true;
+	}
+	// Rotator
+	else if (Type == TEXT("rotator") || Type == TEXT("FRotator"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+		OutPinType.PinSubCategoryObject = TBaseStructure<FRotator>::Get();
+		return true;
+	}
+	// Transform
+	else if (Type == TEXT("transform") || Type == TEXT("FTransform"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+		OutPinType.PinSubCategoryObject = TBaseStructure<FTransform>::Get();
+		return true;
+	}
+	// Quaternion
+	else if (Type == TEXT("quat") || Type == TEXT("FQuat"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+		OutPinType.PinSubCategoryObject = TBaseStructure<FQuat>::Get();
+		return true;
+	}
+	// Color
+	else if (Type == TEXT("color") || Type == TEXT("FColor"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+		OutPinType.PinSubCategoryObject = TBaseStructure<FColor>::Get();
+		return true;
+	}
+	// Linear Color
+	else if (Type == TEXT("linearcolor") || Type == TEXT("FLinearColor"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+		OutPinType.PinSubCategoryObject = TBaseStructure<FLinearColor>::Get();
+		return true;
+	}
+	
+	return false;
+}
+
+bool FN2CMcpCreateBlueprintFunctionTool::ResolveReferenceType(const FString& Type, const FString& SubType, 
+	FEdGraphPinType& OutPinType, FString& OutError) const
+{
+	if (Type == TEXT("object"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Object;
+		if (!SubType.IsEmpty())
+		{
+			UObject* SubTypeObject = ResolveSubType(Type, SubType);
+			if (!SubTypeObject)
+			{
+				OutError = FString::Printf(TEXT("INVALID_SUBTYPE: Could not resolve object type '%s'"), *SubType);
+				return false;
+			}
+			OutPinType.PinSubCategoryObject = SubTypeObject;
+		}
+		return true;
+	}
+	else if (Type == TEXT("class"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Class;
+		if (!SubType.IsEmpty())
+		{
+			UObject* SubTypeObject = ResolveSubType(Type, SubType);
+			if (!SubTypeObject)
+			{
+				OutError = FString::Printf(TEXT("INVALID_SUBTYPE: Could not resolve class type '%s'"), *SubType);
+				return false;
+			}
+			OutPinType.PinSubCategoryObject = SubTypeObject;
+		}
+		return true;
+	}
+	else if (Type == TEXT("struct"))
+	{
+		if (SubType.IsEmpty())
+		{
+			OutError = TEXT("INVALID_SUBTYPE: Struct type requires subType to be specified");
+			return false;
+		}
+		
+		UObject* SubTypeObject = ResolveSubType(Type, SubType);
+		if (!SubTypeObject)
+		{
+			OutError = FString::Printf(TEXT("INVALID_SUBTYPE: Could not resolve struct type '%s'"), *SubType);
+			return false;
+		}
+		
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+		OutPinType.PinSubCategoryObject = SubTypeObject;
+		return true;
+	}
+	else if (Type == TEXT("enum"))
+	{
+		if (SubType.IsEmpty())
+		{
+			OutError = TEXT("INVALID_SUBTYPE: Enum type requires subType to be specified");
+			return false;
+		}
+		
+		UObject* SubTypeObject = ResolveSubType(Type, SubType);
+		if (!SubTypeObject)
+		{
+			OutError = FString::Printf(TEXT("INVALID_SUBTYPE: Could not resolve enum type '%s'"), *SubType);
+			return false;
+		}
+		
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Enum;
+		OutPinType.PinSubCategoryObject = SubTypeObject;
+		return true;
+	}
+	else if (Type == TEXT("interface"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Interface;
+		if (!SubType.IsEmpty())
+		{
+			UObject* SubTypeObject = ResolveSubType(Type, SubType);
+			if (!SubTypeObject)
+			{
+				OutError = FString::Printf(TEXT("INVALID_SUBTYPE: Could not resolve interface type '%s'"), *SubType);
+				return false;
+			}
+			OutPinType.PinSubCategoryObject = SubTypeObject;
+		}
+		return true;
+	}
+	
+	return false;
+}
+
+bool FN2CMcpCreateBlueprintFunctionTool::ResolveSpecialType(const FString& Type, FEdGraphPinType& OutPinType) const
+{
+	if (Type == TEXT("wildcard"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Wildcard;
+		return true;
+	}
+	else if (Type == TEXT("delegate"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Delegate;
+		return true;
+	}
+	else if (Type == TEXT("multicastdelegate"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_MCDelegate;
+		return true;
+	}
+	else if (Type == TEXT("softobject"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
+		return true;
+	}
+	else if (Type == TEXT("softclass"))
+	{
+		OutPinType.PinCategory = UEdGraphSchema_K2::PC_SoftClass;
+		return true;
+	}
+	
+	return false;
+}
+
+UObject* FN2CMcpCreateBlueprintFunctionTool::ResolveSubType(const FString& Type, const FString& SubType) const
+{
+	// Try to find the object by path
+	UObject* FoundObject = FindObject<UObject>(nullptr, *SubType);
+	
+	if (!FoundObject)
+	{
+		// Try loading it
+		FoundObject = LoadObject<UObject>(nullptr, *SubType);
+	}
+	
+	if (!FoundObject)
+	{
+		// Try common type name mappings
+		if (Type == TEXT("object") || Type == TEXT("class"))
+		{
+			// Try as class
+			FoundObject = FindObject<UClass>(nullptr, *SubType);
+		}
+		else if (Type == TEXT("struct"))
+		{
+			// Try as struct
+			FoundObject = FindObject<UScriptStruct>(nullptr, *SubType);
+		}
+		else if (Type == TEXT("enum"))
+		{
+			// Try as enum
+			FoundObject = FindObject<UEnum>(nullptr, *SubType);
+		}
+	}
+	
+	return FoundObject;
+}
+
+void FN2CMcpCreateBlueprintFunctionTool::CreateParameter(UK2Node_FunctionEntry* EntryNode, 
+	UK2Node_FunctionResult* ResultNode, const FParameterDefinition& ParamDef, const FEdGraphPinType& PinType)
+{
+	if (ParamDef.Direction == TEXT("input"))
+	{
+		// Input parameters are added to the entry node as output pins
+		if (EntryNode)
+		{
+			EntryNode->CreateUserDefinedPin(*ParamDef.Name, PinType, EGPD_Output);
+			
+			// Set default value if provided
+			if (!ParamDef.DefaultValue.IsEmpty())
+			{
+				if (UEdGraphPin* NewPin = EntryNode->FindPin(*ParamDef.Name))
+				{
+					NewPin->DefaultValue = ParamDef.DefaultValue;
+				}
+			}
+		}
+	}
+	else if (ParamDef.Direction == TEXT("output"))
+	{
+		// Output parameters are added to the result node as input pins
+		if (ResultNode)
+		{
+			ResultNode->CreateUserDefinedPin(*ParamDef.Name, PinType, EGPD_Input);
+		}
+	}
+}
+
+UK2Node_FunctionResult* FN2CMcpCreateBlueprintFunctionTool::FindOrCreateResultNode(UK2Node_FunctionEntry* EntryNode)
+{
+	if (!EntryNode)
+	{
+		return nullptr;
+	}
+	
+	// Use the built-in utility to find or create the result node
+	return FBlueprintEditorUtils::FindOrCreateFunctionResultNode(EntryNode);
+}
+
+TSharedPtr<FJsonObject> FN2CMcpCreateBlueprintFunctionTool::BuildSuccessResult(const UBlueprint* Blueprint, 
+	const FString& FunctionName, const FGuid& FunctionGuid, UEdGraph* FunctionGraph) const
+{
+	TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
+	
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("functionName"), FunctionName);
+	Result->SetStringField(TEXT("functionGuid"), FunctionGuid.ToString());
+	Result->SetStringField(TEXT("blueprintName"), Blueprint->GetName());
+	Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
+	
+	// Add graph info
+	if (FunctionGraph)
+	{
+		TSharedPtr<FJsonObject> GraphInfo = MakeShareable(new FJsonObject);
+		GraphInfo->SetStringField(TEXT("graphName"), FunctionGraph->GetName());
+		GraphInfo->SetNumberField(TEXT("nodeCount"), FunctionGraph->Nodes.Num());
+		Result->SetObjectField(TEXT("graphInfo"), GraphInfo);
+	}
+	
+	Result->SetStringField(TEXT("message"), FString::Printf(
+		TEXT("Function '%s' created successfully with GUID %s"), 
+		*FunctionName, *FunctionGuid.ToString()));
+	
+	return Result;
+}
+
+bool FN2CMcpCreateBlueprintFunctionTool::ParseParameters(const TSharedPtr<FJsonValue>& ParametersValue, 
+	TArray<FParameterDefinition>& OutParameters, FString& OutError) const
+{
+	const TArray<TSharedPtr<FJsonValue>>* ParamsArray = nullptr;
+	if (!ParametersValue->TryGetArray(ParamsArray) || !ParamsArray)
+	{
+		OutError = TEXT("Parameters must be an array");
+		return false;
+	}
+	
+	for (const TSharedPtr<FJsonValue>& ParamValue : *ParamsArray)
+	{
+		const TSharedPtr<FJsonObject>* ParamObject = nullptr;
+		if (!ParamValue->TryGetObject(ParamObject) || !ParamObject)
+		{
+			OutError = TEXT("Each parameter must be an object");
+			return false;
+		}
+		
+		FParameterDefinition ParamDef;
+		
+		// Required fields
+		if (!(*ParamObject)->TryGetStringField(TEXT("name"), ParamDef.Name))
+		{
+			OutError = TEXT("Parameter missing required field: name");
+			return false;
+		}
+		
+		if (!(*ParamObject)->TryGetStringField(TEXT("type"), ParamDef.Type))
+		{
+			OutError = TEXT("Parameter missing required field: type");
+			return false;
+		}
+		
+		// Optional fields
+		(*ParamObject)->TryGetStringField(TEXT("direction"), ParamDef.Direction);
+		(*ParamObject)->TryGetStringField(TEXT("subType"), ParamDef.SubType);
+		(*ParamObject)->TryGetStringField(TEXT("container"), ParamDef.Container);
+		(*ParamObject)->TryGetStringField(TEXT("keyType"), ParamDef.KeyType);
+		(*ParamObject)->TryGetBoolField(TEXT("isReference"), ParamDef.bIsReference);
+		(*ParamObject)->TryGetBoolField(TEXT("isConst"), ParamDef.bIsConst);
+		(*ParamObject)->TryGetStringField(TEXT("defaultValue"), ParamDef.DefaultValue);
+		
+		OutParameters.Add(ParamDef);
+	}
+	
+	return true;
+}
+
+bool FN2CMcpCreateBlueprintFunctionTool::ParseFunctionFlags(const TSharedPtr<FJsonObject>& FlagsObject, 
+	FFunctionFlags& OutFlags) const
+{
+	// Parse all optional flags
+	FlagsObject->TryGetBoolField(TEXT("isPure"), OutFlags.bIsPure);
+	FlagsObject->TryGetBoolField(TEXT("isCallInEditor"), OutFlags.bIsCallInEditor);
+	FlagsObject->TryGetBoolField(TEXT("isStatic"), OutFlags.bIsStatic);
+	FlagsObject->TryGetBoolField(TEXT("isConst"), OutFlags.bIsConst);
+	FlagsObject->TryGetBoolField(TEXT("isOverride"), OutFlags.bIsOverride);
+	FlagsObject->TryGetBoolField(TEXT("isReliableReplication"), OutFlags.bIsReliableReplication);
+	FlagsObject->TryGetBoolField(TEXT("isMulticast"), OutFlags.bIsMulticast);
+	
+	FlagsObject->TryGetStringField(TEXT("category"), OutFlags.Category);
+	FlagsObject->TryGetStringField(TEXT("keywords"), OutFlags.Keywords);
+	FlagsObject->TryGetStringField(TEXT("tooltip"), OutFlags.Tooltip);
+	FlagsObject->TryGetStringField(TEXT("accessSpecifier"), OutFlags.AccessSpecifier);
+	
+	return true;
+}
+
+void FN2CMcpCreateBlueprintFunctionTool::OpenFunctionInEditor(UBlueprint* Blueprint, UEdGraph* FunctionGraph)
+{
+	if (!Blueprint || !FunctionGraph)
+	{
+		return;
+	}
+	
+	// Get the Blueprint editor module
+	FBlueprintEditorModule& BPEditorModule = FModuleManager::LoadModuleChecked<FBlueprintEditorModule>("Kismet");
+	
+	// For simplicity, we'll always open/focus the Blueprint editor
+	// The module will reuse existing editors if they exist
+	TSharedRef<IBlueprintEditor> Editor = BPEditorModule.CreateBlueprintEditor(
+		EToolkitMode::Standalone, 
+		TSharedPtr<IToolkitHost>(), 
+		Blueprint
+	);
+	
+	// Jump to the function graph
+	Editor->JumpToHyperlink(FunctionGraph, false);
+	Editor->FocusWindow();
+}
