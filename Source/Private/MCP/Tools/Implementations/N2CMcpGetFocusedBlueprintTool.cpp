@@ -162,6 +162,94 @@ FString FN2CMcpGetFocusedBlueprintTool::EnhanceJsonWithGuids(const FString& Json
 					}
 				}
 			}
+			
+			// Process flows section to add GUID information
+			const TSharedPtr<FJsonObject>* FlowsObject;
+			if (GraphObject->TryGetObjectField(TEXT("flows"), FlowsObject))
+			{
+				// Process execution flows
+				const TArray<TSharedPtr<FJsonValue>>* ExecutionFlows;
+				if ((*FlowsObject)->TryGetArrayField(TEXT("execution"), ExecutionFlows))
+				{
+					TArray<TSharedPtr<FJsonValue>> EnhancedExecutionFlows;
+					
+					for (const TSharedPtr<FJsonValue>& FlowValue : *ExecutionFlows)
+					{
+						FString FlowString;
+						if (FlowValue->TryGetString(FlowString))
+						{
+							// Parse the flow string (format: "OutputPinID->InputPinID")
+							FString OutputPinID, InputPinID;
+							if (FlowString.Split(TEXT("->"), &OutputPinID, &InputPinID))
+							{
+								TSharedPtr<FJsonObject> FlowObject = MakeShareable(new FJsonObject);
+								
+								// Create enhanced output pin reference
+								TSharedPtr<FJsonObject> FromObject = MakeShareable(new FJsonObject);
+								FromObject->SetStringField(TEXT("pinId"), OutputPinID);
+								if (FGuid* PinGuid = ReversePinIDMap.Find(OutputPinID))
+								{
+									FromObject->SetStringField(TEXT("pinGuid"), PinGuid->ToString(EGuidFormats::DigitsWithHyphens));
+								}
+								FlowObject->SetObjectField(TEXT("from"), FromObject);
+								
+								// Create enhanced input pin reference
+								TSharedPtr<FJsonObject> ToObject = MakeShareable(new FJsonObject);
+								ToObject->SetStringField(TEXT("pinId"), InputPinID);
+								if (FGuid* PinGuid = ReversePinIDMap.Find(InputPinID))
+								{
+									ToObject->SetStringField(TEXT("pinGuid"), PinGuid->ToString(EGuidFormats::DigitsWithHyphens));
+								}
+								FlowObject->SetObjectField(TEXT("to"), ToObject);
+								
+								EnhancedExecutionFlows.Add(MakeShareable(new FJsonValueObject(FlowObject)));
+							}
+						}
+					}
+					
+					// Replace execution flows with enhanced version
+					(*FlowsObject)->SetArrayField(TEXT("executionEnhanced"), EnhancedExecutionFlows);
+				}
+				
+				// Process data flows
+				const TSharedPtr<FJsonObject>* DataFlows;
+				if ((*FlowsObject)->TryGetObjectField(TEXT("data"), DataFlows))
+				{
+					TSharedPtr<FJsonObject> EnhancedDataFlows = MakeShareable(new FJsonObject);
+					
+					for (const auto& DataFlow : (*DataFlows)->Values)
+					{
+						FString InputPinID;
+						if (DataFlow.Value->TryGetString(InputPinID))
+						{
+							TSharedPtr<FJsonObject> FlowObject = MakeShareable(new FJsonObject);
+							
+							// Create enhanced output pin reference (key)
+							TSharedPtr<FJsonObject> FromObject = MakeShareable(new FJsonObject);
+							FromObject->SetStringField(TEXT("pinId"), DataFlow.Key);
+							if (FGuid* PinGuid = ReversePinIDMap.Find(DataFlow.Key))
+							{
+								FromObject->SetStringField(TEXT("pinGuid"), PinGuid->ToString(EGuidFormats::DigitsWithHyphens));
+							}
+							FlowObject->SetObjectField(TEXT("from"), FromObject);
+							
+							// Create enhanced input pin reference (value)
+							TSharedPtr<FJsonObject> ToObject = MakeShareable(new FJsonObject);
+							ToObject->SetStringField(TEXT("pinId"), InputPinID);
+							if (FGuid* PinGuid = ReversePinIDMap.Find(InputPinID))
+							{
+								ToObject->SetStringField(TEXT("pinGuid"), PinGuid->ToString(EGuidFormats::DigitsWithHyphens));
+							}
+							FlowObject->SetObjectField(TEXT("to"), ToObject);
+							
+							EnhancedDataFlows->SetObjectField(DataFlow.Key, FlowObject);
+						}
+					}
+					
+					// Add enhanced data flows
+					(*FlowsObject)->SetObjectField(TEXT("dataEnhanced"), EnhancedDataFlows);
+				}
+			}
 		}
 	}
 	

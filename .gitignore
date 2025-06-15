@@ -89,3 +89,4 @@ CLAUDE.md
 /.idea
 .mcp.json
 *.sh
+/BuildLogs
