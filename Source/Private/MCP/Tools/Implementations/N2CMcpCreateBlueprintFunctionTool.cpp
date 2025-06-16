@@ -1084,4 +1084,14 @@ void FN2CMcpCreateBlueprintFunctionTool::OpenFunctionInEditor(UBlueprint* Bluepr
 	// Jump to the function graph
 	Editor->JumpToHyperlink(FunctionGraph, false);
 	Editor->FocusWindow();
+	
+	// Update the stored active Blueprint editor to ensure it's properly tracked
+	// Convert TSharedRef to TSharedPtr first
+	TSharedPtr<IBlueprintEditor> EditorPtr = Editor;
+	if (TSharedPtr<FBlueprintEditor> BPEditor = StaticCastSharedPtr<FBlueprintEditor>(EditorPtr))
+	{
+		FN2CEditorIntegration::Get().StoreActiveBlueprintEditor(BPEditor);
+		FN2CLogger::Get().Log(FString::Printf(TEXT("Stored active Blueprint editor after opening function: %s"), 
+			*FunctionGraph->GetName()), EN2CLogSeverity::Debug);
+	}
 }

@@ -57,6 +57,17 @@ public:
      * @return Map of PinGUIDs to simplified PinIDs
      */
     const TMap<FGuid, FString>& GetPinIDMap() const { return PinIDMap; }
+    
+    /**
+     * @brief Preserve the current ID maps before they get cleared
+     * @param OutNodeIDMap Copy of the node ID map
+     * @param OutPinIDMap Copy of the pin ID map
+     */
+    void PreserveIDMaps(TMap<FGuid, FString>& OutNodeIDMap, TMap<FGuid, FString>& OutPinIDMap) const
+    {
+        OutNodeIDMap = NodeIDMap;
+        OutPinIDMap = PinIDMap;
+    }
 
 private:
     /** Constructor */

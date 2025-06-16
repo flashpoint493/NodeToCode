@@ -34,26 +34,54 @@ FMcpToolCallResult FN2CMcpGetFocusedBlueprintTool::Execute(const TSharedPtr<FJso
 	// Since this tool requires Game Thread execution, use the base class helper
 	return ExecuteOnGameThread([this]() -> FMcpToolCallResult
 	{
-		FString ErrorMsg;
-		FString JsonOutput = FN2CEditorIntegration::Get().GetFocusedBlueprintAsJson(false /* no pretty print */, ErrorMsg);
+		// Get the focused graph and collect nodes directly
+		UEdGraph* FocusedGraph = FN2CEditorIntegration::Get().GetFocusedGraphFromActiveEditor();
+		if (!FocusedGraph)
+		{
+			FN2CLogger::Get().LogWarning(TEXT("get-focused-blueprint tool failed: No focused graph"));
+			return FMcpToolCallResult::CreateErrorResult(TEXT("No focused graph in the active Blueprint Editor."));
+		}
 		
-		if (!JsonOutput.IsEmpty())
+		// Collect nodes
+		TArray<UK2Node*> CollectedNodes;
+		if (!FN2CEditorIntegration::Get().CollectNodesFromGraph(FocusedGraph, CollectedNodes) || CollectedNodes.IsEmpty())
 		{
-			// Enhance the JSON with GUID information
-			FString EnhancedJson = EnhanceJsonWithGuids(JsonOutput);
-			
-			FN2CLogger::Get().Log(TEXT("get-focused-blueprint tool successfully retrieved Blueprint JSON with GUID enhancement"), EN2CLogSeverity::Info);
-			return FMcpToolCallResult::CreateTextResult(EnhancedJson);
+			FN2CLogger::Get().LogWarning(TEXT("get-focused-blueprint tool failed: No nodes collected"));
+			return FMcpToolCallResult::CreateErrorResult(TEXT("Failed to collect nodes or no nodes found in the focused graph."));
 		}
-		else
+		
+		// Translate nodes - this populates the ID maps
+		FN2CBlueprint N2CBlueprintData;
+		TMap<FGuid, FString> NodeIDMapCopy;
+		TMap<FGuid, FString> PinIDMapCopy;
+		
+		if (!FN2CEditorIntegration::Get().TranslateNodesToN2CBlueprintWithMaps(CollectedNodes, N2CBlueprintData, NodeIDMapCopy, PinIDMapCopy))
 		{
-			FN2CLogger::Get().LogWarning(FString::Printf(TEXT("get-focused-blueprint tool failed: %s"), *ErrorMsg));
-			return FMcpToolCallResult::CreateErrorResult(ErrorMsg);
+			FN2CLogger::Get().LogWarning(TEXT("get-focused-blueprint tool failed: Translation failed"));
+			return FMcpToolCallResult::CreateErrorResult(TEXT("Failed to translate collected nodes into N2CBlueprint structure."));
 		}
+		
+		FN2CLogger::Get().Log(FString::Printf(TEXT("GetFocusedBlueprintTool: After translation - NodeIDMap has %d entries, PinIDMap has %d entries"), 
+			NodeIDMapCopy.Num(), PinIDMapCopy.Num()), EN2CLogSeverity::Info);
+		
+		// Serialize to JSON
+		FString JsonOutput = FN2CEditorIntegration::Get().SerializeN2CBlueprintToJson(N2CBlueprintData, false);
+		if (JsonOutput.IsEmpty())
+		{
+			FN2CLogger::Get().LogWarning(TEXT("get-focused-blueprint tool failed: Serialization failed"));
+			return FMcpToolCallResult::CreateErrorResult(TEXT("Failed to serialize N2CBlueprint to JSON."));
+		}
+		
+		// Enhance the JSON with GUID information using our saved copies
+		FString EnhancedJson = EnhanceJsonWithGuids(JsonOutput, NodeIDMapCopy, PinIDMapCopy);
+		
+		FN2CLogger::Get().Log(TEXT("get-focused-blueprint tool successfully retrieved Blueprint JSON with GUID enhancement"), EN2CLogSeverity::Info);
+		return FMcpToolCallResult::CreateTextResult(EnhancedJson);
 	});
 }
 
-FString FN2CMcpGetFocusedBlueprintTool::EnhanceJsonWithGuids(const FString& JsonString) const
+FString FN2CMcpGetFocusedBlueprintTool::EnhanceJsonWithGuids(const FString& JsonString, 
+	const TMap<FGuid, FString>& NodeIDMap, const TMap<FGuid, FString>& PinIDMap) const
 {
 	// Parse the JSON
 	TSharedPtr<FJsonObject> RootObject;
@@ -65,10 +93,9 @@ FString FN2CMcpGetFocusedBlueprintTool::EnhanceJsonWithGuids(const FString& Json
 		return JsonString; // Return original if parsing fails
 	}
 	
-	// Get the translator instance to access the ID maps
-	const FN2CNodeTranslator& Translator = FN2CNodeTranslator::Get();
-	const TMap<FGuid, FString>& NodeIDMap = Translator.GetNodeIDMap();
-	const TMap<FGuid, FString>& PinIDMap = Translator.GetPinIDMap();
+	// Log the map sizes for debugging
+	FN2CLogger::Get().Log(FString::Printf(TEXT("EnhanceJsonWithGuids: NodeIDMap has %d entries, PinIDMap has %d entries"), 
+		NodeIDMap.Num(), PinIDMap.Num()), EN2CLogSeverity::Debug);
 	
 	// Create reverse maps (ID -> GUID)
 	TMap<FString, FGuid> ReverseNodeIDMap;
@@ -81,6 +108,18 @@ FString FN2CMcpGetFocusedBlueprintTool::EnhanceJsonWithGuids(const FString& Json
 	for (const auto& Pair : PinIDMap)
 	{
 		ReversePinIDMap.Add(Pair.Value, Pair.Key);
+	}
+	
+	// Log some sample entries from PinIDMap
+	int32 SampleCount = 0;
+	for (const auto& Pair : PinIDMap)
+	{
+		if (SampleCount < 5)
+		{
+			FN2CLogger::Get().Log(FString::Printf(TEXT("  PinIDMap sample: GUID=%s -> ID=%s"), 
+				*Pair.Key.ToString(), *Pair.Value), EN2CLogSeverity::Debug);
+			SampleCount++;
+		}
 	}
 	
 	// Process each graph in the blueprint
@@ -121,12 +160,15 @@ FString FN2CMcpGetFocusedBlueprintTool::EnhanceJsonWithGuids(const FString& Json
 					}
 					
 					// Process pins
-					TArray<FString> PinArrayNames = { TEXT("inputPins"), TEXT("outputPins") };
+					TArray<FString> PinArrayNames = { TEXT("input_pins"), TEXT("output_pins") };
 					for (const FString& PinArrayName : PinArrayNames)
 					{
 						const TArray<TSharedPtr<FJsonValue>>* PinsArray;
 						if (NodeObject->TryGetArrayField(PinArrayName, PinsArray))
 						{
+							// Create a new array for enhanced pins
+							TArray<TSharedPtr<FJsonValue>> EnhancedPins;
+							
 							for (const TSharedPtr<FJsonValue>& PinValue : *PinsArray)
 							{
 								TSharedPtr<FJsonObject> PinObject = PinValue->AsObject();
@@ -136,6 +178,39 @@ FString FN2CMcpGetFocusedBlueprintTool::EnhanceJsonWithGuids(const FString& Json
 								FString ShortPinID;
 								if (PinObject->TryGetStringField(TEXT("id"), ShortPinID))
 								{
+									// Log the pin ID we're looking for
+									FN2CLogger::Get().Log(FString::Printf(TEXT("EnhanceJsonWithGuids: Looking for pin ID '%s' in ReversePinIDMap"), 
+										*ShortPinID), EN2CLogSeverity::Debug);
+									
+									// Log all entries in ReversePinIDMap for this specific search
+									bool bFoundMatch = false;
+									for (const auto& MapEntry : ReversePinIDMap)
+									{
+										if (MapEntry.Key == ShortPinID)
+										{
+											FN2CLogger::Get().Log(FString::Printf(TEXT("  Found exact match: ID='%s' -> GUID=%s"), 
+												*MapEntry.Key, *MapEntry.Value.ToString()), EN2CLogSeverity::Debug);
+											bFoundMatch = true;
+										}
+									}
+									
+									if (!bFoundMatch)
+									{
+										FN2CLogger::Get().Log(FString::Printf(TEXT("  No exact match found for '%s'. Map has %d entries."), 
+											*ShortPinID, ReversePinIDMap.Num()), EN2CLogSeverity::Debug);
+										
+										// Log first few entries to debug case issues
+										int32 Count = 0;
+										for (const auto& MapEntry : ReversePinIDMap)
+										{
+											if (Count++ < 3)
+											{
+												FN2CLogger::Get().Log(FString::Printf(TEXT("    Sample entry: ID='%s' -> GUID=%s"), 
+													*MapEntry.Key, *MapEntry.Value.ToString()), EN2CLogSeverity::Debug);
+											}
+										}
+									}
+									
 									// Create the nested ID structure for pin
 									TSharedPtr<FJsonObject> PinIdsObject = MakeShareable(new FJsonObject);
 									PinIdsObject->SetStringField(TEXT("short"), ShortPinID);
@@ -144,6 +219,14 @@ FString FN2CMcpGetFocusedBlueprintTool::EnhanceJsonWithGuids(const FString& Json
 									if (FGuid* PinGuid = ReversePinIDMap.Find(ShortPinID))
 									{
 										PinIdsObject->SetStringField(TEXT("guid"), PinGuid->ToString(EGuidFormats::DigitsWithHyphens));
+										FN2CLogger::Get().Log(FString::Printf(TEXT("EnhanceJsonWithGuids: Found GUID for pin %s: %s on node %s"), 
+											*ShortPinID, *PinGuid->ToString(), *ShortNodeID), EN2CLogSeverity::Debug);
+									}
+									else
+									{
+										// Log when we can't find a GUID for a pin
+										FN2CLogger::Get().Log(FString::Printf(TEXT("EnhanceJsonWithGuids: No GUID found for pin ID: %s on node %s"), 
+											*ShortPinID, *ShortNodeID), EN2CLogSeverity::Debug);
 									}
 									
 									// Add pin name as fallback identifier
@@ -157,99 +240,20 @@ FString FN2CMcpGetFocusedBlueprintTool::EnhanceJsonWithGuids(const FString& Json
 									PinObject->RemoveField(TEXT("id"));
 									PinObject->SetObjectField(TEXT("ids"), PinIdsObject);
 								}
+								
+								// Add the enhanced pin to the new array
+								EnhancedPins.Add(PinValue);
 							}
+							
+							// Replace the pin array with the enhanced version
+							NodeObject->SetArrayField(PinArrayName, EnhancedPins);
 						}
 					}
 				}
 			}
 			
-			// Process flows section to add GUID information
-			const TSharedPtr<FJsonObject>* FlowsObject;
-			if (GraphObject->TryGetObjectField(TEXT("flows"), FlowsObject))
-			{
-				// Process execution flows
-				const TArray<TSharedPtr<FJsonValue>>* ExecutionFlows;
-				if ((*FlowsObject)->TryGetArrayField(TEXT("execution"), ExecutionFlows))
-				{
-					TArray<TSharedPtr<FJsonValue>> EnhancedExecutionFlows;
-					
-					for (const TSharedPtr<FJsonValue>& FlowValue : *ExecutionFlows)
-					{
-						FString FlowString;
-						if (FlowValue->TryGetString(FlowString))
-						{
-							// Parse the flow string (format: "OutputPinID->InputPinID")
-							FString OutputPinID, InputPinID;
-							if (FlowString.Split(TEXT("->"), &OutputPinID, &InputPinID))
-							{
-								TSharedPtr<FJsonObject> FlowObject = MakeShareable(new FJsonObject);
-								
-								// Create enhanced output pin reference
-								TSharedPtr<FJsonObject> FromObject = MakeShareable(new FJsonObject);
-								FromObject->SetStringField(TEXT("pinId"), OutputPinID);
-								if (FGuid* PinGuid = ReversePinIDMap.Find(OutputPinID))
-								{
-									FromObject->SetStringField(TEXT("pinGuid"), PinGuid->ToString(EGuidFormats::DigitsWithHyphens));
-								}
-								FlowObject->SetObjectField(TEXT("from"), FromObject);
-								
-								// Create enhanced input pin reference
-								TSharedPtr<FJsonObject> ToObject = MakeShareable(new FJsonObject);
-								ToObject->SetStringField(TEXT("pinId"), InputPinID);
-								if (FGuid* PinGuid = ReversePinIDMap.Find(InputPinID))
-								{
-									ToObject->SetStringField(TEXT("pinGuid"), PinGuid->ToString(EGuidFormats::DigitsWithHyphens));
-								}
-								FlowObject->SetObjectField(TEXT("to"), ToObject);
-								
-								EnhancedExecutionFlows.Add(MakeShareable(new FJsonValueObject(FlowObject)));
-							}
-						}
-					}
-					
-					// Replace execution flows with enhanced version
-					(*FlowsObject)->SetArrayField(TEXT("executionEnhanced"), EnhancedExecutionFlows);
-				}
-				
-				// Process data flows
-				const TSharedPtr<FJsonObject>* DataFlows;
-				if ((*FlowsObject)->TryGetObjectField(TEXT("data"), DataFlows))
-				{
-					TSharedPtr<FJsonObject> EnhancedDataFlows = MakeShareable(new FJsonObject);
-					
-					for (const auto& DataFlow : (*DataFlows)->Values)
-					{
-						FString InputPinID;
-						if (DataFlow.Value->TryGetString(InputPinID))
-						{
-							TSharedPtr<FJsonObject> FlowObject = MakeShareable(new FJsonObject);
-							
-							// Create enhanced output pin reference (key)
-							TSharedPtr<FJsonObject> FromObject = MakeShareable(new FJsonObject);
-							FromObject->SetStringField(TEXT("pinId"), DataFlow.Key);
-							if (FGuid* PinGuid = ReversePinIDMap.Find(DataFlow.Key))
-							{
-								FromObject->SetStringField(TEXT("pinGuid"), PinGuid->ToString(EGuidFormats::DigitsWithHyphens));
-							}
-							FlowObject->SetObjectField(TEXT("from"), FromObject);
-							
-							// Create enhanced input pin reference (value)
-							TSharedPtr<FJsonObject> ToObject = MakeShareable(new FJsonObject);
-							ToObject->SetStringField(TEXT("pinId"), InputPinID);
-							if (FGuid* PinGuid = ReversePinIDMap.Find(InputPinID))
-							{
-								ToObject->SetStringField(TEXT("pinGuid"), PinGuid->ToString(EGuidFormats::DigitsWithHyphens));
-							}
-							FlowObject->SetObjectField(TEXT("to"), ToObject);
-							
-							EnhancedDataFlows->SetObjectField(DataFlow.Key, FlowObject);
-						}
-					}
-					
-					// Add enhanced data flows
-					(*FlowsObject)->SetObjectField(TEXT("dataEnhanced"), EnhancedDataFlows);
-				}
-			}
+			// Note: Per user requirement, Pin GUIDs should NOT appear in flows section
+			// The flows section should only use short IDs for readability
 		}
 	}
 	

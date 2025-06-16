@@ -104,6 +104,40 @@ bool FN2CEditorIntegration::TranslateNodesToN2CBlueprint(const TArray<UK2Node*>&
     return false;
 }
 
+bool FN2CEditorIntegration::TranslateNodesToN2CBlueprintWithMaps(const TArray<UK2Node*>& CollectedNodes, FN2CBlueprint& OutN2CBlueprint, 
+    TMap<FGuid, FString>& OutNodeIDMap, TMap<FGuid, FString>& OutPinIDMap) const
+{
+    FN2CNodeTranslator& Translator = FN2CNodeTranslator::Get();
+    
+    if (Translator.GenerateN2CStruct(CollectedNodes))
+    {
+        // Get the translated blueprint structure
+        OutN2CBlueprint = Translator.GetN2CBlueprint();
+        
+        // IMPORTANT: Preserve the ID maps immediately after translation
+        Translator.PreserveIDMaps(OutNodeIDMap, OutPinIDMap);
+        
+        // Validate the result
+        bool bIsValid = OutN2CBlueprint.IsValid();
+        
+        if (bIsValid)
+        {
+            FN2CLogger::Get().Log(TEXT("TranslateNodesToN2CBlueprintWithMaps: Translation validation successful"), EN2CLogSeverity::Info);
+            FN2CLogger::Get().Log(FString::Printf(TEXT("TranslateNodesToN2CBlueprintWithMaps: Preserved %d node IDs and %d pin IDs"), 
+                OutNodeIDMap.Num(), OutPinIDMap.Num()), EN2CLogSeverity::Info);
+        }
+        else
+        {
+            FN2CLogger::Get().LogError(TEXT("TranslateNodesToN2CBlueprintWithMaps: Translation validation failed"));
+        }
+        
+        return bIsValid;
+    }
+    
+    FN2CLogger::Get().LogError(TEXT("TranslateNodesToN2CBlueprintWithMaps: Failed to generate N2C structure"));
+    return false;
+}
+
 FString FN2CEditorIntegration::SerializeN2CBlueprintToJson(const FN2CBlueprint& Blueprint, bool bPrettyPrint) const
 {
     FN2CSerializer::SetPrettyPrint(bPrettyPrint);

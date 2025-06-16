@@ -164,7 +164,8 @@ FString FN2CNodeTranslator::GenerateNodeID()
 
 FString FN2CNodeTranslator::GeneratePinID(int32 PinCount)
 {
-    return FString::Printf(TEXT("P%d"), PinCount + 1);
+    // Use the total number of pins in the map to ensure global uniqueness
+    return FString::Printf(TEXT("P%d"), PinIDMap.Num() + 1);
 }
 
 bool FN2CNodeTranslator::InitializeNodeProcessing(UK2Node* Node, FN2CNodeDefinition& OutNodeDef)
@@ -708,6 +709,11 @@ void FN2CNodeTranslator::ProcessNodePins(UK2Node* Node, FN2CNodeDefinition& OutN
         FString PinID = GeneratePinID(OutNodeDef.InputPins.Num() + OutNodeDef.OutputPins.Num());
         PinIDMap.Add(Pin->PinId, PinID);
         PinDef.ID = PinID;
+        
+        // Debug logging for pin mapping
+        FN2CLogger::Get().Log(FString::Printf(TEXT("ProcessNodePins: Mapped Pin GUID %s to ID %s (Pin Name: %s, Node: %s)"), 
+            *Pin->PinId.ToString(), *PinID, *Pin->GetDisplayName().ToString(), 
+            *Node->GetNodeTitle(ENodeTitleType::ListView).ToString()), EN2CLogSeverity::Debug);
         
         // Set pin name
         PinDef.Name = Pin->GetDisplayName().ToString();

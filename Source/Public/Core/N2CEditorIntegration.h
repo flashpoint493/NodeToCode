@@ -49,6 +49,10 @@ public:
     /** Translates an array of K2Nodes into an FN2CBlueprint structure */
     bool TranslateNodesToN2CBlueprint(const TArray<UK2Node*>& CollectedNodes, FN2CBlueprint& OutN2CBlueprint) const;
     
+    /** Translates an array of K2Nodes into an FN2CBlueprint structure and preserves ID maps */
+    bool TranslateNodesToN2CBlueprintWithMaps(const TArray<UK2Node*>& CollectedNodes, FN2CBlueprint& OutN2CBlueprint,
+        TMap<FGuid, FString>& OutNodeIDMap, TMap<FGuid, FString>& OutPinIDMap) const;
+    
     /** Serializes an FN2CBlueprint structure to a JSON string */
     FString SerializeN2CBlueprintToJson(const FN2CBlueprint& Blueprint, bool bPrettyPrint) const;
 

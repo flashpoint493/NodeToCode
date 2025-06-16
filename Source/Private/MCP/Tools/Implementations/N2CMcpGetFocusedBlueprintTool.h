@@ -23,8 +23,11 @@ public:
 private:
 	/**
 	 * Enhance the JSON output with GUID information from the translator
-	 * @param JsonString The original JSON string  
+	 * @param JsonString The original JSON string
+	 * @param NodeIDMap Map of node GUIDs to simplified IDs
+	 * @param PinIDMap Map of pin GUIDs to simplified IDs
 	 * @return Enhanced JSON string with GUID information
 	 */
-	FString EnhanceJsonWithGuids(const FString& JsonString) const;
+	FString EnhanceJsonWithGuids(const FString& JsonString, 
+		const TMap<FGuid, FString>& NodeIDMap, const TMap<FGuid, FString>& PinIDMap) const;
 };
