@@ -1,6 +1,7 @@
 #include "N2CMcpSearchBlueprintNodesTool.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "Core/N2CEditorIntegration.h"
+#include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "Utils/N2CLogger.h"
 #include "BlueprintActionFilter.h"
 #include "BlueprintActionMenuBuilder.h"
@@ -122,31 +123,21 @@ FMcpToolCallResult FN2CMcpSearchBlueprintNodesTool::Execute(const TSharedPtr<FJs
         if (!GetContextFromPaths(BlueprintContext, ContextBlueprint, ContextGraph, ContextError))
         {
             // Try to fall back to active editor
-            ContextGraph = FN2CEditorIntegration::Get().GetFocusedGraphFromActiveEditor();
-            if (ContextGraph)
-            {
-                ContextBlueprint = FBlueprintEditorUtils::FindBlueprintForGraph(ContextGraph);
-            }
-            
-            if (!ContextGraph || !ContextBlueprint)
+            FString FocusError;
+            if (!FN2CMcpBlueprintUtils::GetFocusedEditorGraph(ContextBlueprint, ContextGraph, FocusError))
             {
                 return FMcpToolCallResult::CreateErrorResult(
-                    FString::Printf(TEXT("Context-sensitive search requested but no valid context available: %s"), *ContextError));
+                    FString::Printf(TEXT("Context-sensitive search requested but no valid context available: %s. Focus Error: %s"), *ContextError, *FocusError));
             }
         }
     }
     else if (bContextSensitive)
     {
         // Try to get context from active editor
-        ContextGraph = FN2CEditorIntegration::Get().GetFocusedGraphFromActiveEditor();
-        if (ContextGraph)
+        FString FocusError;
+        if (!FN2CMcpBlueprintUtils::GetFocusedEditorGraph(ContextBlueprint, ContextGraph, FocusError))
         {
-            ContextBlueprint = FBlueprintEditorUtils::FindBlueprintForGraph(ContextGraph);
-        }
-        
-        if (!ContextGraph || !ContextBlueprint)
-        {
-            return FMcpToolCallResult::CreateErrorResult(TEXT("Context-sensitive search requested but no Blueprint editor is active"));
+            return FMcpToolCallResult::CreateErrorResult(TEXT("Context-sensitive search requested but no Blueprint editor is active or graph focused. Error: ") + FocusError);
         }
     }
     
@@ -289,12 +280,12 @@ bool FN2CMcpSearchBlueprintNodesTool::GetContextFromPaths(
     if (BlueprintContext->TryGetStringField(TEXT("owningBlueprintPath"), BlueprintPath))
     {
         // Load the blueprint
-        FSoftObjectPath SoftPath(BlueprintPath);
-        OutBlueprint = Cast<UBlueprint>(SoftPath.TryLoad());
+        FString ResolveErrorNested;
+        OutBlueprint = FN2CMcpBlueprintUtils::ResolveBlueprint(BlueprintPath, ResolveErrorNested);
         
         if (!OutBlueprint)
         {
-            OutError = FString::Printf(TEXT("Failed to load Blueprint from path: %s"), *BlueprintPath);
+            OutError = FString::Printf(TEXT("Failed to load Blueprint from path: %s. Error: %s"), *BlueprintPath, *ResolveErrorNested);
             return false;
         }
     }
@@ -310,8 +301,8 @@ bool FN2CMcpSearchBlueprintNodesTool::GetContextFromPaths(
             // If we don't have the blueprint yet, try to load it from the graph path
             if (!OutBlueprint)
             {
-                FSoftObjectPath SoftPath(PackagePath);
-                OutBlueprint = Cast<UBlueprint>(SoftPath.TryLoad());
+                FString ResolveErrorNested;
+                OutBlueprint = FN2CMcpBlueprintUtils::ResolveBlueprint(PackagePath, ResolveErrorNested);
             }
             
             if (OutBlueprint)

@@ -3,6 +3,7 @@
 #include "N2CMcpConnectPinsTool.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "Core/N2CEditorIntegration.h"
+#include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "Utils/N2CLogger.h"
 #include "Engine/Blueprint.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -183,25 +184,18 @@ FMcpToolCallResult FN2CMcpConnectPinsTool::Execute(const TSharedPtr<FJsonObject>
 		
 		FN2CLogger::Get().Log(FString::Printf(TEXT("ConnectPins: Processing %d connection requests"), ConnectionRequests.Num()), EN2CLogSeverity::Debug);
 		
-		// Get focused graph
-		UEdGraph* FocusedGraph = FN2CEditorIntegration::Get().GetFocusedGraphFromActiveEditor();
-		if (!FocusedGraph)
+		// Get focused graph and Blueprint
+		UBlueprint* Blueprint = nullptr;
+		UEdGraph* FocusedGraph = nullptr;
+		FString GraphError;
+		if (!FN2CMcpBlueprintUtils::GetFocusedEditorGraph(Blueprint, FocusedGraph, GraphError))
 		{
-			FN2CLogger::Get().LogError(TEXT("ConnectPins: No focused graph found in the editor"));
-			return FMcpToolCallResult::CreateErrorResult(TEXT("No focused graph found in the editor"));
+			FN2CLogger::Get().LogError(FString::Printf(TEXT("ConnectPins: Failed to get focused graph/Blueprint: %s"), *GraphError));
+			return FMcpToolCallResult::CreateErrorResult(GraphError);
 		}
 		
-		FN2CLogger::Get().Log(FString::Printf(TEXT("ConnectPins: Found focused graph: %s"), *FocusedGraph->GetName()), EN2CLogSeverity::Debug);
-		
-		// Get Blueprint
-		UBlueprint* Blueprint = FBlueprintEditorUtils::FindBlueprintForGraph(FocusedGraph);
-		if (!Blueprint)
-		{
-			FN2CLogger::Get().LogError(TEXT("ConnectPins: No Blueprint found for the focused graph"));
-			return FMcpToolCallResult::CreateErrorResult(TEXT("No Blueprint found for the focused graph"));
-		}
-		
-		FN2CLogger::Get().Log(FString::Printf(TEXT("ConnectPins: Found Blueprint: %s"), *Blueprint->GetName()), EN2CLogSeverity::Debug);
+		FN2CLogger::Get().Log(FString::Printf(TEXT("ConnectPins: Found focused graph: %s in Blueprint: %s"), 
+			*FocusedGraph->GetName(), *Blueprint->GetName()), EN2CLogSeverity::Debug);
 		
 		// Get graph schema
 		const UEdGraphSchema* Schema = FocusedGraph->GetSchema();

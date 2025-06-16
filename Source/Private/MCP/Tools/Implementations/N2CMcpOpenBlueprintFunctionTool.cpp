@@ -1,6 +1,7 @@
 // Copyright Protospatial 2025. All Rights Reserved.
 
 #include "N2CMcpOpenBlueprintFunctionTool.h"
+#include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "MCP/Tools/N2CMcpToolManager.h"
 #include "MCP/Tools/N2CMcpFunctionGuidUtils.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
@@ -147,10 +148,28 @@ FMcpToolCallResult FN2CMcpOpenBlueprintFunctionTool::Execute(const TSharedPtr<FJ
 
 UEdGraph* FN2CMcpOpenBlueprintFunctionTool::FindFunctionByGuid(const FGuid& FunctionGuid, const FString& BlueprintPath, UBlueprint*& OutBlueprint) const
 {
+	FString ResolveError;
 	// First try the specified Blueprint path
 	if (!BlueprintPath.IsEmpty())
 	{
-		OutBlueprint = ResolveTargetBlueprint(BlueprintPath);
+		OutBlueprint = FN2CMcpBlueprintUtils::ResolveBlueprint(BlueprintPath, ResolveError); // Use new utility
+		if (OutBlueprint)
+		{
+			UEdGraph* FoundGraph = SearchFunctionInBlueprint(OutBlueprint, FunctionGuid);
+			if (FoundGraph)
+			{
+				return FoundGraph;
+			}
+		}
+		// If BlueprintPath was specified but not found, OutBlueprint will be null.
+		// For now, it falls through to focused.
+	}
+	
+	// Try the focused Blueprint if path was empty or BP not found via path
+	if (!OutBlueprint) 
+	{
+		// Use ResolveBlueprint with empty path to get focused, or error.
+		OutBlueprint = FN2CMcpBlueprintUtils::ResolveBlueprint(TEXT(""), ResolveError); 
 		if (OutBlueprint)
 		{
 			UEdGraph* FoundGraph = SearchFunctionInBlueprint(OutBlueprint, FunctionGuid);
@@ -161,21 +180,7 @@ UEdGraph* FN2CMcpOpenBlueprintFunctionTool::FindFunctionByGuid(const FGuid& Func
 		}
 	}
 	
-	// Try the focused Blueprint
-	OutBlueprint = GetFocusedBlueprint();
-	if (OutBlueprint)
-	{
-		UEdGraph* FoundGraph = SearchFunctionInBlueprint(OutBlueprint, FunctionGuid);
-		if (FoundGraph)
-		{
-			return FoundGraph;
-		}
-	}
-	
-	// Could optionally search all open Blueprints here
-	// For now, we'll just return nullptr if not found
-	
-	OutBlueprint = nullptr;
+	OutBlueprint = nullptr; // Ensure it's null if no function found in any BP
 	return nullptr;
 }
 
@@ -199,29 +204,6 @@ FGuid FN2CMcpOpenBlueprintFunctionTool::GetFunctionGuid(const UEdGraph* Function
 	
 	// Use the utility to get the stored GUID
 	return FN2CMcpFunctionGuidUtils::GetStoredFunctionGuid(FunctionGraph);
-}
-
-UBlueprint* FN2CMcpOpenBlueprintFunctionTool::ResolveTargetBlueprint(const FString& BlueprintPath) const
-{
-	if (BlueprintPath.IsEmpty())
-	{
-		return nullptr;
-	}
-	
-	// Try to load the Blueprint asset
-	UObject* LoadedAsset = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	return Cast<UBlueprint>(LoadedAsset);
-}
-
-UBlueprint* FN2CMcpOpenBlueprintFunctionTool::GetFocusedBlueprint() const
-{
-	// Get from focused graph through our editor integration
-	if (UEdGraph* FocusedGraph = FN2CEditorIntegration::Get().GetFocusedGraphFromActiveEditor())
-	{
-		return FBlueprintEditorUtils::FindBlueprintForGraph(FocusedGraph);
-	}
-	
-	return nullptr;
 }
 
 bool FN2CMcpOpenBlueprintFunctionTool::OpenBlueprintEditor(UBlueprint* Blueprint, TSharedPtr<IBlueprintEditor>& OutEditor) const

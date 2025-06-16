@@ -1,6 +1,7 @@
 // Copyright Protospatial 2025. All Rights Reserved.
 
 #include "N2CMcpCreateLocalVariableTool.h"
+#include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "Core/N2CEditorIntegration.h"
 #include "Utils/N2CLogger.h"
@@ -102,10 +103,12 @@ FMcpToolCallResult FN2CMcpCreateLocalVariableTool::Execute(const TSharedPtr<FJso
 		Arguments->TryGetStringField(TEXT("tooltip"), Tooltip);
 		
 		// Get focused function graph
-		UEdGraph* FocusedGraph = FN2CEditorIntegration::Get().GetFocusedGraphFromActiveEditor();
-		if (!FocusedGraph)
+		UBlueprint* OwningBlueprint = nullptr;
+		UEdGraph* FocusedGraph = nullptr;
+		FString GraphError;
+		if (!FN2CMcpBlueprintUtils::GetFocusedEditorGraph(OwningBlueprint, FocusedGraph, GraphError))
 		{
-			return FMcpToolCallResult::CreateErrorResult(TEXT("No focused graph found in the editor"));
+			return FMcpToolCallResult::CreateErrorResult(GraphError);
 		}
 		
 		// Ensure we're in a K2 graph

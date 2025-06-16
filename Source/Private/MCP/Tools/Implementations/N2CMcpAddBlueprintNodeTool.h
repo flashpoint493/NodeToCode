@@ -30,9 +30,9 @@ private:
                        FVector2D& OutLocation,
                        FString& OutError);
     
-    bool GetActiveGraphContext(UBlueprint*& OutBlueprint,
-                             UEdGraph*& OutGraph,
-                             FString& OutError);
+    // bool GetActiveGraphContext(UBlueprint*& OutBlueprint, // Removed
+    //                          UEdGraph*& OutGraph, // Removed
+    //                          FString& OutError); // Removed
     
     bool FindAndSpawnNode(const FString& NodeName,
                          const FString& ActionIdentifier,

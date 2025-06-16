@@ -5,6 +5,7 @@
 #include "Core/N2CEditorIntegration.h"
 #include "Core/N2CNodeTranslator.h"
 #include "Utils/N2CLogger.h"
+#include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonReader.h"
@@ -35,12 +36,15 @@ FMcpToolCallResult FN2CMcpGetFocusedBlueprintTool::Execute(const TSharedPtr<FJso
 	return ExecuteOnGameThread([this]() -> FMcpToolCallResult
 	{
 		// Get the focused graph and collect nodes directly
-		UEdGraph* FocusedGraph = FN2CEditorIntegration::Get().GetFocusedGraphFromActiveEditor();
-		if (!FocusedGraph)
-		{
-			FN2CLogger::Get().LogWarning(TEXT("get-focused-blueprint tool failed: No focused graph"));
-			return FMcpToolCallResult::CreateErrorResult(TEXT("No focused graph in the active Blueprint Editor."));
-		}
+		// UEdGraph* FocusedGraph = FN2CEditorIntegration::Get().GetFocusedGraphFromActiveEditor(); // Old way
+            UBlueprint* OwningBlueprint = nullptr; // Will be populated by the utility
+            UEdGraph* FocusedGraph = nullptr;
+            FString GraphError;
+            if (!FN2CMcpBlueprintUtils::GetFocusedEditorGraph(OwningBlueprint, FocusedGraph, GraphError))
+            {
+                FN2CLogger::Get().LogWarning(FString::Printf(TEXT("get-focused-blueprint tool failed: %s"), *GraphError));
+                return FMcpToolCallResult::CreateErrorResult(GraphError);
+            }
 		
 		// Collect nodes
 		TArray<UK2Node*> CollectedNodes;

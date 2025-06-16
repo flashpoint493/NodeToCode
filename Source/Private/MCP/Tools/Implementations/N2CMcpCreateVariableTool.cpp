@@ -1,6 +1,7 @@
 // Copyright Protospatial 2025. All Rights Reserved.
 
 #include "N2CMcpCreateVariableTool.h"
+#include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpToolTypes.h"
 #include "Utils/N2CLogger.h"
@@ -139,10 +140,11 @@ FMcpToolCallResult FN2CMcpCreateVariableTool::Execute(const TSharedPtr<FJsonObje
 		}
 		
 		// Get active Blueprint
-		UBlueprint* ActiveBlueprint = GetActiveBlueprint();
+		FString ResolveError;
+		UBlueprint* ActiveBlueprint = FN2CMcpBlueprintUtils::ResolveBlueprint(TEXT(""), ResolveError); // Empty path gets focused
 		if (!ActiveBlueprint)
 		{
-			return FMcpToolCallResult::CreateErrorResult(TEXT("No active Blueprint found"));
+			return FMcpToolCallResult::CreateErrorResult(ResolveError);
 		}
 		
 		// Validate Blueprint is modifiable
@@ -153,10 +155,10 @@ FMcpToolCallResult FN2CMcpCreateVariableTool::Execute(const TSharedPtr<FJsonObje
 		
 		// Resolve type identifier to FEdGraphPinType
 		FEdGraphPinType PinType;
-		FString ResolveError;
-		if (!ResolveTypeIdentifier(Settings.TypeIdentifier, PinType, ResolveError))
+		FString TypeResolveError; // Rename this one
+		if (!ResolveTypeIdentifier(Settings.TypeIdentifier, PinType, TypeResolveError))
 		{
-			return FMcpToolCallResult::CreateErrorResult(ResolveError);
+			return FMcpToolCallResult::CreateErrorResult(TypeResolveError); // Use the new name
 		}
 		
 		// Create the variable
@@ -192,44 +194,6 @@ FMcpToolCallResult FN2CMcpCreateVariableTool::Execute(const TSharedPtr<FJsonObje
 		
 		return FMcpToolCallResult::CreateTextResult(ResultString);
 	});
-}
-
-UBlueprint* FN2CMcpCreateVariableTool::GetActiveBlueprint() const
-{
-	// Try to get from active Blueprint editor
-	FBlueprintEditorModule& BPEditorModule = FModuleManager::LoadModuleChecked<FBlueprintEditorModule>("Kismet");
-	TArray<TSharedRef<IBlueprintEditor>> BlueprintEditors = BPEditorModule.GetBlueprintEditors();
-	
-	// Find the most recently activated Blueprint editor
-	TSharedPtr<IBlueprintEditor> ActiveEditor;
-	double LatestActivationTime = 0.0;
-	
-	for (const TSharedRef<IBlueprintEditor>& Editor : BlueprintEditors)
-	{
-		double ActivationTime = Editor->GetLastActivationTime();
-		if (ActivationTime > LatestActivationTime)
-		{
-			LatestActivationTime = ActivationTime;
-			ActiveEditor = Editor;
-		}
-	}
-	
-	if (ActiveEditor.IsValid())
-	{
-		// Cast IBlueprintEditor to FBlueprintEditor to access GetBlueprintObj
-		if (TSharedPtr<FBlueprintEditor> BPEditor = StaticCastSharedPtr<FBlueprintEditor>(ActiveEditor))
-		{
-			return BPEditor->GetBlueprintObj();
-		}
-	}
-	
-	// Alternative: Get from focused graph
-	if (UEdGraph* FocusedGraph = FN2CEditorIntegration::Get().GetFocusedGraphFromActiveEditor())
-	{
-		return FBlueprintEditorUtils::FindBlueprintForGraph(FocusedGraph);
-	}
-	
-	return nullptr;
 }
 
 bool FN2CMcpCreateVariableTool::ResolveTypeIdentifier(const FString& TypeIdentifier, 

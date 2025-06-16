@@ -29,8 +29,8 @@ private:
 	FGuid GetFunctionGuid(const UEdGraph* FunctionGraph) const;
 	
 	// Blueprint resolution
-	UBlueprint* ResolveTargetBlueprint(const FString& BlueprintPath) const;
-	UBlueprint* GetFocusedBlueprint() const;
+	// UBlueprint* ResolveTargetBlueprint(const FString& BlueprintPath) const; // Removed
+	// UBlueprint* GetFocusedBlueprint() const; // Removed
 	
 	// Editor operations
 	bool OpenBlueprintEditor(UBlueprint* Blueprint, TSharedPtr<IBlueprintEditor>& OutEditor) const;

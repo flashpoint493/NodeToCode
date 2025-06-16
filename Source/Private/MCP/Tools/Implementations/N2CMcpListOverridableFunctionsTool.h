@@ -22,7 +22,7 @@ private:
 	 * @param BlueprintPath Optional path to a specific Blueprint
 	 * @return The resolved Blueprint or nullptr if not found
 	 */
-	class UBlueprint* ResolveTargetBlueprint(const FString& BlueprintPath) const;
+	// class UBlueprint* ResolveTargetBlueprint(const FString& BlueprintPath) const; // Removed
 
 	/**
 	 * Collects all overridable functions from parent classes and interfaces.

@@ -1,6 +1,7 @@
 // Copyright Protospatial 2025. All Rights Reserved.
 
 #include "N2CMcpDeleteBlueprintFunctionTool.h"
+#include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpFunctionGuidUtils.h"
 #include "Core/N2CEditorIntegration.h"
@@ -97,10 +98,11 @@ FMcpToolCallResult FN2CMcpDeleteBlueprintFunctionTool::Execute(const TSharedPtr<
 		Arguments->TryGetBoolField(TEXT("force"), bForce);
 		
 		// Resolve target Blueprint
-		UBlueprint* TargetBlueprint = ResolveTargetBlueprint(BlueprintPath);
+		FString ResolveError;
+		UBlueprint* TargetBlueprint = FN2CMcpBlueprintUtils::ResolveBlueprint(BlueprintPath, ResolveError);
 		if (!TargetBlueprint)
 		{
-			return FMcpToolCallResult::CreateErrorResult(TEXT("No Blueprint specified and no Blueprint is currently focused in the editor"));
+			return FMcpToolCallResult::CreateErrorResult(ResolveError);
 		}
 		
 		// Find the function by GUID
@@ -178,30 +180,6 @@ FMcpToolCallResult FN2CMcpDeleteBlueprintFunctionTool::Execute(const TSharedPtr<
 		
 		return FMcpToolCallResult::CreateTextResult(JsonString);
 	});
-}
-
-UBlueprint* FN2CMcpDeleteBlueprintFunctionTool::ResolveTargetBlueprint(const FString& BlueprintPath) const
-{
-	if (!BlueprintPath.IsEmpty())
-	{
-		// Try to load the Blueprint asset
-		UObject* LoadedAsset = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-		return Cast<UBlueprint>(LoadedAsset);
-	}
-	
-	// Fall back to focused Blueprint
-	return GetFocusedBlueprint();
-}
-
-UBlueprint* FN2CMcpDeleteBlueprintFunctionTool::GetFocusedBlueprint() const
-{
-	// Get from focused graph through our editor integration
-	if (UEdGraph* FocusedGraph = FN2CEditorIntegration::Get().GetFocusedGraphFromActiveEditor())
-	{
-		return FBlueprintEditorUtils::FindBlueprintForGraph(FocusedGraph);
-	}
-	
-	return nullptr;
 }
 
 UEdGraph* FN2CMcpDeleteBlueprintFunctionTool::FindFunctionByGuid(UBlueprint* Blueprint, const FGuid& FunctionGuid) const

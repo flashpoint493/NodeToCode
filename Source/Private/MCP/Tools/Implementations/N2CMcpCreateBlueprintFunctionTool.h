@@ -56,7 +56,6 @@ private:
 	};
 
 	// Main operations
-	UBlueprint* ResolveTargetBlueprint(const FString& BlueprintPath) const;
 	bool ValidateFunctionName(const UBlueprint* Blueprint, const FString& FunctionName, FString& OutError) const;
 	UEdGraph* CreateFunctionGraph(UBlueprint* Blueprint, const FString& FunctionName);
 	void CreateFunctionParameters(UK2Node_FunctionEntry* EntryNode, UK2Node_FunctionResult* ResultNode,

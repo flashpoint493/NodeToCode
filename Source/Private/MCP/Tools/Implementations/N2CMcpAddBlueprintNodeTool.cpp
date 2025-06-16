@@ -1,6 +1,7 @@
 #include "N2CMcpAddBlueprintNodeTool.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "Core/N2CEditorIntegration.h"
+#include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "Core/N2CNodeTranslator.h"
 #include "Core/N2CSerializer.h"
 #include "Utils/N2CLogger.h"
@@ -100,11 +101,10 @@ FMcpToolCallResult FN2CMcpAddBlueprintNodeTool::Execute(const TSharedPtr<FJsonOb
         *NodeName, *ActionIdentifier, Location.X, Location.Y), EN2CLogSeverity::Info);
     
     // Get the active graph context
+    FString ContextError;
     UBlueprint* ActiveBlueprint = nullptr;
     UEdGraph* ActiveGraph = nullptr;
-    FString ContextError;
-    
-    if (!GetActiveGraphContext(ActiveBlueprint, ActiveGraph, ContextError))
+    if (!FN2CMcpBlueprintUtils::GetFocusedEditorGraph(ActiveBlueprint, ActiveGraph, ContextError))
     {
         return FMcpToolCallResult::CreateErrorResult(ContextError);
     }
@@ -185,81 +185,6 @@ bool FN2CMcpAddBlueprintNodeTool::ParseArguments(
         (*LocationObject)->TryGetNumberField(TEXT("y"), Y);
         OutLocation.X = X;
         OutLocation.Y = Y;
-    }
-    
-    return true;
-}
-
-bool FN2CMcpAddBlueprintNodeTool::GetActiveGraphContext(
-    UBlueprint*& OutBlueprint,
-    UEdGraph*& OutGraph,
-    FString& OutError)
-{
-    // Try to get the focused graph from the active editor
-    OutGraph = FN2CEditorIntegration::Get().GetFocusedGraphFromActiveEditor();
-    
-    if (!OutGraph)
-    {
-        // Try alternative method: Get the most recently activated Blueprint editor
-        FBlueprintEditorModule& BPEditorModule = FModuleManager::LoadModuleChecked<FBlueprintEditorModule>("Kismet");
-        TArray<TSharedRef<IBlueprintEditor>> BlueprintEditors = BPEditorModule.GetBlueprintEditors();
-        
-        TSharedPtr<IBlueprintEditor> ActiveEditor;
-        double LatestActivationTime = 0.0;
-        
-        for (const TSharedRef<IBlueprintEditor>& Editor : BlueprintEditors)
-        {
-            double ActivationTime = Editor->GetLastActivationTime();
-            if (ActivationTime > LatestActivationTime)
-            {
-                LatestActivationTime = ActivationTime;
-                ActiveEditor = Editor;
-            }
-        }
-        
-        if (ActiveEditor.IsValid())
-        {
-            // Cast to FBlueprintEditor to get focused graph
-            if (TSharedPtr<FBlueprintEditor> BPEditor = StaticCastSharedPtr<FBlueprintEditor>(ActiveEditor))
-            {
-                OutGraph = BPEditor->GetFocusedGraph();
-                FN2CLogger::Get().Log(FString::Printf(TEXT("Found graph via active editor: %s"), 
-                    OutGraph ? *OutGraph->GetName() : TEXT("NULL")), EN2CLogSeverity::Debug);
-            }
-        }
-        
-        if (!OutGraph)
-        {
-            OutError = TEXT("No active Blueprint graph found. Please open a Blueprint editor and focus on a graph.");
-            return false;
-        }
-    }
-    else
-    {
-        FN2CLogger::Get().Log(FString::Printf(TEXT("Found focused graph: %s"), 
-            *OutGraph->GetName()), EN2CLogSeverity::Debug);
-    }
-    
-    // Get the Blueprint from the graph
-    OutBlueprint = FBlueprintEditorUtils::FindBlueprintForGraph(OutGraph);
-    
-    if (!OutBlueprint)
-    {
-        OutError = TEXT("Could not find Blueprint for the active graph");
-        return false;
-    }
-    
-    FN2CLogger::Get().Log(FString::Printf(TEXT("Found Blueprint: %s, Graph: %s, GraphType: %s"), 
-        *OutBlueprint->GetName(), 
-        *OutGraph->GetName(),
-        OutGraph->GetSchema() ? *OutGraph->GetSchema()->GetClass()->GetName() : TEXT("NoSchema")), 
-        EN2CLogSeverity::Debug);
-    
-    // Verify this is an editable graph
-    if (!OutGraph->bEditable)
-    {
-        OutError = TEXT("The active graph is not editable");
-        return false;
     }
     
     return true;

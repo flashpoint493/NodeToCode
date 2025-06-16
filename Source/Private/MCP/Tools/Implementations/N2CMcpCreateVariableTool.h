@@ -37,7 +37,7 @@ private:
 	};
 
 	// Main operations
-	UBlueprint* GetActiveBlueprint() const;
+	// UBlueprint* GetActiveBlueprint() const; // Removed
 	bool ResolveTypeIdentifier(const FString& TypeIdentifier, FEdGraphPinType& OutPinType, FString& OutError) const;
 	FName CreateVariable(UBlueprint* Blueprint, const FString& DesiredName, 
 		const FEdGraphPinType& PinType, const FString& DefaultValue, const FString& Category);

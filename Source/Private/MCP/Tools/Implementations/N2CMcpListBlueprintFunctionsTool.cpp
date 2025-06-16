@@ -1,6 +1,7 @@
 // Copyright Protospatial 2025. All Rights Reserved.
 
 #include "N2CMcpListBlueprintFunctionsTool.h"
+#include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpToolTypes.h"
 #include "MCP/Tools/N2CMcpFunctionGuidUtils.h"
@@ -82,17 +83,11 @@ FMcpToolCallResult FN2CMcpListBlueprintFunctionsTool::Execute(const TSharedPtr<F
 		Arguments->TryGetBoolField(TEXT("includeOverridden"), bIncludeOverridden);
 		
 		// Resolve target Blueprint
-		UBlueprint* TargetBlueprint = ResolveTargetBlueprint(BlueprintPath);
+		FString ResolveError;
+		UBlueprint* TargetBlueprint = FN2CMcpBlueprintUtils::ResolveBlueprint(BlueprintPath, ResolveError);
 		if (!TargetBlueprint)
 		{
-			if (BlueprintPath.IsEmpty())
-			{
-				return FMcpToolCallResult::CreateErrorResult(TEXT("NO_ACTIVE_BLUEPRINT: No blueprint path provided and no focused editor"));
-			}
-			else
-			{
-				return FMcpToolCallResult::CreateErrorResult(FString::Printf(TEXT("ASSET_NOT_FOUND: Blueprint not found at path: %s"), *BlueprintPath));
-			}
+			return FMcpToolCallResult::CreateErrorResult(ResolveError);
 		}
 		
 		// Collect function information
@@ -115,63 +110,6 @@ FMcpToolCallResult FN2CMcpListBlueprintFunctionsTool::Execute(const TSharedPtr<F
 		
 		return FMcpToolCallResult::CreateTextResult(ResultString);
 	});
-}
-
-UBlueprint* FN2CMcpListBlueprintFunctionsTool::ResolveTargetBlueprint(const FString& BlueprintPath) const
-{
-	// If blueprint path is provided, load it
-	if (!BlueprintPath.IsEmpty())
-	{
-		// Try to find the asset
-		FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
-		IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
-		
-		FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(BlueprintPath));
-		if (AssetData.IsValid())
-		{
-			UObject* LoadedAsset = AssetData.GetAsset();
-			return Cast<UBlueprint>(LoadedAsset);
-		}
-		
-		// Try alternate loading method
-		UObject* LoadedObject = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-		return Cast<UBlueprint>(LoadedObject);
-	}
-	
-	// Otherwise, try to get the focused Blueprint
-	FBlueprintEditorModule& BPEditorModule = FModuleManager::LoadModuleChecked<FBlueprintEditorModule>("Kismet");
-	TArray<TSharedRef<IBlueprintEditor>> BlueprintEditors = BPEditorModule.GetBlueprintEditors();
-	
-	// Find the most recently activated Blueprint editor
-	TSharedPtr<IBlueprintEditor> ActiveEditor;
-	double LatestActivationTime = 0.0;
-	
-	for (const TSharedRef<IBlueprintEditor>& Editor : BlueprintEditors)
-	{
-		double ActivationTime = Editor->GetLastActivationTime();
-		if (ActivationTime > LatestActivationTime)
-		{
-			LatestActivationTime = ActivationTime;
-			ActiveEditor = Editor;
-		}
-	}
-	
-	if (ActiveEditor.IsValid())
-	{
-		// Cast IBlueprintEditor to FBlueprintEditor to access GetBlueprintObj
-		if (TSharedPtr<FBlueprintEditor> BPEditor = StaticCastSharedPtr<FBlueprintEditor>(ActiveEditor))
-		{
-			return BPEditor->GetBlueprintObj();
-		}
-	}
-	
-	// Alternative: Get from focused graph
-	if (UEdGraph* FocusedGraph = FN2CEditorIntegration::Get().GetFocusedGraphFromActiveEditor())
-	{
-		return FBlueprintEditorUtils::FindBlueprintForGraph(FocusedGraph);
-	}
-	
-	return nullptr;
 }
 
 TSharedPtr<FJsonObject> FN2CMcpListBlueprintFunctionsTool::CollectFunctionInformation(const UBlueprint* Blueprint) const

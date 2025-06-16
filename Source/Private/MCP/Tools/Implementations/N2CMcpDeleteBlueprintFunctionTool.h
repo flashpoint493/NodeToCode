@@ -32,7 +32,7 @@ private:
 	};
 
 	// Main operations
-	UBlueprint* ResolveTargetBlueprint(const FString& BlueprintPath) const;
+	// UBlueprint* ResolveTargetBlueprint(const FString& BlueprintPath) const; // Removed
 	UEdGraph* FindFunctionByGuid(UBlueprint* Blueprint, const FGuid& FunctionGuid) const;
 	
 	// Validation methods
@@ -61,7 +61,7 @@ private:
 		const FGuid& TransactionGuid) const;
 	
 	// Helper methods
-	UBlueprint* GetFocusedBlueprint() const;
+	// UBlueprint* GetFocusedBlueprint() const; // Removed
 	FString GetFunctionDisplayName(UEdGraph* FunctionGraph) const;
 	UK2Node_FunctionEntry* GetFunctionEntryNode(UEdGraph* FunctionGraph) const;
 };
