@@ -4,6 +4,7 @@
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "Core/N2CEditorIntegration.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
+#include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "Utils/N2CLogger.h"
 #include "Engine/Blueprint.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -275,9 +276,11 @@ bool FN2CMcpConnectPinsTool::ParseConnectionRequests(const TSharedPtr<FJsonObjec
 {
 	FN2CLogger::Get().Log(TEXT("ConnectPins: Parsing connection requests"), EN2CLogSeverity::Debug);
 	
+	FN2CMcpArgumentParser ArgParser(Arguments);
+	
 	// Parse connections array
-	const TArray<TSharedPtr<FJsonValue>>* ConnectionsArray;
-	if (!Arguments->TryGetArrayField(TEXT("connections"), ConnectionsArray))
+	const TArray<TSharedPtr<FJsonValue>>* ConnectionsArray = ArgParser.GetOptionalArray(TEXT("connections"));
+	if (!ConnectionsArray || ConnectionsArray->Num() == 0)
 	{
 		FN2CLogger::Get().LogError(TEXT("ConnectPins: No 'connections' array field found in arguments"));
 		return false;
@@ -302,15 +305,17 @@ bool FN2CMcpConnectPinsTool::ParseConnectionRequests(const TSharedPtr<FJsonObjec
 			continue;
 		}
 		
-		if (!(*FromObject)->TryGetStringField(TEXT("nodeGuid"), Request.FromNodeGuid) ||
-			!(*FromObject)->TryGetStringField(TEXT("pinGuid"), Request.FromPinGuid))
+		FN2CMcpArgumentParser FromParser(*FromObject);
+		FString ErrorMsg;
+		if (!FromParser.TryGetRequiredString(TEXT("nodeGuid"), Request.FromNodeGuid, ErrorMsg) ||
+			!FromParser.TryGetRequiredString(TEXT("pinGuid"), Request.FromPinGuid, ErrorMsg))
 		{
 			continue;
 		}
 		
 		// Optional fields
-		(*FromObject)->TryGetStringField(TEXT("pinName"), Request.FromPinName);
-		(*FromObject)->TryGetStringField(TEXT("pinDirection"), Request.FromPinDirection);
+		Request.FromPinName = FromParser.GetOptionalString(TEXT("pinName"));
+		Request.FromPinDirection = FromParser.GetOptionalString(TEXT("pinDirection"));
 		
 		// Parse 'to' object
 		const TSharedPtr<FJsonObject>* ToObject;
@@ -319,15 +324,16 @@ bool FN2CMcpConnectPinsTool::ParseConnectionRequests(const TSharedPtr<FJsonObjec
 			continue;
 		}
 		
-		if (!(*ToObject)->TryGetStringField(TEXT("nodeGuid"), Request.ToNodeGuid) ||
-			!(*ToObject)->TryGetStringField(TEXT("pinGuid"), Request.ToPinGuid))
+		FN2CMcpArgumentParser ToParser(*ToObject);
+		if (!ToParser.TryGetRequiredString(TEXT("nodeGuid"), Request.ToNodeGuid, ErrorMsg) ||
+			!ToParser.TryGetRequiredString(TEXT("pinGuid"), Request.ToPinGuid, ErrorMsg))
 		{
 			continue;
 		}
 		
 		// Optional fields
-		(*ToObject)->TryGetStringField(TEXT("pinName"), Request.ToPinName);
-		(*ToObject)->TryGetStringField(TEXT("pinDirection"), Request.ToPinDirection);
+		Request.ToPinName = ToParser.GetOptionalString(TEXT("pinName"));
+		Request.ToPinDirection = ToParser.GetOptionalString(TEXT("pinDirection"));
 		
 		FN2CLogger::Get().Log(FString::Printf(TEXT("ConnectPins: Parsed connection request - From: Node=%s, Pin=%s, Name=%s, Dir=%s | To: Node=%s, Pin=%s, Name=%s, Dir=%s"),
 			*Request.FromNodeGuid, *Request.FromPinGuid, *Request.FromPinName, *Request.FromPinDirection,
@@ -337,11 +343,12 @@ bool FN2CMcpConnectPinsTool::ParseConnectionRequests(const TSharedPtr<FJsonObjec
 	}
 	
 	// Parse options (optional)
-	const TSharedPtr<FJsonObject>* OptionsObject;
-	if (Arguments->TryGetObjectField(TEXT("options"), OptionsObject))
+	TSharedPtr<FJsonObject> OptionsObject = ArgParser.GetOptionalObject(TEXT("options"));
+	if (OptionsObject.IsValid())
 	{
-		(*OptionsObject)->TryGetStringField(TEXT("transactionName"), OutOptions.TransactionName);
-		(*OptionsObject)->TryGetBoolField(TEXT("breakExistingLinks"), OutOptions.bBreakExistingLinks);
+		FN2CMcpArgumentParser OptionsParser(OptionsObject);
+		OutOptions.TransactionName = OptionsParser.GetOptionalString(TEXT("transactionName"), OutOptions.TransactionName);
+		OutOptions.bBreakExistingLinks = OptionsParser.GetOptionalBool(TEXT("breakExistingLinks"), OutOptions.bBreakExistingLinks);
 	}
 	
 	return true;

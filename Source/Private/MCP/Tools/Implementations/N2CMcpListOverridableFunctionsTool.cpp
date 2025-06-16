@@ -2,6 +2,7 @@
 
 #include "N2CMcpListOverridableFunctionsTool.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
+#include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpToolTypes.h"
 #include "Utils/N2CLogger.h"
@@ -80,17 +81,13 @@ FMcpToolCallResult FN2CMcpListOverridableFunctionsTool::Execute(const TSharedPtr
 	return ExecuteOnGameThread([this, Arguments]() -> FMcpToolCallResult
 	{
 		// Parse arguments
-		FString BlueprintPath;
-		Arguments->TryGetStringField(TEXT("blueprintPath"), BlueprintPath);
+		FN2CMcpArgumentParser ArgParser(Arguments);
 		
-		bool bIncludeImplemented = false;
-		Arguments->TryGetBoolField(TEXT("includeImplemented"), bIncludeImplemented);
-		
-		FString FilterByCategory;
-		Arguments->TryGetStringField(TEXT("filterByCategory"), FilterByCategory);
-		
-		FString SearchTerm;
-		Arguments->TryGetStringField(TEXT("searchTerm"), SearchTerm);
+		// Optional parameters
+		FString BlueprintPath = ArgParser.GetOptionalString(TEXT("blueprintPath"));
+		bool bIncludeImplemented = ArgParser.GetOptionalBool(TEXT("includeImplemented"), false);
+		FString FilterByCategory = ArgParser.GetOptionalString(TEXT("filterByCategory"));
+		FString SearchTerm = ArgParser.GetOptionalString(TEXT("searchTerm"));
 		
 		// Resolve target Blueprint
 		FString ResolveError;

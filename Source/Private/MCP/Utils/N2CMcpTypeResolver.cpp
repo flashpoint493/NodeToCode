@@ -170,9 +170,9 @@ UObject* FN2CMcpTypeResolver::FindObjectByPathOrName(const FString& PathOrName, 
     else // Likely a name
     {
         // Try common engine types by name first for performance
-        if (ExpectedClass == UClass::StaticClass()) FoundObject = FindObject<UClass>(ANY_PACKAGE, *PathOrName);
-        else if (ExpectedClass == UScriptStruct::StaticClass()) FoundObject = FindObject<UScriptStruct>(ANY_PACKAGE, *PathOrName);
-        else if (ExpectedClass == UEnum::StaticClass()) FoundObject = FindObject<UEnum>(ANY_PACKAGE, *PathOrName);
+        if (ExpectedClass == UClass::StaticClass()) FoundObject = FindObject<UClass>(nullptr, *PathOrName);
+        else if (ExpectedClass == UScriptStruct::StaticClass()) FoundObject = FindObject<UScriptStruct>(nullptr, *PathOrName);
+        else if (ExpectedClass == UEnum::StaticClass()) FoundObject = FindObject<UEnum>(nullptr, *PathOrName);
 
         if (!FoundObject) // Fallback to iterating all objects if not found by common name
         {

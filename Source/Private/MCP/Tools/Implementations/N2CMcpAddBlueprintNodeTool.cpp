@@ -4,6 +4,7 @@
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "Core/N2CEditorIntegration.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
+#include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "Core/N2CNodeTranslator.h"
 #include "Core/N2CSerializer.h"
 #include "Utils/N2CLogger.h"
@@ -152,41 +153,27 @@ bool FN2CMcpAddBlueprintNodeTool::ParseArguments(
         return false;
     }
     
-    // Required: nodeName
-    if (!Arguments->TryGetStringField(TEXT("nodeName"), OutNodeName))
-    {
-        OutError = TEXT("Missing required field: nodeName");
-        return false;
-    }
+    FN2CMcpArgumentParser ArgParser(Arguments);
     
-    if (OutNodeName.IsEmpty())
+    // Required: nodeName
+    if (!ArgParser.TryGetRequiredString(TEXT("nodeName"), OutNodeName, OutError, false))
     {
-        OutError = TEXT("nodeName cannot be empty");
         return false;
     }
     
     // Required: actionIdentifier
-    if (!Arguments->TryGetStringField(TEXT("actionIdentifier"), OutActionIdentifier))
+    if (!ArgParser.TryGetRequiredString(TEXT("actionIdentifier"), OutActionIdentifier, OutError, false))
     {
-        OutError = TEXT("Missing required field: actionIdentifier");
-        return false;
-    }
-    
-    if (OutActionIdentifier.IsEmpty())
-    {
-        OutError = TEXT("actionIdentifier cannot be empty");
         return false;
     }
     
     // Optional: location
-    const TSharedPtr<FJsonObject>* LocationObject;
-    if (Arguments->TryGetObjectField(TEXT("location"), LocationObject))
+    TSharedPtr<FJsonObject> LocationObject = ArgParser.GetOptionalObject(TEXT("location"));
+    if (LocationObject.IsValid())
     {
-        double X = 0, Y = 0;
-        (*LocationObject)->TryGetNumberField(TEXT("x"), X);
-        (*LocationObject)->TryGetNumberField(TEXT("y"), Y);
-        OutLocation.X = X;
-        OutLocation.Y = Y;
+        FN2CMcpArgumentParser LocationParser(LocationObject);
+        OutLocation.X = LocationParser.GetOptionalNumber(TEXT("x"), 0.0);
+        OutLocation.Y = LocationParser.GetOptionalNumber(TEXT("y"), 0.0);
     }
     
     return true;

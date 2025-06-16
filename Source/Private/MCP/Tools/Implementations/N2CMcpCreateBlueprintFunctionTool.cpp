@@ -3,6 +3,7 @@
 #include "N2CMcpCreateBlueprintFunctionTool.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "MCP/Utils/N2CMcpTypeResolver.h"
+#include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpToolTypes.h"
 #include "MCP/Tools/N2CMcpFunctionGuidUtils.h"
@@ -144,51 +145,48 @@ FMcpToolCallResult FN2CMcpCreateBlueprintFunctionTool::Execute(const TSharedPtr<
 {
 	return ExecuteOnGameThread([this, Arguments]() -> FMcpToolCallResult
 	{
-		// Parse arguments
-		FString FunctionName;
-		if (!Arguments->TryGetStringField(TEXT("functionName"), FunctionName))
-		{
-			return FMcpToolCallResult::CreateErrorResult(TEXT("Missing required field: functionName"));
-		}
-		
-		FString BlueprintPath;
-		Arguments->TryGetStringField(TEXT("blueprintPath"), BlueprintPath);
-		
-		// Parse parameters if provided
-		TArray<FParameterDefinition> Parameters;
-		FString ParseError;
-		const TArray<TSharedPtr<FJsonValue>>* ParametersArray = nullptr;
-		if (Arguments->TryGetArrayField(TEXT("parameters"), ParametersArray) && ParametersArray)
-		{
-			TSharedPtr<FJsonValue> ParametersValue = MakeShareable(new FJsonValueArray(*ParametersArray));
-			if (!ParseParameters(ParametersValue, Parameters, ParseError))
-			{
-				return FMcpToolCallResult::CreateErrorResult(ParseError);
-			}
-		}
-		
-		// Parse function flags if provided
-		FFunctionFlags Flags;
-		const TSharedPtr<FJsonObject>* FlagsObject = nullptr;
-		if (Arguments->TryGetObjectField(TEXT("functionFlags"), FlagsObject) && FlagsObject)
-		{
-			ParseFunctionFlags(*FlagsObject, Flags);
-		}
+        FN2CMcpArgumentParser ArgParser(Arguments);
+        FString Error;
+
+        FString FunctionName;
+        if (!ArgParser.TryGetRequiredString(TEXT("functionName"), FunctionName, Error))
+        {
+            return FMcpToolCallResult::CreateErrorResult(Error);
+        }
+        
+        FString BlueprintPath = ArgParser.GetOptionalString(TEXT("blueprintPath"));
+        
+        TArray<FParameterDefinition> Parameters;
+        const TArray<TSharedPtr<FJsonValue>>* ParametersArrayJson = ArgParser.GetOptionalArray(TEXT("parameters"));
+        if (ParametersArrayJson)
+        {
+            // The FJsonValueArray constructor expects a TArray<TSharedPtr<FJsonValue>>, not a pointer to it.
+            // So we need to dereference it.
+            TSharedPtr<FJsonValue> ParametersValue = MakeShareable(new FJsonValueArray(*ParametersArrayJson));
+            if (!ParseParameters(ParametersValue, Parameters, Error))
+            {
+                return FMcpToolCallResult::CreateErrorResult(Error);
+            }
+        }
+        
+        FFunctionFlags Flags;
+		TSharedPtr<FJsonObject> FlagsObjectJson = ArgParser.GetOptionalObject(TEXT("functionFlags"));
+		if (FlagsObjectJson.IsValid())
+        {
+            ParseFunctionFlags(FlagsObjectJson, Flags);
+        }
 		
 		// Resolve target Blueprint using the new utility
-		FString ResolveError; // Renamed from ParseError for clarity here
-		UBlueprint* TargetBlueprint = FN2CMcpBlueprintUtils::ResolveBlueprint(BlueprintPath, ResolveError);
+		UBlueprint* TargetBlueprint = FN2CMcpBlueprintUtils::ResolveBlueprint(BlueprintPath, Error);
 		if (!TargetBlueprint)
 		{
-			// ResolveError already contains a code like ASSET_NOT_FOUND or NO_ACTIVE_BLUEPRINT
-			return FMcpToolCallResult::CreateErrorResult(ResolveError);
+			return FMcpToolCallResult::CreateErrorResult(Error);
 		}
 		
 		// Validate function name
-		FString ValidationError;
-		if (!ValidateFunctionName(TargetBlueprint, FunctionName, ValidationError))
+		if (!ValidateFunctionName(TargetBlueprint, FunctionName, Error))
 		{
-			return FMcpToolCallResult::CreateErrorResult(ValidationError);
+			return FMcpToolCallResult::CreateErrorResult(Error);
 		}
 		
 		// Begin transaction for undo/redo support

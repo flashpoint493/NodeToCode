@@ -3,6 +3,7 @@
 #include "N2CMcpCreateLocalVariableTool.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "MCP/Utils/N2CMcpTypeResolver.h"
+#include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "Core/N2CEditorIntegration.h"
 #include "Utils/N2CLogger.h"
@@ -83,25 +84,26 @@ FMcpToolCallResult FN2CMcpCreateLocalVariableTool::Execute(const TSharedPtr<FJso
 {
 	return ExecuteOnGameThread([this, Arguments]() -> FMcpToolCallResult
 	{
-		// Extract parameters
+		// Parse arguments
+		FN2CMcpArgumentParser ArgParser(Arguments);
+		FString ErrorMsg;
+		
+		// Extract required parameters
 		FString VariableName;
-		if (!Arguments->TryGetStringField(TEXT("variableName"), VariableName))
+		if (!ArgParser.TryGetRequiredString(TEXT("variableName"), VariableName, ErrorMsg))
 		{
-			return FMcpToolCallResult::CreateErrorResult(TEXT("Missing required parameter: variableName"));
+			return FMcpToolCallResult::CreateErrorResult(ErrorMsg);
 		}
 		
 		FString TypeIdentifier;
-		if (!Arguments->TryGetStringField(TEXT("typeIdentifier"), TypeIdentifier))
+		if (!ArgParser.TryGetRequiredString(TEXT("typeIdentifier"), TypeIdentifier, ErrorMsg))
 		{
-			return FMcpToolCallResult::CreateErrorResult(TEXT("Missing required parameter: typeIdentifier"));
+			return FMcpToolCallResult::CreateErrorResult(ErrorMsg);
 		}
 		
 		// Optional parameters
-		FString DefaultValue;
-		Arguments->TryGetStringField(TEXT("defaultValue"), DefaultValue);
-		
-		FString Tooltip;
-		Arguments->TryGetStringField(TEXT("tooltip"), Tooltip);
+		FString DefaultValue = ArgParser.GetOptionalString(TEXT("defaultValue"));
+		FString Tooltip = ArgParser.GetOptionalString(TEXT("tooltip"));
 		
 		// Get focused function graph
 		UBlueprint* OwningBlueprint = nullptr;

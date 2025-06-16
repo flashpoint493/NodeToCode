@@ -2,6 +2,7 @@
 
 #include "N2CMcpListBlueprintFunctionsTool.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
+#include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpToolTypes.h"
 #include "MCP/Tools/N2CMcpFunctionGuidUtils.h"
@@ -73,14 +74,12 @@ FMcpToolCallResult FN2CMcpListBlueprintFunctionsTool::Execute(const TSharedPtr<F
 	return ExecuteOnGameThread([this, Arguments]() -> FMcpToolCallResult
 	{
 		// Parse arguments
-		FString BlueprintPath;
-		Arguments->TryGetStringField(TEXT("blueprintPath"), BlueprintPath);
+		FN2CMcpArgumentParser ArgParser(Arguments);
 		
-		bool bIncludeInherited = false;
-		Arguments->TryGetBoolField(TEXT("includeInherited"), bIncludeInherited);
-		
-		bool bIncludeOverridden = false;
-		Arguments->TryGetBoolField(TEXT("includeOverridden"), bIncludeOverridden);
+		// Optional parameters
+		FString BlueprintPath = ArgParser.GetOptionalString(TEXT("blueprintPath"));
+		bool bIncludeInherited = ArgParser.GetOptionalBool(TEXT("includeInherited"), false);
+		bool bIncludeOverridden = ArgParser.GetOptionalBool(TEXT("includeOverridden"), false);
 		
 		// Resolve target Blueprint
 		FString ResolveError;

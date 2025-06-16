@@ -4,6 +4,7 @@
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "Core/N2CEditorIntegration.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
+#include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "Utils/N2CLogger.h"
 #include "BlueprintActionFilter.h"
 #include "BlueprintActionMenuBuilder.h"
@@ -218,50 +219,25 @@ FMcpToolCallResult FN2CMcpSearchBlueprintNodesTool::Execute(const TSharedPtr<FJs
 }
 
 bool FN2CMcpSearchBlueprintNodesTool::ParseArguments(
-    const TSharedPtr<FJsonObject>& Arguments,
+    const TSharedPtr<FJsonObject>& ArgumentsJsonObj,
     FString& OutSearchTerm,
     bool& OutContextSensitive,
     int32& OutMaxResults,
     TSharedPtr<FJsonObject>& OutBlueprintContext,
     FString& OutError)
 {
-    if (!Arguments.IsValid())
+    FN2CMcpArgumentParser ArgParser(ArgumentsJsonObj);
+
+    if (!ArgParser.TryGetRequiredString(TEXT("searchTerm"), OutSearchTerm, OutError))
     {
-        OutError = TEXT("Invalid arguments object");
         return false;
     }
     
-    // Required: searchTerm
-    if (!Arguments->TryGetStringField(TEXT("searchTerm"), OutSearchTerm))
-    {
-        OutError = TEXT("Missing required field: searchTerm");
-        return false;
-    }
-    
-    if (OutSearchTerm.IsEmpty())
-    {
-        OutError = TEXT("searchTerm cannot be empty");
-        return false;
-    }
-    
-    // Optional: contextSensitive (default: true)
-    OutContextSensitive = true;
-    Arguments->TryGetBoolField(TEXT("contextSensitive"), OutContextSensitive);
-    
-    // Optional: maxResults (default: 20)
-    OutMaxResults = 20;
-    if (Arguments->HasField(TEXT("maxResults")))
-    {
-        Arguments->TryGetNumberField(TEXT("maxResults"), OutMaxResults);
-        OutMaxResults = FMath::Clamp(OutMaxResults, 1, 100);
-    }
-    
-    // Optional: blueprintContext
-    const TSharedPtr<FJsonObject>* ContextObject;
-    if (Arguments->TryGetObjectField(TEXT("blueprintContext"), ContextObject))
-    {
-        OutBlueprintContext = *ContextObject;
-    }
+    OutContextSensitive = ArgParser.GetOptionalBool(TEXT("contextSensitive"), true);
+    OutMaxResults = ArgParser.GetOptionalInt(TEXT("maxResults"), 20);
+    OutMaxResults = FMath::Clamp(OutMaxResults, 1, 100);
+
+    OutBlueprintContext = ArgParser.GetOptionalObject(TEXT("blueprintContext"));
     
     return true;
 }

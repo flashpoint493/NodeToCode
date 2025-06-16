@@ -3,6 +3,7 @@
 #include "N2CMcpCreateVariableTool.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "MCP/Utils/N2CMcpTypeResolver.h"
+#include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpToolTypes.h"
 #include "Utils/N2CLogger.h"
@@ -114,24 +115,26 @@ FMcpToolCallResult FN2CMcpCreateVariableTool::Execute(const TSharedPtr<FJsonObje
 	{
 		// Parse arguments
 		FVariableCreationSettings Settings;
+		FN2CMcpArgumentParser ArgParser(Arguments);
+		FString ErrorMsg;
 		
-		if (!Arguments->TryGetStringField(TEXT("variableName"), Settings.VariableName))
+		if (!ArgParser.TryGetRequiredString(TEXT("variableName"), Settings.VariableName, ErrorMsg))
 		{
-			return FMcpToolCallResult::CreateErrorResult(TEXT("Missing required field: variableName"));
+			return FMcpToolCallResult::CreateErrorResult(ErrorMsg);
 		}
 		
-		if (!Arguments->TryGetStringField(TEXT("typeIdentifier"), Settings.TypeIdentifier))
+		if (!ArgParser.TryGetRequiredString(TEXT("typeIdentifier"), Settings.TypeIdentifier, ErrorMsg))
 		{
-			return FMcpToolCallResult::CreateErrorResult(TEXT("Missing required field: typeIdentifier"));
+			return FMcpToolCallResult::CreateErrorResult(ErrorMsg);
 		}
 		
 		// Optional fields
-		Arguments->TryGetStringField(TEXT("defaultValue"), Settings.DefaultValue);
-		Arguments->TryGetStringField(TEXT("category"), Settings.Category);
-		Arguments->TryGetBoolField(TEXT("isInstanceEditable"), Settings.bInstanceEditable);
-		Arguments->TryGetBoolField(TEXT("isBlueprintReadOnly"), Settings.bBlueprintReadOnly);
-		Arguments->TryGetStringField(TEXT("tooltip"), Settings.Tooltip);
-		Arguments->TryGetStringField(TEXT("replicationCondition"), Settings.ReplicationCondition);
+		Settings.DefaultValue = ArgParser.GetOptionalString(TEXT("defaultValue"));
+		Settings.Category = ArgParser.GetOptionalString(TEXT("category"), TEXT("Default"));
+		Settings.bInstanceEditable = ArgParser.GetOptionalBool(TEXT("isInstanceEditable"), true);
+		Settings.bBlueprintReadOnly = ArgParser.GetOptionalBool(TEXT("isBlueprintReadOnly"), false);
+		Settings.Tooltip = ArgParser.GetOptionalString(TEXT("tooltip"));
+		Settings.ReplicationCondition = ArgParser.GetOptionalString(TEXT("replicationCondition"), TEXT("none"));
 		
 		// Validate variable name
 		FString ValidationError;

@@ -2,6 +2,7 @@
 
 #include "N2CMcpOpenBlueprintFunctionTool.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
+#include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "MCP/Tools/N2CMcpToolManager.h"
 #include "MCP/Tools/N2CMcpFunctionGuidUtils.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
@@ -78,72 +79,73 @@ FMcpToolDefinition FN2CMcpOpenBlueprintFunctionTool::GetDefinition() const
 
 FMcpToolCallResult FN2CMcpOpenBlueprintFunctionTool::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-	FMcpToolCallResult Result;
-	
-	// Extract parameters
-	FString FunctionGuidString;
-	if (!Arguments->TryGetStringField(TEXT("functionGuid"), FunctionGuidString))
+	return ExecuteOnGameThread([this, Arguments]() -> FMcpToolCallResult
 	{
-		return FMcpToolCallResult::CreateErrorResult(TEXT("Missing required parameter: functionGuid"));
-	}
-	
-	// Parse GUID
-	FGuid FunctionGuid;
-	if (!FGuid::Parse(FunctionGuidString, FunctionGuid))
-	{
-		return FMcpToolCallResult::CreateErrorResult(FString::Printf(TEXT("Invalid GUID format: %s"), *FunctionGuidString));
-	}
-	
-	FString BlueprintPath;
-	Arguments->TryGetStringField(TEXT("blueprintPath"), BlueprintPath);
-	
-	bool bCenterView = true;
-	Arguments->TryGetBoolField(TEXT("centerView"), bCenterView);
-	
-	bool bSelectNodes = true;
-	Arguments->TryGetBoolField(TEXT("selectNodes"), bSelectNodes);
-	
-	// Find the function
-	UBlueprint* Blueprint = nullptr;
-	UEdGraph* FunctionGraph = FindFunctionByGuid(FunctionGuid, BlueprintPath, Blueprint);
-	
-	if (!FunctionGraph || !Blueprint)
-	{
-		return FMcpToolCallResult::CreateErrorResult(FString::Printf(TEXT("Function with GUID %s not found"), *FunctionGuidString));
-	}
-	
-	// Open the Blueprint editor
-	TSharedPtr<IBlueprintEditor> Editor;
-	if (!OpenBlueprintEditor(Blueprint, Editor))
-	{
-		return FMcpToolCallResult::CreateErrorResult(TEXT("Failed to open Blueprint editor"));
-	}
-	
-	// Navigate to the function
-	if (!NavigateToFunction(Editor, FunctionGraph))
-	{
-		return FMcpToolCallResult::CreateErrorResult(TEXT("Failed to navigate to function"));
-	}
-	
-	// Optional: Center view
-	if (bCenterView)
-	{
-		CenterViewOnFunction(Editor, FunctionGraph);
-	}
-	
-	// Optional: Select nodes
-	if (bSelectNodes)
-	{
-		SelectAllNodesInFunction(Editor, FunctionGraph);
-	}
-	
-	// Build success result
-	TSharedPtr<FJsonObject> SuccessData = BuildSuccessResult(Blueprint, FunctionGraph, FunctionGuid);
-	FString JsonString;
-	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
-	FJsonSerializer::Serialize(SuccessData.ToSharedRef(), Writer);
-	
-	return FMcpToolCallResult::CreateTextResult(JsonString);
+		// Parse arguments
+		FN2CMcpArgumentParser ArgParser(Arguments);
+		FString ErrorMsg;
+		
+		// Extract required parameters
+		FString FunctionGuidString;
+		if (!ArgParser.TryGetRequiredString(TEXT("functionGuid"), FunctionGuidString, ErrorMsg))
+		{
+			return FMcpToolCallResult::CreateErrorResult(ErrorMsg);
+		}
+		
+		// Parse GUID
+		FGuid FunctionGuid;
+		if (!FGuid::Parse(FunctionGuidString, FunctionGuid))
+		{
+			return FMcpToolCallResult::CreateErrorResult(FString::Printf(TEXT("Invalid GUID format: %s"), *FunctionGuidString));
+		}
+		
+		// Optional parameters
+		FString BlueprintPath = ArgParser.GetOptionalString(TEXT("blueprintPath"));
+		bool bCenterView = ArgParser.GetOptionalBool(TEXT("centerView"), true);
+		bool bSelectNodes = ArgParser.GetOptionalBool(TEXT("selectNodes"), true);
+		
+		// Find the function
+		UBlueprint* Blueprint = nullptr;
+		UEdGraph* FunctionGraph = FindFunctionByGuid(FunctionGuid, BlueprintPath, Blueprint);
+		
+		if (!FunctionGraph || !Blueprint)
+		{
+			return FMcpToolCallResult::CreateErrorResult(FString::Printf(TEXT("Function with GUID %s not found"), *FunctionGuidString));
+		}
+		
+		// Open the Blueprint editor
+		TSharedPtr<IBlueprintEditor> Editor;
+		if (!OpenBlueprintEditor(Blueprint, Editor))
+		{
+			return FMcpToolCallResult::CreateErrorResult(TEXT("Failed to open Blueprint editor"));
+		}
+		
+		// Navigate to the function
+		if (!NavigateToFunction(Editor, FunctionGraph))
+		{
+			return FMcpToolCallResult::CreateErrorResult(TEXT("Failed to navigate to function"));
+		}
+		
+		// Optional: Center view
+		if (bCenterView)
+		{
+			CenterViewOnFunction(Editor, FunctionGraph);
+		}
+		
+		// Optional: Select nodes
+		if (bSelectNodes)
+		{
+			SelectAllNodesInFunction(Editor, FunctionGraph);
+		}
+		
+		// Build success result
+		TSharedPtr<FJsonObject> SuccessData = BuildSuccessResult(Blueprint, FunctionGraph, FunctionGuid);
+		FString JsonString;
+		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
+		FJsonSerializer::Serialize(SuccessData.ToSharedRef(), Writer);
+		
+		return FMcpToolCallResult::CreateTextResult(JsonString);
+	});
 }
 
 UEdGraph* FN2CMcpOpenBlueprintFunctionTool::FindFunctionByGuid(const FGuid& FunctionGuid, const FString& BlueprintPath, UBlueprint*& OutBlueprint) const

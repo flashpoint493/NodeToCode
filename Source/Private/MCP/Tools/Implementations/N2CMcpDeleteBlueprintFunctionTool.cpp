@@ -2,6 +2,7 @@
 
 #include "N2CMcpDeleteBlueprintFunctionTool.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
+#include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpFunctionGuidUtils.h"
 #include "Core/N2CEditorIntegration.h"
@@ -76,11 +77,15 @@ FMcpToolCallResult FN2CMcpDeleteBlueprintFunctionTool::Execute(const TSharedPtr<
 {
 	return ExecuteOnGameThread([this, Arguments]() -> FMcpToolCallResult
 	{
-		// Extract parameters
+		// Parse arguments
+		FN2CMcpArgumentParser ArgParser(Arguments);
+		FString ErrorMsg;
+		
+		// Extract required parameters
 		FString FunctionGuidString;
-		if (!Arguments->TryGetStringField(TEXT("functionGuid"), FunctionGuidString))
+		if (!ArgParser.TryGetRequiredString(TEXT("functionGuid"), FunctionGuidString, ErrorMsg))
 		{
-			return FMcpToolCallResult::CreateErrorResult(TEXT("Missing required parameter: functionGuid"));
+			return FMcpToolCallResult::CreateErrorResult(ErrorMsg);
 		}
 		
 		// Parse GUID
@@ -91,11 +96,8 @@ FMcpToolCallResult FN2CMcpDeleteBlueprintFunctionTool::Execute(const TSharedPtr<
 		}
 		
 		// Get optional parameters
-		FString BlueprintPath;
-		Arguments->TryGetStringField(TEXT("blueprintPath"), BlueprintPath);
-		
-		bool bForce = false;
-		Arguments->TryGetBoolField(TEXT("force"), bForce);
+		FString BlueprintPath = ArgParser.GetOptionalString(TEXT("blueprintPath"));
+		bool bForce = ArgParser.GetOptionalBool(TEXT("force"), false);
 		
 		// Resolve target Blueprint
 		FString ResolveError;

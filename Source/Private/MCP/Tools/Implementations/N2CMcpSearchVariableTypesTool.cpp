@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
 #include "N2CMcpSearchVariableTypesTool.h"
+#include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpToolTypes.h"
 #include "Utils/N2CLogger.h"
@@ -111,23 +112,24 @@ FMcpToolCallResult FN2CMcpSearchVariableTypesTool::Execute(const TSharedPtr<FJso
 		}
 
 		// Parse arguments
+		FN2CMcpArgumentParser ArgParser(Arguments);
+		FString ErrorMsg;
+		
 		FString SearchTerm;
-		if (!Arguments->TryGetStringField(TEXT("searchTerm"), SearchTerm) || SearchTerm.IsEmpty())
+		if (!ArgParser.TryGetRequiredString(TEXT("searchTerm"), SearchTerm, ErrorMsg))
 		{
-			return FMcpToolCallResult::CreateErrorResult(TEXT("searchTerm is required and cannot be empty"));
+			return FMcpToolCallResult::CreateErrorResult(ErrorMsg);
+		}
+		
+		if (SearchTerm.IsEmpty())
+		{
+			return FMcpToolCallResult::CreateErrorResult(TEXT("searchTerm cannot be empty"));
 		}
 
-		FString Category = TEXT("all");
-		Arguments->TryGetStringField(TEXT("category"), Category);
-
-		bool bIncludeEngineTypes = true;
-		Arguments->TryGetBoolField(TEXT("includeEngineTypes"), bIncludeEngineTypes);
-
-		int32 MaxResults = 50;
-		if (Arguments->HasField(TEXT("maxResults")))
-		{
-			MaxResults = FMath::Clamp(Arguments->GetIntegerField(TEXT("maxResults")), 1, 200);
-		}
+		// Optional parameters
+		FString Category = ArgParser.GetOptionalString(TEXT("category"), TEXT("all"));
+		bool bIncludeEngineTypes = ArgParser.GetOptionalBool(TEXT("includeEngineTypes"), true);
+		int32 MaxResults = FMath::Clamp(ArgParser.GetOptionalInt(TEXT("maxResults"), 50), 1, 200);
 
 		// Log the search request
 		FN2CLogger& Logger = FN2CLogger::Get();
