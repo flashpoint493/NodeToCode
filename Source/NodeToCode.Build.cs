@@ -8,12 +8,6 @@ public class NodeToCode : ModuleRules
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
         
-		PublicIncludePaths.AddRange(
-			new string[] {
-				"NodeToCode/Public/MCP/Tools"
-			}
-		);
-        
 		PrivateIncludePaths.AddRange(
 			new string[] {
 			}
@@ -38,14 +32,20 @@ public class NodeToCode : ModuleRules
 				"ToolMenus",
 				"ApplicationCore",
 				"Projects",
-				"HTTPServer"
+				"HttpServer"
 			}
 		);
         
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"DeveloperSettings", "Blutility", "UMGEditor"
+				"DeveloperSettings", 
+				"Blutility", 
+				"UMGEditor",
+				"KismetWidgets",          // For action menu widgets
+				"EditorSubsystem",        // For editor subsystem access
+				"EditorWidgets",          // For editor widgets
+				"AssetRegistry"           // For asset path resolution
 			}
 		);
 	}
