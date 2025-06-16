@@ -64,12 +64,12 @@ private:
 	FGuid GetOrCreateFunctionGuid(UEdGraph* FunctionGraph) const;
 	
 	// Type conversion
-	bool ConvertToPinType(const FParameterDefinition& ParamDef, FEdGraphPinType& OutPinType, FString& OutError) const;
-	bool ResolvePrimitiveType(const FString& Type, FEdGraphPinType& OutPinType) const;
-	bool ResolveMathType(const FString& Type, FEdGraphPinType& OutPinType) const;
-	bool ResolveReferenceType(const FString& Type, const FString& SubType, FEdGraphPinType& OutPinType, FString& OutError) const;
-	bool ResolveSpecialType(const FString& Type, FEdGraphPinType& OutPinType) const;
-	UObject* ResolveSubType(const FString& Type, const FString& SubType) const;
+	// bool ConvertToPinType(const FParameterDefinition& ParamDef, FEdGraphPinType& OutPinType, FString& OutError) const; // Removed
+	// bool ResolvePrimitiveType(const FString& Type, FEdGraphPinType& OutPinType) const; // Removed
+	// bool ResolveMathType(const FString& Type, FEdGraphPinType& OutPinType) const; // Removed
+	// bool ResolveReferenceType(const FString& Type, const FString& SubType, FEdGraphPinType& OutPinType, FString& OutError) const; // Removed
+	// bool ResolveSpecialType(const FString& Type, FEdGraphPinType& OutPinType) const; // Removed
+	// UObject* ResolveSubType(const FString& Type, const FString& SubType) const; // Removed
 	
 	// Parameter creation
 	void CreateParameter(UK2Node_FunctionEntry* EntryNode, UK2Node_FunctionResult* ResultNode,

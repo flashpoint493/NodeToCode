@@ -38,7 +38,7 @@ private:
 
 	// Main operations
 	// UBlueprint* GetActiveBlueprint() const; // Removed
-	bool ResolveTypeIdentifier(const FString& TypeIdentifier, FEdGraphPinType& OutPinType, FString& OutError) const;
+	// bool ResolveTypeIdentifier(const FString& TypeIdentifier, FEdGraphPinType& OutPinType, FString& OutError) const; // Removed
 	FName CreateVariable(UBlueprint* Blueprint, const FString& DesiredName, 
 		const FEdGraphPinType& PinType, const FString& DefaultValue, const FString& Category);
 	void ApplyVariableProperties(UBlueprint* Blueprint, FName VariableName,
@@ -46,8 +46,8 @@ private:
 		const FString& Tooltip, const FString& ReplicationCondition);
 
 	// Type resolution helpers
-	bool ResolvePrimitiveType(const FString& TypeIdentifier, FEdGraphPinType& OutPinType) const;
-	bool ResolveObjectType(const FString& TypeIdentifier, FEdGraphPinType& OutPinType, FString& OutError) const;
+	// bool ResolvePrimitiveType(const FString& TypeIdentifier, FEdGraphPinType& OutPinType) const; // Removed
+	// bool ResolveObjectType(const FString& TypeIdentifier, FEdGraphPinType& OutPinType, FString& OutError) const; // Removed
 	
 	// Result building
 	TSharedPtr<FJsonObject> BuildSuccessResult(const UBlueprint* Blueprint, const FString& RequestedName,

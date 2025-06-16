@@ -2,6 +2,7 @@
 
 #include "N2CMcpCreateVariableTool.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
+#include "MCP/Utils/N2CMcpTypeResolver.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpToolTypes.h"
 #include "Utils/N2CLogger.h"
@@ -155,10 +156,13 @@ FMcpToolCallResult FN2CMcpCreateVariableTool::Execute(const TSharedPtr<FJsonObje
 		
 		// Resolve type identifier to FEdGraphPinType
 		FEdGraphPinType PinType;
-		FString TypeResolveError; // Rename this one
-		if (!ResolveTypeIdentifier(Settings.TypeIdentifier, PinType, TypeResolveError))
+		FString TypeResolveError; 
+            // For variables, container type and key type are usually not directly specified in the same way as function params.
+            // We'll pass empty/default for those, as variable creation typically handles single types or arrays directly.
+            // The FBlueprintEditorUtils::AddMemberVariable handles array creation if PinType.ContainerType is Array.
+		if (!FN2CMcpTypeResolver::ResolvePinType(Settings.TypeIdentifier, TEXT(""), TEXT("none"), TEXT(""), false, false, PinType, TypeResolveError))
 		{
-			return FMcpToolCallResult::CreateErrorResult(TypeResolveError); // Use the new name
+			return FMcpToolCallResult::CreateErrorResult(TypeResolveError);
 		}
 		
 		// Create the variable
@@ -194,138 +198,6 @@ FMcpToolCallResult FN2CMcpCreateVariableTool::Execute(const TSharedPtr<FJsonObje
 		
 		return FMcpToolCallResult::CreateTextResult(ResultString);
 	});
-}
-
-bool FN2CMcpCreateVariableTool::ResolveTypeIdentifier(const FString& TypeIdentifier, 
-	FEdGraphPinType& OutPinType, FString& OutError) const
-{
-	// Try primitive types first
-	if (ResolvePrimitiveType(TypeIdentifier, OutPinType))
-	{
-		return true;
-	}
-	
-	// Try object types (classes, structs, enums)
-	return ResolveObjectType(TypeIdentifier, OutPinType, OutError);
-}
-
-bool FN2CMcpCreateVariableTool::ResolvePrimitiveType(const FString& TypeIdentifier, 
-	FEdGraphPinType& OutPinType) const
-{
-	// Boolean
-	if (TypeIdentifier == TEXT("bool"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-		return true;
-	}
-	// Byte
-	else if (TypeIdentifier == TEXT("uint8"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
-		return true;
-	}
-	// Integer
-	else if (TypeIdentifier == TEXT("int32"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Int;
-		return true;
-	}
-	// Integer64
-	else if (TypeIdentifier == TEXT("int64"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Int64;
-		return true;
-	}
-	// Float
-	else if (TypeIdentifier == TEXT("float"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-		OutPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-		return true;
-	}
-	// Double
-	else if (TypeIdentifier == TEXT("double"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-		OutPinType.PinSubCategory = UEdGraphSchema_K2::PC_Double;
-		return true;
-	}
-	// String
-	else if (TypeIdentifier == TEXT("FString"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_String;
-		return true;
-	}
-	// Text
-	else if (TypeIdentifier == TEXT("FText"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Text;
-		return true;
-	}
-	// Name
-	else if (TypeIdentifier == TEXT("FName"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Name;
-		return true;
-	}
-	
-	return false;
-}
-
-bool FN2CMcpCreateVariableTool::ResolveObjectType(const FString& TypeIdentifier, 
-	FEdGraphPinType& OutPinType, FString& OutError) const
-{
-	// Handle object types (classes, structs, enums)
-	UObject* ResolvedObject = FindObject<UObject>(nullptr, *TypeIdentifier);
-	if (!ResolvedObject)
-	{
-		OutError = FString::Printf(TEXT("Failed to resolve type identifier: %s"), *TypeIdentifier);
-		return false;
-	}
-	
-	// Handle different object types
-	if (UClass* Class = Cast<UClass>(ResolvedObject))
-	{
-		if (!UEdGraphSchema_K2::IsAllowableBlueprintVariableType(Class))
-		{
-			OutError = FString::Printf(TEXT("Class %s is not allowed as Blueprint variable"), 
-				*Class->GetName());
-			return false;
-		}
-		
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Object;
-		OutPinType.PinSubCategoryObject = Class;
-		return true;
-	}
-	else if (UScriptStruct* Struct = Cast<UScriptStruct>(ResolvedObject))
-	{
-		if (!UEdGraphSchema_K2::IsAllowableBlueprintVariableType(Struct))
-		{
-			OutError = FString::Printf(TEXT("Struct %s is not allowed as Blueprint variable"), 
-				*Struct->GetName());
-			return false;
-		}
-		
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-		OutPinType.PinSubCategoryObject = Struct;
-		return true;
-	}
-	else if (UEnum* Enum = Cast<UEnum>(ResolvedObject))
-	{
-		if (!UEdGraphSchema_K2::IsAllowableBlueprintVariableType(Enum))
-		{
-			OutError = FString::Printf(TEXT("Enum %s is not allowed as Blueprint variable"), 
-				*Enum->GetName());
-			return false;
-		}
-		
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Enum;
-		OutPinType.PinSubCategoryObject = Enum;
-		return true;
-	}
-	
-	OutError = FString::Printf(TEXT("Unknown type object: %s"), *TypeIdentifier);
-	return false;
 }
 
 FName FN2CMcpCreateVariableTool::CreateVariable(UBlueprint* Blueprint, const FString& DesiredName, 

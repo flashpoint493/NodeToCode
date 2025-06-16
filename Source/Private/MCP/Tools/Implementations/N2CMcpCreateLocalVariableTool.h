@@ -28,15 +28,15 @@ public:
 private:
 	// Core workflow methods
 	UK2Node_FunctionEntry* FindFunctionEntryNode(UEdGraph* Graph) const;
-	bool ResolveTypeIdentifier(const FString& TypeIdentifier, FEdGraphPinType& OutPinType, FString& OutError) const;
+	// bool ResolveTypeIdentifier(const FString& TypeIdentifier, FEdGraphPinType& OutPinType, FString& OutError) const; // Removed
 	FName MakeUniqueLocalVariableName(UK2Node_FunctionEntry* FunctionEntry, const FString& BaseName) const;
 	FName CreateLocalVariable(UK2Node_FunctionEntry* FunctionEntry, const FString& DesiredName,
 		const FEdGraphPinType& PinType, const FString& DefaultValue, const FString& Tooltip);
 	
 	// Type resolution helpers (similar to CreateVariable tool)
-	bool IsPrimitiveType(const FString& TypeIdentifier) const;
-	bool ResolvePrimitiveType(const FString& TypeIdentifier, FEdGraphPinType& OutPinType) const;
-	bool ResolveObjectType(const FString& TypeIdentifier, FEdGraphPinType& OutPinType, FString& OutError) const;
+	// bool IsPrimitiveType(const FString& TypeIdentifier) const; // Removed
+	// bool ResolvePrimitiveType(const FString& TypeIdentifier, FEdGraphPinType& OutPinType) const; // Removed
+	// bool ResolveObjectType(const FString& TypeIdentifier, FEdGraphPinType& OutPinType, FString& OutError) const; // Removed
 	
 	// Result building
 	TSharedPtr<FJsonObject> BuildSuccessResult(UK2Node_FunctionEntry* FunctionEntry, UEdGraph* FunctionGraph,

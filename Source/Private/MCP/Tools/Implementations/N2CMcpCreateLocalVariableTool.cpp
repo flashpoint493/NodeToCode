@@ -2,6 +2,7 @@
 
 #include "N2CMcpCreateLocalVariableTool.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
+#include "MCP/Utils/N2CMcpTypeResolver.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "Core/N2CEditorIntegration.h"
 #include "Utils/N2CLogger.h"
@@ -127,7 +128,8 @@ FMcpToolCallResult FN2CMcpCreateLocalVariableTool::Execute(const TSharedPtr<FJso
 		// Resolve type identifier to FEdGraphPinType
 		FEdGraphPinType PinType;
 		FString ResolveError;
-		if (!ResolveTypeIdentifier(TypeIdentifier, PinType, ResolveError))
+            // Similar to global variables, local variables are typically single types or arrays.
+		if (!FN2CMcpTypeResolver::ResolvePinType(TypeIdentifier, TEXT(""), TEXT("none"), TEXT(""), false, false, PinType, ResolveError))
 		{
 			return FMcpToolCallResult::CreateErrorResult(ResolveError);
 		}
@@ -173,178 +175,6 @@ UK2Node_FunctionEntry* FN2CMcpCreateLocalVariableTool::FindFunctionEntryNode(UEd
 	}
 	
 	return nullptr;
-}
-
-bool FN2CMcpCreateLocalVariableTool::ResolveTypeIdentifier(const FString& TypeIdentifier, FEdGraphPinType& OutPinType, FString& OutError) const
-{
-	// Check if it's a primitive type first
-	if (IsPrimitiveType(TypeIdentifier))
-	{
-		return ResolvePrimitiveType(TypeIdentifier, OutPinType);
-	}
-	
-	// Otherwise, try to resolve as an object type
-	return ResolveObjectType(TypeIdentifier, OutPinType, OutError);
-}
-
-bool FN2CMcpCreateLocalVariableTool::IsPrimitiveType(const FString& TypeIdentifier) const
-{
-	static const TSet<FString> PrimitiveTypes = {
-		TEXT("bool"),
-		TEXT("byte"),
-		TEXT("int"),
-		TEXT("int64"),
-		TEXT("float"),
-		TEXT("double"),
-		TEXT("name"),
-		TEXT("string"),
-		TEXT("text"),
-		TEXT("vector"),
-		TEXT("rotator"),
-		TEXT("transform")
-	};
-	
-	return PrimitiveTypes.Contains(TypeIdentifier.ToLower());
-}
-
-bool FN2CMcpCreateLocalVariableTool::ResolvePrimitiveType(const FString& TypeIdentifier, FEdGraphPinType& OutPinType) const
-{
-	const FString LowerType = TypeIdentifier.ToLower();
-	
-	OutPinType.ResetToDefaults();
-	OutPinType.ContainerType = EPinContainerType::None;
-	
-	if (LowerType == TEXT("bool"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-	}
-	else if (LowerType == TEXT("byte"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
-	}
-	else if (LowerType == TEXT("int"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Int;
-	}
-	else if (LowerType == TEXT("int64"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Int64;
-	}
-	else if (LowerType == TEXT("float"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-		OutPinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
-	}
-	else if (LowerType == TEXT("double"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-		OutPinType.PinSubCategory = UEdGraphSchema_K2::PC_Double;
-	}
-	else if (LowerType == TEXT("name"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Name;
-	}
-	else if (LowerType == TEXT("string"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_String;
-	}
-	else if (LowerType == TEXT("text"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Text;
-	}
-	else if (LowerType == TEXT("vector"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-		OutPinType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
-	}
-	else if (LowerType == TEXT("rotator"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-		OutPinType.PinSubCategoryObject = TBaseStructure<FRotator>::Get();
-	}
-	else if (LowerType == TEXT("transform"))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-		OutPinType.PinSubCategoryObject = TBaseStructure<FTransform>::Get();
-	}
-	else
-	{
-		return false;
-	}
-	
-	return true;
-}
-
-bool FN2CMcpCreateLocalVariableTool::ResolveObjectType(const FString& TypeIdentifier, FEdGraphPinType& OutPinType, FString& OutError) const
-{
-	// Handle potential _C suffix for Blueprint classes
-	FString CleanPath = TypeIdentifier;
-	bool bIsBlueprintClass = false;
-	
-	if (TypeIdentifier.EndsWith(TEXT("_C")))
-	{
-		CleanPath = TypeIdentifier.LeftChop(2); // Remove _C suffix
-		bIsBlueprintClass = true;
-	}
-	
-	// Try to find the object
-	UObject* FoundObject = FindObject<UObject>(nullptr, *TypeIdentifier);
-	
-	// If not found and has _C suffix, try without it
-	if (!FoundObject && bIsBlueprintClass)
-	{
-		FoundObject = FindObject<UObject>(nullptr, *CleanPath);
-	}
-	
-	if (!FoundObject)
-	{
-		OutError = FString::Printf(TEXT("Failed to resolve type: '%s'"), *TypeIdentifier);
-		return false;
-	}
-	
-	// Determine the appropriate pin type based on the object
-	OutPinType.ResetToDefaults();
-	OutPinType.ContainerType = EPinContainerType::None;
-	
-	if (UClass* AsClass = Cast<UClass>(FoundObject))
-	{
-		// Check if it's a valid Blueprint variable type
-		const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
-		if (!K2Schema->IsAllowableBlueprintVariableType(AsClass))
-		{
-			OutError = FString::Printf(TEXT("Type '%s' is not allowed as a Blueprint variable"), *AsClass->GetName());
-			return false;
-		}
-		
-		// Determine if it's an object reference or class reference
-		if (AsClass->IsChildOf(UObject::StaticClass()) && !AsClass->IsChildOf(UClass::StaticClass()))
-		{
-			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Object;
-			OutPinType.PinSubCategoryObject = AsClass;
-		}
-		else
-		{
-			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Class;
-			OutPinType.PinSubCategoryObject = AsClass;
-		}
-	}
-	else if (UScriptStruct* AsStruct = Cast<UScriptStruct>(FoundObject))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-		OutPinType.PinSubCategoryObject = AsStruct;
-	}
-	else if (UEnum* AsEnum = Cast<UEnum>(FoundObject))
-	{
-		OutPinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
-		OutPinType.PinSubCategoryObject = AsEnum;
-	}
-	else
-	{
-		OutError = FString::Printf(TEXT("Object '%s' is not a valid type for Blueprint variables"), *TypeIdentifier);
-		return false;
-	}
-	
-	return true;
 }
 
 FName FN2CMcpCreateLocalVariableTool::MakeUniqueLocalVariableName(UK2Node_FunctionEntry* FunctionEntry, const FString& BaseName) const
