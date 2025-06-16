@@ -12,15 +12,8 @@
 #include "Engine/Blueprint.h"
 #include "BlueprintEditor.h"
 #include "BlueprintEditorModule.h"
-#include "Framework/Application/SlateApplication.h"
 #include "K2Node_FunctionEntry.h"
-#include "K2Node_Event.h"
-#include "K2Node_CustomEvent.h"
 #include "EdGraphSchema_K2.h"
-#include "SGraphPanel.h"
-#include "Widgets/SWidget.h"
-#include "AssetRegistry/AssetRegistryModule.h"
-#include "Engine/AssetManager.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -215,14 +208,15 @@ bool FN2CMcpOpenBlueprintFunctionTool::OpenBlueprintEditor(UBlueprint* Blueprint
 		return false;
 	}
 	
-	// Open or focus the Blueprint editor
-	FBlueprintEditorModule& BlueprintEditorModule = FModuleManager::LoadModuleChecked<FBlueprintEditorModule>("Kismet");
-	TSharedRef<IBlueprintEditor> Editor = BlueprintEditorModule.CreateBlueprintEditor(
-		EToolkitMode::Standalone, 
-		TSharedPtr<IToolkitHost>(), 
-		Blueprint
-	);
-	OutEditor = Editor;
+	// Use the utility function to open or focus the Blueprint editor
+	FString ErrorMsg;
+	bool bSuccess = FN2CMcpBlueprintUtils::OpenBlueprintEditor(Blueprint, OutEditor, ErrorMsg);
+	
+	if (!bSuccess)
+	{
+		FN2CLogger::Get().LogError(FString::Printf(TEXT("Failed to open Blueprint editor: %s"), *ErrorMsg));
+		return false;
+	}
 	
 	return true;
 }

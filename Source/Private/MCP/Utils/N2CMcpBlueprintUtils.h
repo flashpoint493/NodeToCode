@@ -6,6 +6,7 @@
 
 class UBlueprint;
 class UEdGraph;
+class IBlueprintEditor;
 
 class NODETOCODE_API FN2CMcpBlueprintUtils
 {
@@ -27,4 +28,14 @@ public:
      * @return True if a focused graph and its Blueprint were successfully retrieved, false otherwise.
      */
     static bool GetFocusedEditorGraph(UBlueprint*& OutBlueprint, UEdGraph*& OutGraph, FString& OutErrorMsg);
+
+    /**
+     * Opens or focuses a Blueprint editor for the given Blueprint.
+     * This method will reuse existing editors if one is already open for the Blueprint.
+     * @param Blueprint The Blueprint to open in the editor.
+     * @param OutEditor The resulting Blueprint editor instance.
+     * @param OutErrorMsg Error message if the editor could not be opened.
+     * @return True if the editor was successfully opened or focused, false otherwise.
+     */
+    static bool OpenBlueprintEditor(UBlueprint* Blueprint, TSharedPtr<IBlueprintEditor>& OutEditor, FString& OutErrorMsg);
 };

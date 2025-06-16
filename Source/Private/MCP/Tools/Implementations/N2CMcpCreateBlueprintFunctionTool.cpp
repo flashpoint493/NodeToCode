@@ -8,19 +8,17 @@
 #include "MCP/Tools/N2CMcpToolTypes.h"
 #include "MCP/Tools/N2CMcpFunctionGuidUtils.h"
 #include "Utils/N2CLogger.h"
-#include "Core/N2CEditorIntegration.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Engine/UserDefinedEnum.h"
 #include "Engine/UserDefinedStruct.h"
-#include "BlueprintEditorModule.h"
+#include "BlueprintEditor.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
 #include "EdGraphSchema_K2.h"
 #include "Framework/Notifications/NotificationManager.h"
 #include "Widgets/Notifications/SNotificationList.h"
-#include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -594,28 +592,22 @@ void FN2CMcpCreateBlueprintFunctionTool::OpenFunctionInEditor(UBlueprint* Bluepr
 		return;
 	}
 	
-	// Get the Blueprint editor module
-	FBlueprintEditorModule& BPEditorModule = FModuleManager::LoadModuleChecked<FBlueprintEditorModule>("Kismet");
+	// Use the utility function to open or focus the Blueprint editor
+	TSharedPtr<IBlueprintEditor> Editor;
+	FString ErrorMsg;
+	bool bSuccess = FN2CMcpBlueprintUtils::OpenBlueprintEditor(Blueprint, Editor, ErrorMsg);
 	
-	// For simplicity, we'll always open/focus the Blueprint editor
-	// The module will reuse existing editors if they exist
-	TSharedRef<IBlueprintEditor> Editor = BPEditorModule.CreateBlueprintEditor(
-		EToolkitMode::Standalone, 
-		TSharedPtr<IToolkitHost>(), 
-		Blueprint
-	);
+	if (!bSuccess)
+	{
+		FN2CLogger::Get().LogError(FString::Printf(TEXT("Failed to open Blueprint editor: %s"), *ErrorMsg));
+		return;
+	}
 	
 	// Jump to the function graph
-	Editor->JumpToHyperlink(FunctionGraph, false);
-	Editor->FocusWindow();
-	
-	// Update the stored active Blueprint editor to ensure it's properly tracked
-	// Convert TSharedRef to TSharedPtr first
-	TSharedPtr<IBlueprintEditor> EditorPtr = Editor;
-	if (TSharedPtr<FBlueprintEditor> BPEditor = StaticCastSharedPtr<FBlueprintEditor>(EditorPtr))
+	if (Editor.IsValid())
 	{
-		FN2CEditorIntegration::Get().StoreActiveBlueprintEditor(BPEditor);
-		FN2CLogger::Get().Log(FString::Printf(TEXT("Stored active Blueprint editor after opening function: %s"), 
-			*FunctionGraph->GetName()), EN2CLogSeverity::Debug);
+		Editor->JumpToHyperlink(FunctionGraph, false);
+		Editor->FocusWindow();
+		FN2CLogger::Get().Log(FString::Printf(TEXT("Navigated to function: %s"), *FunctionGraph->GetName()), EN2CLogSeverity::Debug);
 	}
 }

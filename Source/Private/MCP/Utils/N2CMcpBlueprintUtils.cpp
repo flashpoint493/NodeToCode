@@ -7,6 +7,10 @@
 #include "Core/N2CEditorIntegration.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "BlueprintEditor.h" // Required for TSharedPtr<FBlueprintEditor>
+#include "Subsystems/AssetEditorSubsystem.h"
+#include "BlueprintEditorModule.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Utils/N2CLogger.h"
 
 UBlueprint* FN2CMcpBlueprintUtils::ResolveBlueprint(const FString& OptionalBlueprintPath, FString& OutErrorMsg)
 {
@@ -72,6 +76,85 @@ bool FN2CMcpBlueprintUtils::GetFocusedEditorGraph(UBlueprint*& OutBlueprint, UEd
     {
         // This case should ideally not happen if a graph is focused.
         OutErrorMsg = FString::Printf(TEXT("INTERNAL_ERROR: Could not find owning Blueprint for focused graph: %s"), *OutGraph->GetName());
+        return false;
+    }
+    
+    return true;
+}
+
+bool FN2CMcpBlueprintUtils::OpenBlueprintEditor(UBlueprint* Blueprint, TSharedPtr<IBlueprintEditor>& OutEditor, FString& OutErrorMsg)
+{
+    OutErrorMsg.Empty();
+    OutEditor.Reset();
+    
+    if (!Blueprint)
+    {
+        OutErrorMsg = TEXT("INVALID_BLUEPRINT: Blueprint is null");
+        return false;
+    }
+    
+    // Get the asset editor subsystem
+    UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
+    if (!AssetEditorSubsystem)
+    {
+        OutErrorMsg = TEXT("EDITOR_SUBSYSTEM_ERROR: Could not get AssetEditorSubsystem");
+        return false;
+    }
+    
+    // First check if there's already an editor open for this Blueprint
+    IAssetEditorInstance* ExistingEditor = AssetEditorSubsystem->FindEditorForAsset(Blueprint, true); // true = focus if open
+    
+    if (ExistingEditor)
+    {
+        // An editor is already open, we just focused it
+        // Give the editor focus callback time to update
+        FSlateApplication::Get().ProcessApplicationActivationEvent(true);
+        
+        // Try to get the active Blueprint editor from our integration
+        OutEditor = FN2CEditorIntegration::Get().GetActiveBlueprintEditor();
+        
+        if (OutEditor.IsValid())
+        {
+            FN2CLogger::Get().Log(FString::Printf(TEXT("Using existing editor for Blueprint: %s"), *Blueprint->GetName()), EN2CLogSeverity::Debug);
+            return true;
+        }
+    }
+    
+    // If we get here, either there was no existing editor or we couldn't get a valid reference to it
+    // Use the asset editor subsystem to open the editor, which will reuse existing ones
+    bool bOpened = AssetEditorSubsystem->OpenEditorForAsset(Blueprint);
+    if (!bOpened)
+    {
+        OutErrorMsg = TEXT("OPEN_EDITOR_FAILED: Failed to open editor for Blueprint");
+        return false;
+    }
+    
+    // After opening, we should be able to get the active Blueprint editor
+    OutEditor = FN2CEditorIntegration::Get().GetActiveBlueprintEditor();
+    
+    if (!OutEditor.IsValid())
+    {
+        // This shouldn't happen, but as a fallback we can try to create a new editor
+        FN2CLogger::Get().LogWarning(TEXT("Could not get active Blueprint editor after opening, creating new instance"));
+        
+        FBlueprintEditorModule& BlueprintEditorModule = FModuleManager::LoadModuleChecked<FBlueprintEditorModule>("Kismet");
+        TSharedRef<IBlueprintEditor> NewEditor = BlueprintEditorModule.CreateBlueprintEditor(
+            EToolkitMode::Standalone, 
+            TSharedPtr<IToolkitHost>(), 
+            Blueprint
+        );
+        OutEditor = NewEditor;
+        
+        // Make sure to update the active editor
+        if (TSharedPtr<FBlueprintEditor> BPEditor = StaticCastSharedPtr<FBlueprintEditor>(OutEditor))
+        {
+            FN2CEditorIntegration::Get().StoreActiveBlueprintEditor(BPEditor);
+        }
+    }
+    
+    if (!OutEditor.IsValid())
+    {
+        OutErrorMsg = TEXT("EDITOR_CREATION_FAILED: Could not create or get Blueprint editor");
         return false;
     }
     
