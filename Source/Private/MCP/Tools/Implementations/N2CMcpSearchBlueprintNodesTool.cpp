@@ -1,3 +1,5 @@
+// Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
+
 #include "N2CMcpSearchBlueprintNodesTool.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "Core/N2CEditorIntegration.h"

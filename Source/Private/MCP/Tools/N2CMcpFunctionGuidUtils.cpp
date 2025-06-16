@@ -1,4 +1,4 @@
-// Copyright Protospatial 2025. All Rights Reserved.
+// Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
 #include "N2CMcpFunctionGuidUtils.h"
 #include "Engine/Blueprint.h"

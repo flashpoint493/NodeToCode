@@ -1,3 +1,5 @@
+// Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
+
 #pragma once
 
 #include "CoreMinimal.h"

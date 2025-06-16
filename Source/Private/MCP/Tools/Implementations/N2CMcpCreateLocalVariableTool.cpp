@@ -1,4 +1,4 @@
-// Copyright Protospatial 2025. All Rights Reserved.
+// Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
 #include "N2CMcpCreateLocalVariableTool.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"

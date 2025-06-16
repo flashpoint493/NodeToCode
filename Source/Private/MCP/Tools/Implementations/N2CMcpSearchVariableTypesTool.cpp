@@ -1,4 +1,4 @@
-// Copyright Protospatial 2025. All Rights Reserved.
+// Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
 #include "N2CMcpSearchVariableTypesTool.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
@@ -16,7 +16,6 @@
 #include "AssetRegistry/AssetData.h"
 #include "Dom/JsonObject.h"
 #include "UObject/UObjectIterator.h"
-
 
 REGISTER_MCP_TOOL(FN2CMcpSearchVariableTypesTool)
 
