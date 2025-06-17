@@ -29,7 +29,7 @@ FMcpToolDefinition FN2CMcpCreateVariableTool::GetDefinition() const
 {
 	FMcpToolDefinition Definition(
 		TEXT("create-variable"),
-		TEXT("Creates a new member variable in the active Blueprint. For map variables, 'typeIdentifier' specifies the VALUE type and 'mapKeyTypeIdentifier' specifies the KEY type.")
+		TEXT("Creates a new member variable in the active Blueprint. For map variables: 'typeIdentifier' specifies the map's VALUE type, and 'mapKeyTypeIdentifier' (added by common schema utils) specifies the map's KEY type.")
 	);
 
 	// Build input schema
@@ -47,7 +47,7 @@ FMcpToolDefinition FN2CMcpCreateVariableTool::GetDefinition() const
 	// typeIdentifier property (VALUE type for maps)
 	TSharedPtr<FJsonObject> TypeIdentifierProp = MakeShareable(new FJsonObject);
 	TypeIdentifierProp->SetStringField(TEXT("type"), TEXT("string"));
-	TypeIdentifierProp->SetStringField(TEXT("description"), TEXT("Type identifier for the variable. For 'map' containerType, this specifies the map's VALUE type (e.g., 'bool', 'vector', '/Script/Engine.Actor'). For other containers, it's the element type. For non-containers, it's the variable type."));
+	TypeIdentifierProp->SetStringField(TEXT("description"), TEXT("Type identifier for the variable. For non-container types, this is the variable's type (e.g., 'bool', 'FVector', '/Script/Engine.Actor'). For 'array' or 'set' containers, this is the element type. For 'map' containers, this specifies the map's VALUE type; the KEY type is specified by 'mapKeyTypeIdentifier'."));
 	Properties->SetObjectField(TEXT("typeIdentifier"), TypeIdentifierProp);
 
 	// defaultValue property
@@ -142,8 +142,8 @@ FMcpToolCallResult FN2CMcpCreateVariableTool::Execute(const TSharedPtr<FJsonObje
 		Settings.ReplicationCondition = ArgParser.GetOptionalString(TEXT("replicationCondition"), TEXT("none"));
 		
 		// Container type fields
-		FString ContainerType, MapKeyTypeIdentifier; // Changed from KeyTypeIdentifier
-		FN2CMcpVariableUtils::ParseContainerTypeArguments(ArgParser, ContainerType, MapKeyTypeIdentifier);
+		FString ContainerType, ParsedMapKeyTypeIdentifier;
+		FN2CMcpVariableUtils::ParseContainerTypeArguments(ArgParser, ContainerType, ParsedMapKeyTypeIdentifier);
 		
 		// Validate variable name
 		FString ValidationError;
@@ -168,23 +168,23 @@ FMcpToolCallResult FN2CMcpCreateVariableTool::Execute(const TSharedPtr<FJsonObje
 		
 		// Validate container type and key type combination
 		FString ContainerValidationError;
-		if (!FN2CMcpVariableUtils::ValidateContainerTypeParameters(ContainerType, MapKeyTypeIdentifier, ContainerValidationError))
+		if (!FN2CMcpVariableUtils::ValidateContainerTypeParameters(ContainerType, ParsedMapKeyTypeIdentifier, ContainerValidationError))
 		{
 			return FMcpToolCallResult::CreateErrorResult(ContainerValidationError);
 		}
 		
 		// Resolve type identifier to FEdGraphPinType
-		FEdGraphPinType ResolvedVariablePinType; // Renamed from ValuePinType
+		FEdGraphPinType ResolvedPinType;
 		FString TypeResolveError;
-		// Settings.TypeIdentifier is the VALUE type for maps. MapKeyTypeIdentifier is the KEY type.
-		if (!FN2CMcpTypeResolver::ResolvePinType(Settings.TypeIdentifier, TEXT(""), ContainerType, MapKeyTypeIdentifier, false, false, ResolvedVariablePinType, TypeResolveError))
+		// Settings.TypeIdentifier is the VALUE type for maps. ParsedMapKeyTypeIdentifier is the KEY type.
+		if (!FN2CMcpTypeResolver::ResolvePinType(Settings.TypeIdentifier, TEXT(""), ContainerType, ParsedMapKeyTypeIdentifier, false, false, ResolvedPinType, TypeResolveError))
 		{
 			return FMcpToolCallResult::CreateErrorResult(TypeResolveError);
 		}
 		
 		// Create the variable
 		FName ActualVariableName = CreateVariable(ActiveBlueprint, Settings.VariableName, 
-			ResolvedVariablePinType, Settings.DefaultValue, Settings.Category);
+			ResolvedPinType, Settings.DefaultValue, Settings.Category);
 		
 		if (ActualVariableName.IsNone())
 		{
@@ -206,7 +206,7 @@ FMcpToolCallResult FN2CMcpCreateVariableTool::Execute(const TSharedPtr<FJsonObje
 		
 		// Return success result
 		TSharedPtr<FJsonObject> Result = BuildSuccessResult(ActiveBlueprint, Settings.VariableName, 
-			ActualVariableName, ResolvedVariablePinType, ContainerType);
+			ActualVariableName, ResolvedPinType, ContainerType);
 		
 		// Convert JSON object to string
 		FString ResultString;

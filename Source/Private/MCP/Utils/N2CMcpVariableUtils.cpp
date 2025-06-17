@@ -56,23 +56,23 @@ bool FN2CMcpVariableUtils::ValidateMapKeyType(const FString& KeyType, FString& O
 	return true;
 }
 
-bool FN2CMcpVariableUtils::ValidateContainerTypeParameters(const FString& ContainerType, const FString& KeyType, FString& OutError)
+bool FN2CMcpVariableUtils::ValidateContainerTypeParameters(const FString& ContainerType, const FString& MapKeyTypeIdentifier, FString& OutError)
 {
 	// Validate container type and key type combination
 	if (ContainerType.Equals(TEXT("map"), ESearchCase::IgnoreCase))
 	{
-		if (KeyType.IsEmpty())
+		if (MapKeyTypeIdentifier.IsEmpty())
 		{
-			OutError = TEXT("valueType is required when containerType is 'map'");
+			OutError = TEXT("mapKeyTypeIdentifier is required when containerType is 'map'");
 			return false;
 		}
 		
 		// Validate the key type
-		return ValidateMapKeyType(KeyType, OutError);
+		return ValidateMapKeyType(MapKeyTypeIdentifier, OutError);
 	}
-	else if (!KeyType.IsEmpty())
+	else if (!MapKeyTypeIdentifier.IsEmpty())
 	{
-		OutError = TEXT("valueType should only be provided when containerType is 'map'");
+		OutError = TEXT("mapKeyTypeIdentifier should only be provided when containerType is 'map'");
 		return false;
 	}
 	
@@ -94,18 +94,18 @@ void FN2CMcpVariableUtils::AddContainerTypeSchemaProperties(TSharedPtr<FJsonObje
 	ContainerTypeProp->SetStringField(TEXT("description"), TEXT("Container type for the variable (none, array, set, map)"));
 	Properties->SetObjectField(TEXT("containerType"), ContainerTypeProp);
 
-	// valueType property
-	TSharedPtr<FJsonObject> ValueTypePro = MakeShareable(new FJsonObject);
-	ValueTypePro->SetStringField(TEXT("type"), TEXT("string"));
-	ValueTypePro->SetStringField(TEXT("description"), TEXT("A map container's VALUE type identifier (required when containerType is 'map'). Eg. Map<Name, Vector>: typeIdentifier='Name', valueType='Vector'"));
-	ValueTypePro->SetStringField(TEXT("default"), TEXT(""));
-	Properties->SetObjectField(TEXT("valueType"), ValueTypePro);
+	// mapKeyTypeIdentifier property (for map key type)
+	TSharedPtr<FJsonObject> MapKeyTypeProp = MakeShareable(new FJsonObject);
+	MapKeyTypeProp->SetStringField(TEXT("type"), TEXT("string"));
+	MapKeyTypeProp->SetStringField(TEXT("description"), TEXT("For 'map' containerType, this specifies the map's KEY type identifier (e.g., 'Name', 'int32', '/Script/CoreUObject.Guid'). This is required if containerType is 'map'. The map's VALUE type is specified by 'typeIdentifier'. Example: For TMap<FName, FVector>, 'typeIdentifier' would be 'FVector' and 'mapKeyTypeIdentifier' would be 'FName'."));
+	MapKeyTypeProp->SetStringField(TEXT("default"), TEXT("")); // No default, conditionally required
+	Properties->SetObjectField(TEXT("mapKeyTypeIdentifier"), MapKeyTypeProp);
 }
 
-void FN2CMcpVariableUtils::ParseContainerTypeArguments(const FN2CMcpArgumentParser& ArgParser, FString& OutContainerType, FString& OutKeyType)
+void FN2CMcpVariableUtils::ParseContainerTypeArguments(const FN2CMcpArgumentParser& ArgParser, FString& OutContainerType, FString& OutMapKeyTypeIdentifier)
 {
 	OutContainerType = ArgParser.GetOptionalString(TEXT("containerType"), TEXT("none"));
-	OutKeyType = ArgParser.GetOptionalString(TEXT("valueType"));
+	OutMapKeyTypeIdentifier = ArgParser.GetOptionalString(TEXT("mapKeyTypeIdentifier"));
 }
 
 void FN2CMcpVariableUtils::AddContainerInfoToResult(TSharedPtr<FJsonObject> Result, const FString& ContainerType, bool bIsLocalVariable)

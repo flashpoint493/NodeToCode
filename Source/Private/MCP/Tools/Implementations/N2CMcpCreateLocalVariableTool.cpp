@@ -33,7 +33,7 @@ FMcpToolDefinition FN2CMcpCreateLocalVariableTool::GetDefinition() const
 {
 	FMcpToolDefinition Definition(
 		TEXT("create-local-variable"),
-		TEXT("Creates a new local variable in the currently focused Blueprint function. For map variables, 'typeIdentifier' specifies the VALUE type and 'mapKeyTypeIdentifier' specifies the KEY type.")
+		TEXT("Creates a new local variable in the currently focused Blueprint function. For map variables: 'typeIdentifier' specifies the map's VALUE type, and 'mapKeyTypeIdentifier' (added by common schema utils) specifies the map's KEY type.")
 	);
 
 	// Build input schema
@@ -51,7 +51,7 @@ FMcpToolDefinition FN2CMcpCreateLocalVariableTool::GetDefinition() const
 	// typeIdentifier property (VALUE type for maps) (required)
 	TSharedPtr<FJsonObject> TypeIdentifierProp = MakeShareable(new FJsonObject);
 	TypeIdentifierProp->SetStringField(TEXT("type"), TEXT("string"));
-	TypeIdentifierProp->SetStringField(TEXT("description"), TEXT("Type identifier for the variable's value (e.g., 'bool', 'vector', '/Script/Engine.Actor'). For 'map' containerType, this specifies the map's VALUE type."));
+	TypeIdentifierProp->SetStringField(TEXT("description"), TEXT("Type identifier for the variable's value. For non-container types, this is the variable's type (e.g., 'bool', 'FVector', '/Script/Engine.Actor'). For 'array' or 'set' containers, this is the element type. For 'map' containers, this specifies the map's VALUE type; the KEY type is specified by 'mapKeyTypeIdentifier'."));
 	Properties->SetObjectField(TEXT("typeIdentifier"), TypeIdentifierProp);
 
 	// defaultValue property (optional)
@@ -111,8 +111,8 @@ FMcpToolCallResult FN2CMcpCreateLocalVariableTool::Execute(const TSharedPtr<FJso
 		FString Tooltip = ArgParser.GetOptionalString(TEXT("tooltip"));
 		
 		// Container type parameters
-		FString ContainerType, MapKeyTypeIdentifier; // Changed from KeyType
-		FN2CMcpVariableUtils::ParseContainerTypeArguments(ArgParser, ContainerType, MapKeyTypeIdentifier);
+		FString ContainerType, ParsedMapKeyTypeIdentifier;
+		FN2CMcpVariableUtils::ParseContainerTypeArguments(ArgParser, ContainerType, ParsedMapKeyTypeIdentifier);
 		
 		// Get focused function graph
 		UBlueprint* OwningBlueprint = nullptr;
@@ -138,7 +138,7 @@ FMcpToolCallResult FN2CMcpCreateLocalVariableTool::Execute(const TSharedPtr<FJso
 		
 		// Validate container type and key type combination
 		FString ContainerValidationError;
-		if (!FN2CMcpVariableUtils::ValidateContainerTypeParameters(ContainerType, MapKeyTypeIdentifier, ContainerValidationError))
+		if (!FN2CMcpVariableUtils::ValidateContainerTypeParameters(ContainerType, ParsedMapKeyTypeIdentifier, ContainerValidationError))
 		{
 			return FMcpToolCallResult::CreateErrorResult(ContainerValidationError);
 		}
@@ -146,8 +146,8 @@ FMcpToolCallResult FN2CMcpCreateLocalVariableTool::Execute(const TSharedPtr<FJso
 		// Resolve type identifier to FEdGraphPinType
 		FEdGraphPinType ResolvedPinType; // This will be the final pin type (e.g. TMap<Key,Value>)
 		FString ResolveError;
-		// TypeIdentifier is the VALUE type for maps. MapKeyTypeIdentifier is the KEY type.
-		if (!FN2CMcpTypeResolver::ResolvePinType(TypeIdentifier, TEXT(""), ContainerType, MapKeyTypeIdentifier, false, false, ResolvedPinType, ResolveError))
+		// TypeIdentifier is the VALUE type for maps. ParsedMapKeyTypeIdentifier is the KEY type.
+		if (!FN2CMcpTypeResolver::ResolvePinType(TypeIdentifier, TEXT(""), ContainerType, ParsedMapKeyTypeIdentifier, false, false, ResolvedPinType, ResolveError))
 		{
 			return FMcpToolCallResult::CreateErrorResult(ResolveError);
 		}

@@ -31,7 +31,7 @@ public:
 	 * @param OutError Error message if validation fails
 	 * @return true if the combination is valid, false otherwise
 	 */
-	static bool ValidateContainerTypeParameters(const FString& ContainerType, const FString& KeyType, FString& OutError);
+	static bool ValidateContainerTypeParameters(const FString& ContainerType, const FString& MapKeyTypeIdentifier, FString& OutError);
 
 	/**
 	 * Adds container type properties to the input schema
@@ -43,9 +43,9 @@ public:
 	 * Parses container type parameters from arguments
 	 * @param ArgParser The argument parser
 	 * @param OutContainerType The parsed container type
-	 * @param OutKeyType The parsed key type
+	 * @param OutMapKeyTypeIdentifier The parsed map key type identifier (only relevant for maps)
 	 */
-	static void ParseContainerTypeArguments(const FN2CMcpArgumentParser& ArgParser, FString& OutContainerType, FString& OutKeyType);
+	static void ParseContainerTypeArguments(const FN2CMcpArgumentParser& ArgParser, FString& OutContainerType, FString& OutMapKeyTypeIdentifier);
 
 	/**
 	 * Adds container type information to a success result
