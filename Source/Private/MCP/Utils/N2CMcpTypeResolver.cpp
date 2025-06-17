@@ -76,27 +76,46 @@ bool FN2CMcpTypeResolver::ResolvePinType(
         }
         else if (ContainerTypeStr.Equals(TEXT("map"), ESearchCase::IgnoreCase))
         {
-            OutPinType.ContainerType = EPinContainerType::Map;
-            if (!KeyTypeIdentifierStr.IsEmpty())
+            FEdGraphPinType ResolvedValuePinType;
+            FString ValueResolveError;
+            // Explicitly resolve the map's VALUE type (TypeIdentifier + SubTypeIdentifier) as a standalone type.
+            // The SubTypeIdentifier is passed along from the original call to ResolvePinType.
+            if (!ResolvePinType(TypeIdentifier, SubTypeIdentifier, TEXT("none"), TEXT(""), false, false, ResolvedValuePinType, ValueResolveError))
             {
-                FEdGraphPinType KeyPinType;
-                FString KeyTypeError;
-                // Recursively resolve key type. Pass "none" for container, as key types cannot be containers themselves.
-                if (ResolvePinType(KeyTypeIdentifierStr, TEXT(""), TEXT("none"), TEXT(""), false, false, KeyPinType, KeyTypeError))
-                {
-                    OutPinType.PinValueType = FEdGraphTerminalType::FromPinType(KeyPinType);
-                }
-                else
-                {
-                    OutErrorMsg = FString::Printf(TEXT("INVALID_KEY_TYPE: Failed to resolve map key type '%s'. Error: %s"), *KeyTypeIdentifierStr, *KeyTypeError);
-                    return false;
-                }
-            }
-            else
-            {
-                OutErrorMsg = TEXT("INVALID_KEY_TYPE: Map container specified but KeyTypeIdentifier is empty.");
+                OutErrorMsg = FString::Printf(TEXT("INVALID_MAP_VALUE_TYPE: Failed to resolve map value type '%s' (SubType: '%s'). Error: %s"), *TypeIdentifier, *SubTypeIdentifier, *ValueResolveError);
                 return false;
             }
+
+            FEdGraphPinType ResolvedKeyPinType;
+            FString KeyResolveError;
+            // Explicitly resolve the map's KEY type (KeyTypeIdentifierStr) as a standalone type.
+            if (KeyTypeIdentifierStr.IsEmpty())
+            {
+                OutErrorMsg = TEXT("INVALID_MAP_KEY_TYPE: Map container specified but KeyTypeIdentifier is empty.");
+                return false;
+            }
+            if (!ResolvePinType(KeyTypeIdentifierStr, TEXT(""), TEXT("none"), TEXT(""), false, false, ResolvedKeyPinType, KeyResolveError))
+            {
+                OutErrorMsg = FString::Printf(TEXT("INVALID_MAP_KEY_TYPE: Failed to resolve map key type '%s'. Error: %s"), *KeyTypeIdentifierStr, *KeyResolveError);
+                return false;
+            }
+
+            // Now, construct OutPinType for the map
+            // Maps use the value type's category, not a separate PC_Map
+            OutPinType.PinCategory = ResolvedValuePinType.PinCategory;
+            OutPinType.ContainerType = EPinContainerType::Map;
+
+            // Assign VALUE type's properties to OutPinType's sub-category fields
+            OutPinType.PinSubCategory = ResolvedValuePinType.PinSubCategory;
+            OutPinType.PinSubCategoryObject = ResolvedValuePinType.PinSubCategoryObject;
+            // Note: Other value-specific flags like bIsWeakPointer are inherent to ResolvedValuePinType.PinSubCategoryObject
+
+            // Assign KEY type's properties to OutPinType's PinValueType
+            OutPinType.PinValueType.TerminalCategory = ResolvedKeyPinType.PinCategory;
+            OutPinType.PinValueType.TerminalSubCategory = ResolvedKeyPinType.PinSubCategory;
+            OutPinType.PinValueType.TerminalSubCategoryObject = ResolvedKeyPinType.PinSubCategoryObject;
+            OutPinType.PinValueType.bTerminalIsConst = ResolvedKeyPinType.bIsConst; // Carry over const for key if specified
+            OutPinType.PinValueType.bTerminalIsWeakPointer = ResolvedKeyPinType.bIsWeakPointer; // Carry over weak for key if specified
         }
         else
         {
