@@ -40,5 +40,5 @@ private:
 	
 	// Result building
 	TSharedPtr<FJsonObject> BuildSuccessResult(UK2Node_FunctionEntry* FunctionEntry, UEdGraph* FunctionGraph,
-		const FString& RequestedName, FName ActualName, const FEdGraphPinType& PinType) const;
+		const FString& RequestedName, FName ActualName, const FEdGraphPinType& PinType, const FString& ContainerType) const;
 };
