@@ -100,22 +100,24 @@ bool FN2CMcpTypeResolver::ResolvePinType(
                 return false;
             }
 
-            // Now, construct OutPinType for the map
-            // Maps use the value type's category, not a separate PC_Map
-            OutPinType.PinCategory = ResolvedValuePinType.PinCategory;
+            // Now, construct OutPinType for the map.
+            // For FEdGraphPinType used in variable declarations,
+            // the main PinCategory/PinSubCategoryObject fields represent the KEY type,
+            // and PinValueType represents the VALUE type.
+            OutPinType.PinCategory = ResolvedKeyPinType.PinCategory; // KEY's category
             OutPinType.ContainerType = EPinContainerType::Map;
 
-            // Assign VALUE type's properties to OutPinType's sub-category fields
-            OutPinType.PinSubCategory = ResolvedValuePinType.PinSubCategory;
-            OutPinType.PinSubCategoryObject = ResolvedValuePinType.PinSubCategoryObject;
-            // Note: Other value-specific flags like bIsWeakPointer are inherent to ResolvedValuePinType.PinSubCategoryObject
+            // Assign KEY type's properties to OutPinType's main fields
+            OutPinType.PinSubCategory = ResolvedKeyPinType.PinSubCategory;
+            OutPinType.PinSubCategoryObject = ResolvedKeyPinType.PinSubCategoryObject;
+            // Note: bIsReference and bIsConst for the overall PinType (applied later) will apply to the Key.
 
-            // Assign KEY type's properties to OutPinType's PinValueType
-            OutPinType.PinValueType.TerminalCategory = ResolvedKeyPinType.PinCategory;
-            OutPinType.PinValueType.TerminalSubCategory = ResolvedKeyPinType.PinSubCategory;
-            OutPinType.PinValueType.TerminalSubCategoryObject = ResolvedKeyPinType.PinSubCategoryObject;
-            OutPinType.PinValueType.bTerminalIsConst = ResolvedKeyPinType.bIsConst; // Carry over const for key if specified
-            OutPinType.PinValueType.bTerminalIsWeakPointer = ResolvedKeyPinType.bIsWeakPointer; // Carry over weak for key if specified
+            // Assign VALUE type's properties to OutPinType's PinValueType
+            OutPinType.PinValueType.TerminalCategory = ResolvedValuePinType.PinCategory;
+            OutPinType.PinValueType.TerminalSubCategory = ResolvedValuePinType.PinSubCategory;
+            OutPinType.PinValueType.TerminalSubCategoryObject = ResolvedValuePinType.PinSubCategoryObject;
+            OutPinType.PinValueType.bTerminalIsConst = ResolvedValuePinType.bIsConst;
+            OutPinType.PinValueType.bTerminalIsWeakPointer = ResolvedValuePinType.bIsWeakPointer;
         }
         else
         {
