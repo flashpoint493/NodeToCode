@@ -51,7 +51,8 @@ private:
 	
 	// Result building
 	TSharedPtr<FJsonObject> BuildSuccessResult(const UBlueprint* Blueprint, const FString& RequestedName,
-		FName ActualName, const FEdGraphPinType& PinType) const;
+		FName ActualName, const FEdGraphPinType& ResolvedPinType, // Changed from ValuePinType, removed KeyPinType
+		const FString& ContainerType) const;
 	
 	// Validation
 	bool ValidateVariableName(const FString& VariableName, FString& OutError) const;

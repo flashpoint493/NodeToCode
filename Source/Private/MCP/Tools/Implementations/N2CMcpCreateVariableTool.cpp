@@ -4,6 +4,7 @@
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "MCP/Utils/N2CMcpTypeResolver.h"
 #include "MCP/Utils/N2CMcpArgumentParser.h"
+#include "MCP/Utils/N2CMcpVariableUtils.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpToolTypes.h"
 #include "Utils/N2CLogger.h"
@@ -28,7 +29,7 @@ FMcpToolDefinition FN2CMcpCreateVariableTool::GetDefinition() const
 {
 	FMcpToolDefinition Definition(
 		TEXT("create-variable"),
-		TEXT("Creates a new variable in the active Blueprint using a type identifier from search-variable-types")
+		TEXT("Creates a new member variable in the active Blueprint. For map variables, 'typeIdentifier' specifies the VALUE type and 'mapKeyTypeIdentifier' specifies the KEY type.")
 	);
 
 	// Build input schema
@@ -43,10 +44,10 @@ FMcpToolDefinition FN2CMcpCreateVariableTool::GetDefinition() const
 	VariableNameProp->SetStringField(TEXT("description"), TEXT("Name for the new variable"));
 	Properties->SetObjectField(TEXT("variableName"), VariableNameProp);
 
-	// typeIdentifier property
+	// typeIdentifier property (VALUE type for maps)
 	TSharedPtr<FJsonObject> TypeIdentifierProp = MakeShareable(new FJsonObject);
 	TypeIdentifierProp->SetStringField(TEXT("type"), TEXT("string"));
-	TypeIdentifierProp->SetStringField(TEXT("description"), TEXT("Type identifier from search-variable-types (e.g., 'bool', '/Script/Engine.Actor')"));
+	TypeIdentifierProp->SetStringField(TEXT("description"), TEXT("Type identifier for the variable. For 'map' containerType, this specifies the map's VALUE type (e.g., 'bool', 'vector', '/Script/Engine.Actor'). For other containers, it's the element type. For non-containers, it's the variable type."));
 	Properties->SetObjectField(TEXT("typeIdentifier"), TypeIdentifierProp);
 
 	// defaultValue property
@@ -96,12 +97,16 @@ FMcpToolDefinition FN2CMcpCreateVariableTool::GetDefinition() const
 	ReplicationProp->SetStringField(TEXT("description"), TEXT("Network replication setting"));
 	Properties->SetObjectField(TEXT("replicationCondition"), ReplicationProp);
 
+	// Add container type properties (includes mapKeyTypeIdentifier)
+	FN2CMcpVariableUtils::AddContainerTypeSchemaProperties(Properties);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 	
 	// Required fields
 	TArray<TSharedPtr<FJsonValue>> RequiredArray;
 	RequiredArray.Add(MakeShareable(new FJsonValueString(TEXT("variableName"))));
 	RequiredArray.Add(MakeShareable(new FJsonValueString(TEXT("typeIdentifier"))));
+	// mapKeyTypeIdentifier will be conditionally required by logic if containerType is 'map'
 	Schema->SetArrayField(TEXT("required"), RequiredArray);
 	
 	Definition.InputSchema = Schema;
@@ -136,6 +141,10 @@ FMcpToolCallResult FN2CMcpCreateVariableTool::Execute(const TSharedPtr<FJsonObje
 		Settings.Tooltip = ArgParser.GetOptionalString(TEXT("tooltip"));
 		Settings.ReplicationCondition = ArgParser.GetOptionalString(TEXT("replicationCondition"), TEXT("none"));
 		
+		// Container type fields
+		FString ContainerType, MapKeyTypeIdentifier; // Changed from KeyTypeIdentifier
+		FN2CMcpVariableUtils::ParseContainerTypeArguments(ArgParser, ContainerType, MapKeyTypeIdentifier);
+		
 		// Validate variable name
 		FString ValidationError;
 		if (!ValidateVariableName(Settings.VariableName, ValidationError))
@@ -157,20 +166,25 @@ FMcpToolCallResult FN2CMcpCreateVariableTool::Execute(const TSharedPtr<FJsonObje
 			return FMcpToolCallResult::CreateErrorResult(ValidationError);
 		}
 		
+		// Validate container type and key type combination
+		FString ContainerValidationError;
+		if (!FN2CMcpVariableUtils::ValidateContainerTypeParameters(ContainerType, MapKeyTypeIdentifier, ContainerValidationError))
+		{
+			return FMcpToolCallResult::CreateErrorResult(ContainerValidationError);
+		}
+		
 		// Resolve type identifier to FEdGraphPinType
-		FEdGraphPinType PinType;
-		FString TypeResolveError; 
-            // For variables, container type and key type are usually not directly specified in the same way as function params.
-            // We'll pass empty/default for those, as variable creation typically handles single types or arrays directly.
-            // The FBlueprintEditorUtils::AddMemberVariable handles array creation if PinType.ContainerType is Array.
-		if (!FN2CMcpTypeResolver::ResolvePinType(Settings.TypeIdentifier, TEXT(""), TEXT("none"), TEXT(""), false, false, PinType, TypeResolveError))
+		FEdGraphPinType ResolvedVariablePinType; // Renamed from ValuePinType
+		FString TypeResolveError;
+		// Settings.TypeIdentifier is the VALUE type for maps. MapKeyTypeIdentifier is the KEY type.
+		if (!FN2CMcpTypeResolver::ResolvePinType(Settings.TypeIdentifier, TEXT(""), ContainerType, MapKeyTypeIdentifier, false, false, ResolvedVariablePinType, TypeResolveError))
 		{
 			return FMcpToolCallResult::CreateErrorResult(TypeResolveError);
 		}
 		
 		// Create the variable
 		FName ActualVariableName = CreateVariable(ActiveBlueprint, Settings.VariableName, 
-			PinType, Settings.DefaultValue, Settings.Category);
+			ResolvedVariablePinType, Settings.DefaultValue, Settings.Category);
 		
 		if (ActualVariableName.IsNone())
 		{
@@ -192,7 +206,7 @@ FMcpToolCallResult FN2CMcpCreateVariableTool::Execute(const TSharedPtr<FJsonObje
 		
 		// Return success result
 		TSharedPtr<FJsonObject> Result = BuildSuccessResult(ActiveBlueprint, Settings.VariableName, 
-			ActualVariableName, PinType);
+			ActualVariableName, ResolvedVariablePinType, ContainerType);
 		
 		// Convert JSON object to string
 		FString ResultString;
@@ -316,7 +330,8 @@ void FN2CMcpCreateVariableTool::ApplyVariableProperties(UBlueprint* Blueprint, F
 }
 
 TSharedPtr<FJsonObject> FN2CMcpCreateVariableTool::BuildSuccessResult(const UBlueprint* Blueprint, 
-	const FString& RequestedName, FName ActualName, const FEdGraphPinType& PinType) const
+	const FString& RequestedName, FName ActualName, const FEdGraphPinType& ResolvedPinType,
+	const FString& ContainerType) const // Removed KeyPinType
 {
 	TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
 	
@@ -325,34 +340,13 @@ TSharedPtr<FJsonObject> FN2CMcpCreateVariableTool::BuildSuccessResult(const UBlu
 	Result->SetStringField(TEXT("actualName"), ActualName.ToString());
 	Result->SetStringField(TEXT("blueprintName"), Blueprint->GetName());
 	
-	// Add type info
-	TSharedPtr<FJsonObject> TypeInfo = MakeShareable(new FJsonObject);
+	// Add resolved pin type info (this will include key/value for maps)
+	TSharedPtr<FJsonObject> PinTypeInfoJson = FN2CMcpVariableUtils::BuildTypeInfo(ResolvedPinType);
+	Result->SetObjectField(TEXT("typeInfo"), PinTypeInfoJson);
 	
-	if (PinType.PinCategory == UEdGraphSchema_K2::PC_Object && PinType.PinSubCategoryObject.IsValid())
-	{
-		TypeInfo->SetStringField(TEXT("category"), TEXT("object"));
-		TypeInfo->SetStringField(TEXT("className"), PinType.PinSubCategoryObject->GetName());
-		TypeInfo->SetStringField(TEXT("path"), PinType.PinSubCategoryObject->GetPathName());
-	}
-	else if (PinType.PinCategory == UEdGraphSchema_K2::PC_Struct && PinType.PinSubCategoryObject.IsValid())
-	{
-		TypeInfo->SetStringField(TEXT("category"), TEXT("struct"));
-		TypeInfo->SetStringField(TEXT("structName"), PinType.PinSubCategoryObject->GetName());
-		TypeInfo->SetStringField(TEXT("path"), PinType.PinSubCategoryObject->GetPathName());
-	}
-	else if (PinType.PinCategory == UEdGraphSchema_K2::PC_Enum && PinType.PinSubCategoryObject.IsValid())
-	{
-		TypeInfo->SetStringField(TEXT("category"), TEXT("enum"));
-		TypeInfo->SetStringField(TEXT("enumName"), PinType.PinSubCategoryObject->GetName());
-		TypeInfo->SetStringField(TEXT("path"), PinType.PinSubCategoryObject->GetPathName());
-	}
-	else
-	{
-		TypeInfo->SetStringField(TEXT("category"), TEXT("primitive"));
-		TypeInfo->SetStringField(TEXT("typeName"), PinType.PinCategory.ToString());
-	}
-	
-	Result->SetObjectField(TEXT("typeInfo"), TypeInfo);
+	// Add container information (e.g., "map", "array", "none")
+	// This is somewhat redundant if typeInfo already contains it, but explicit can be good.
+	Result->SetStringField(TEXT("containerType"), ContainerType);
 	
 	Result->SetStringField(TEXT("message"), FString::Printf(
 		TEXT("Variable '%s' created successfully"), *ActualName.ToString()));

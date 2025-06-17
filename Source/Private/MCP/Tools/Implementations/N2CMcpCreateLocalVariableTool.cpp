@@ -4,6 +4,7 @@
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "MCP/Utils/N2CMcpTypeResolver.h"
 #include "MCP/Utils/N2CMcpArgumentParser.h"
+#include "MCP/Utils/N2CMcpVariableUtils.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "Core/N2CEditorIntegration.h"
 #include "Utils/N2CLogger.h"
@@ -32,7 +33,7 @@ FMcpToolDefinition FN2CMcpCreateLocalVariableTool::GetDefinition() const
 {
 	FMcpToolDefinition Definition(
 		TEXT("create-local-variable"),
-		TEXT("Creates a new local variable in the currently focused Blueprint function")
+		TEXT("Creates a new local variable in the currently focused Blueprint function. For map variables, 'typeIdentifier' specifies the VALUE type and 'mapKeyTypeIdentifier' specifies the KEY type.")
 	);
 
 	// Build input schema
@@ -47,10 +48,10 @@ FMcpToolDefinition FN2CMcpCreateLocalVariableTool::GetDefinition() const
 	VariableNameProp->SetStringField(TEXT("description"), TEXT("Name for the new local variable"));
 	Properties->SetObjectField(TEXT("variableName"), VariableNameProp);
 
-	// typeIdentifier property (required)
+	// typeIdentifier property (VALUE type for maps) (required)
 	TSharedPtr<FJsonObject> TypeIdentifierProp = MakeShareable(new FJsonObject);
 	TypeIdentifierProp->SetStringField(TEXT("type"), TEXT("string"));
-	TypeIdentifierProp->SetStringField(TEXT("description"), TEXT("Type identifier from search-variable-types (e.g., 'bool', '/Script/Engine.Actor')"));
+	TypeIdentifierProp->SetStringField(TEXT("description"), TEXT("Type identifier for the variable's value (e.g., 'bool', 'vector', '/Script/Engine.Actor'). For 'map' containerType, this specifies the map's VALUE type."));
 	Properties->SetObjectField(TEXT("typeIdentifier"), TypeIdentifierProp);
 
 	// defaultValue property (optional)
@@ -67,12 +68,16 @@ FMcpToolDefinition FN2CMcpCreateLocalVariableTool::GetDefinition() const
 	TooltipProp->SetStringField(TEXT("default"), TEXT(""));
 	Properties->SetObjectField(TEXT("tooltip"), TooltipProp);
 
+	// Add container type properties (includes mapKeyTypeIdentifier)
+	FN2CMcpVariableUtils::AddContainerTypeSchemaProperties(Properties);
+
 	Schema->SetObjectField(TEXT("properties"), Properties);
 	
 	// Required parameters
 	TArray<TSharedPtr<FJsonValue>> Required;
 	Required.Add(MakeShareable(new FJsonValueString(TEXT("variableName"))));
 	Required.Add(MakeShareable(new FJsonValueString(TEXT("typeIdentifier"))));
+	// mapKeyTypeIdentifier will be conditionally required by logic if containerType is 'map'
 	Schema->SetArrayField(TEXT("required"), Required);
 	
 	Definition.InputSchema = Schema;
@@ -105,6 +110,10 @@ FMcpToolCallResult FN2CMcpCreateLocalVariableTool::Execute(const TSharedPtr<FJso
 		FString DefaultValue = ArgParser.GetOptionalString(TEXT("defaultValue"));
 		FString Tooltip = ArgParser.GetOptionalString(TEXT("tooltip"));
 		
+		// Container type parameters
+		FString ContainerType, MapKeyTypeIdentifier; // Changed from KeyType
+		FN2CMcpVariableUtils::ParseContainerTypeArguments(ArgParser, ContainerType, MapKeyTypeIdentifier);
+		
 		// Get focused function graph
 		UBlueprint* OwningBlueprint = nullptr;
 		UEdGraph* FocusedGraph = nullptr;
@@ -127,20 +136,27 @@ FMcpToolCallResult FN2CMcpCreateLocalVariableTool::Execute(const TSharedPtr<FJso
 			return FMcpToolCallResult::CreateErrorResult(TEXT("Not in a function graph. Local variables can only be created in functions, not event graphs."));
 		}
 		
+		// Validate container type and key type combination
+		FString ContainerValidationError;
+		if (!FN2CMcpVariableUtils::ValidateContainerTypeParameters(ContainerType, MapKeyTypeIdentifier, ContainerValidationError))
+		{
+			return FMcpToolCallResult::CreateErrorResult(ContainerValidationError);
+		}
+		
 		// Resolve type identifier to FEdGraphPinType
-		FEdGraphPinType PinType;
+		FEdGraphPinType ResolvedPinType; // This will be the final pin type (e.g. TMap<Key,Value>)
 		FString ResolveError;
-            // Similar to global variables, local variables are typically single types or arrays.
-		if (!FN2CMcpTypeResolver::ResolvePinType(TypeIdentifier, TEXT(""), TEXT("none"), TEXT(""), false, false, PinType, ResolveError))
+		// TypeIdentifier is the VALUE type for maps. MapKeyTypeIdentifier is the KEY type.
+		if (!FN2CMcpTypeResolver::ResolvePinType(TypeIdentifier, TEXT(""), ContainerType, MapKeyTypeIdentifier, false, false, ResolvedPinType, ResolveError))
 		{
 			return FMcpToolCallResult::CreateErrorResult(ResolveError);
 		}
 		
 		// Create the local variable
-		FName ActualVariableName = CreateLocalVariable(FunctionEntry, VariableName, PinType, DefaultValue, Tooltip);
+		FName ActualVariableName = CreateLocalVariable(FunctionEntry, VariableName, ResolvedPinType, DefaultValue, Tooltip);
 		
 		// Build and return success result
-		TSharedPtr<FJsonObject> Result = BuildSuccessResult(FunctionEntry, FocusedGraph, VariableName, ActualVariableName, PinType);
+		TSharedPtr<FJsonObject> Result = BuildSuccessResult(FunctionEntry, FocusedGraph, VariableName, ActualVariableName, ResolvedPinType, ContainerType);
 		
 		FString JsonString;
 		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
@@ -226,7 +242,7 @@ FName FN2CMcpCreateLocalVariableTool::CreateLocalVariable(UK2Node_FunctionEntry*
 	FBPVariableDescription NewVar;
 	NewVar.VarName = MakeUniqueLocalVariableName(FunctionEntry, DesiredName);
 	NewVar.VarGuid = FGuid::NewGuid();
-	NewVar.VarType = PinType;
+	NewVar.VarType = PinType; // PinType is the fully resolved type (e.g. TMap<Key,Value>)
 	NewVar.FriendlyName = DesiredName;
 	NewVar.DefaultValue = DefaultValue;
 	NewVar.Category = FText::FromString(TEXT("Local"));
@@ -264,7 +280,7 @@ FName FN2CMcpCreateLocalVariableTool::CreateLocalVariable(UK2Node_FunctionEntry*
 }
 
 TSharedPtr<FJsonObject> FN2CMcpCreateLocalVariableTool::BuildSuccessResult(UK2Node_FunctionEntry* FunctionEntry, UEdGraph* FunctionGraph,
-	const FString& RequestedName, FName ActualName, const FEdGraphPinType& PinType) const
+	const FString& RequestedName, FName ActualName, const FEdGraphPinType& ResolvedPinType, const FString& ContainerType) const
 {
 	TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
 	
@@ -272,46 +288,13 @@ TSharedPtr<FJsonObject> FN2CMcpCreateLocalVariableTool::BuildSuccessResult(UK2No
 	Result->SetStringField(TEXT("variableName"), RequestedName);
 	Result->SetStringField(TEXT("actualName"), ActualName.ToString());
 	
-	// Add type info
-	TSharedPtr<FJsonObject> TypeInfo = MakeShareable(new FJsonObject);
-	
-	// Determine category
-	FString Category;
-	if (PinType.PinCategory == UEdGraphSchema_K2::PC_Boolean)
-		Category = TEXT("boolean");
-	else if (PinType.PinCategory == UEdGraphSchema_K2::PC_Byte)
-		Category = TEXT("byte");
-	else if (PinType.PinCategory == UEdGraphSchema_K2::PC_Int)
-		Category = TEXT("integer");
-	else if (PinType.PinCategory == UEdGraphSchema_K2::PC_Int64)
-		Category = TEXT("integer64");
-	else if (PinType.PinCategory == UEdGraphSchema_K2::PC_Real)
-		Category = TEXT("float");
-	else if (PinType.PinCategory == UEdGraphSchema_K2::PC_Name)
-		Category = TEXT("name");
-	else if (PinType.PinCategory == UEdGraphSchema_K2::PC_String)
-		Category = TEXT("string");
-	else if (PinType.PinCategory == UEdGraphSchema_K2::PC_Text)
-		Category = TEXT("text");
-	else if (PinType.PinCategory == UEdGraphSchema_K2::PC_Object)
-		Category = TEXT("object");
-	else if (PinType.PinCategory == UEdGraphSchema_K2::PC_Class)
-		Category = TEXT("class");
-	else if (PinType.PinCategory == UEdGraphSchema_K2::PC_Struct)
-		Category = TEXT("struct");
-	else
-		Category = PinType.PinCategory.ToString();
-	
-	TypeInfo->SetStringField(TEXT("category"), Category);
-	
-	// Add class/struct name if applicable
-	if (PinType.PinSubCategoryObject.IsValid())
-	{
-		TypeInfo->SetStringField(TEXT("className"), PinType.PinSubCategoryObject->GetName());
-		TypeInfo->SetStringField(TEXT("path"), PinType.PinSubCategoryObject->GetPathName());
-	}
-	
+	// Add type info (this will include key/value for maps)
+	TSharedPtr<FJsonObject> TypeInfo = FN2CMcpVariableUtils::BuildTypeInfo(ResolvedPinType);
 	Result->SetObjectField(TEXT("typeInfo"), TypeInfo);
+	
+	// Add container information (e.g., "map", "array", "none")
+	// This is somewhat redundant if typeInfo already contains it, but explicit can be good.
+	FN2CMcpVariableUtils::AddContainerInfoToResult(Result, ContainerType, true);
 	
 	// Add function and Blueprint info
 	if (FunctionGraph)
