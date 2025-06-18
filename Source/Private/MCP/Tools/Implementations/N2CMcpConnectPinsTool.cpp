@@ -24,7 +24,7 @@ FMcpToolDefinition FN2CMcpConnectPinsTool::GetDefinition() const
 {
 	FMcpToolDefinition Definition(
 		TEXT("connect-pins"),
-		TEXT("Connect pins between Blueprint nodes using their GUIDs. Supports batch connections with transactional safety.")
+		TEXT("Connect pins between Blueprint nodes using their GUIDs. Supports batch connections with transactional safety. Output data pins can connect to multiple input pins, while execution pins maintain single connections.")
 	);
 
 	// Build input schema
@@ -579,8 +579,44 @@ FN2CMcpConnectPinsTool::FConnectionResult FN2CMcpConnectPinsTool::ProcessConnect
 	// Break existing connections if requested
 	if (Options.bBreakExistingLinks)
 	{
-		FromPin->BreakAllPinLinks();
-		ToPin->BreakAllPinLinks();
+		// Log pin types for debugging
+		FN2CLogger::Get().Log(FString::Printf(TEXT("ConnectPins: FromPin type: %s, Direction: %s"), 
+			*FromPin->PinType.PinCategory.ToString(),
+			FromPin->Direction == EGPD_Input ? TEXT("Input") : TEXT("Output")), EN2CLogSeverity::Debug);
+		FN2CLogger::Get().Log(FString::Printf(TEXT("ConnectPins: ToPin type: %s, Direction: %s"), 
+			*ToPin->PinType.PinCategory.ToString(),
+			ToPin->Direction == EGPD_Input ? TEXT("Input") : TEXT("Output")), EN2CLogSeverity::Debug);
+		
+		// For execution pins, break all connections as they should only have one connection
+		if (UEdGraphSchema_K2::IsExecPin(*FromPin))
+		{
+			FN2CLogger::Get().Log(TEXT("ConnectPins: FromPin is exec pin, breaking all links"), EN2CLogSeverity::Debug);
+			FromPin->BreakAllPinLinks();
+		}
+		
+		if (UEdGraphSchema_K2::IsExecPin(*ToPin))
+		{
+			FN2CLogger::Get().Log(TEXT("ConnectPins: ToPin is exec pin, breaking all links"), EN2CLogSeverity::Debug);
+			ToPin->BreakAllPinLinks();
+		}
+		// For data pins:
+		// - Input pins can only have one connection, so break existing connections
+		// - Output pins can have multiple connections, so don't break them
+		else
+		{
+			// Input pins should only have one connection
+			if (ToPin->Direction == EGPD_Input)
+			{
+				FN2CLogger::Get().Log(TEXT("ConnectPins: ToPin is input data pin, breaking all links"), EN2CLogSeverity::Debug);
+				ToPin->BreakAllPinLinks();
+			}
+			else
+			{
+				FN2CLogger::Get().Log(TEXT("ConnectPins: FromPin is output data pin, preserving existing connections"), EN2CLogSeverity::Debug);
+			}
+			// Output data pins can connect to multiple inputs, so we don't break their connections
+			// The connection from FromPin (output) to ToPin (input) will be added without breaking FromPin's existing connections
+		}
 	}
 	
 	// Make the connection

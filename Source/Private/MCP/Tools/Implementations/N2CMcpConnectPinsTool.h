@@ -15,6 +15,11 @@ class UEdGraphSchema;
 /**
  * MCP tool that connects pins between Blueprint nodes using their GUIDs.
  * Supports batch connections with transactional safety and comprehensive validation.
+ * 
+ * Connection behavior:
+ * - Output data pins can connect to multiple input pins (one-to-many)
+ * - Input data pins can only have one connection (many-to-one)
+ * - Execution pins maintain single connections (one-to-one)
  */
 class FN2CMcpConnectPinsTool : public FN2CMcpToolBase
 {

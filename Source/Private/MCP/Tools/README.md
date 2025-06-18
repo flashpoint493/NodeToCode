@@ -246,7 +246,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
 
 ### connect-pins
 - **Location**: `Implementations/N2CMcpConnectPinsTool.cpp`
-- **Description**: Connect pins between Blueprint nodes using their GUIDs. Supports batch connections with transactional safety.
+- **Description**: Connect pins between Blueprint nodes using their GUIDs. Supports batch connections with transactional safety. Output data pins can connect to multiple input pins, while execution pins maintain single connections.
 - **Parameters**:
   - `connections` (array, required): Array of pin connection objects to create. Each object has:
     - `from` (object, required):
@@ -261,7 +261,10 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
       - `pinDirection` (string, optional, enum: `"EGPD_Input"`, `"EGPD_Output"`): Expected direction of the pin, for validation.
   - `options` (object, optional):
     - `transactionName` (string, default: "NodeToCode: Connect Pins"): Name for the undo transaction.
-    - `breakExistingLinks` (boolean, default: true): Whether to break existing links on the pins before creating the new connection.
+    - `breakExistingLinks` (boolean, default: true): Whether to break existing links on the pins before creating the new connection. When true:
+      - Execution pins: All existing connections are broken (one-to-one connections)
+      - Input data pins: Existing connection is broken (can only have one connection)
+      - Output data pins: Existing connections are preserved (can connect to multiple inputs)
 - **Requires Game Thread**: Yes
 - **Returns**: Object containing:
   - `succeeded` (array of objects): Each object details a successful connection (`from`, `to`).
