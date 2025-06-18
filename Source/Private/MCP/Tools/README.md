@@ -450,6 +450,46 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
     - `flags`: Function flags (isConst, isStatic, isReliable, etc.)
   - `functionCount`: Total number of overridable functions
 
+### get-available-translation-targets
+- **Location**: `Implementations/N2CMcpGetAvailableTranslationTargetsTool.cpp`
+- **Description**: Returns the list of programming languages that NodeToCode can translate Blueprints into, including metadata about each language
+- **Parameters**: None
+- **Requires Game Thread**: No (only accesses static enum data and settings)
+- **Returns**: Object containing:
+  - `languages`: Array of language objects, each containing:
+    - `id`: Language identifier (e.g., "cpp", "python")
+    - `displayName`: Human-readable name (e.g., "C++", "Python")
+    - `description`: Description of the language variant/features
+    - `fileExtensions`: Array of file extensions (e.g., [".h", ".cpp"])
+    - `category`: Language category ("compiled", "scripted", or "documentation")
+    - `features`: Additional features or notes about the language
+    - `syntaxHighlightingSupported`: Whether syntax highlighting is available
+  - `defaultLanguage`: The default language (always "cpp")
+  - `currentLanguage`: Currently selected language in settings
+  - `languageCount`: Total number of available languages
+
+### get-available-llm-providers
+- **Location**: `Implementations/N2CMcpGetAvailableLLMProvidersTool.cpp`
+- **Description**: Returns the list of configured LLM providers available for Blueprint translation. Checks which providers have valid API keys set and includes local providers
+- **Parameters**: None
+- **Requires Game Thread**: Yes (accessing settings and user secrets)
+- **Returns**: Object containing:
+  - `providers`: Array of provider objects, each containing:
+    - `id`: Provider identifier (e.g., "openai", "anthropic", "ollama")
+    - `displayName`: Human-readable name (e.g., "OpenAI", "Ollama (Local)")
+    - `configured`: Whether the provider is configured (always true in results)
+    - `isLocal`: Whether this is a local provider (Ollama, LM Studio)
+    - `currentModel`: Currently selected model for this provider
+    - `availableModels` (cloud providers only): Array of available models with:
+      - `id`: Model identifier
+      - `name`: Model display name
+      - `supportsSystemPrompts` (OpenAI only): Whether the model supports system prompts
+    - `endpoint` (local providers only): API endpoint URL
+    - `supportsStructuredOutput`: Whether the provider supports structured JSON output
+    - `supportsSystemPrompts`: Whether the provider/model supports system prompts
+  - `currentProvider`: Currently selected provider in settings
+  - `configuredProviderCount`: Number of providers that are configured and available
+
 ## Example Workflows
 
 ### Searching and Adding Blueprint Nodes
