@@ -233,7 +233,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
 - **Description**: Adds a Blueprint node to the currently active graph. IMPORTANT: The search-blueprint-nodes tool MUST have been used before this tool to find the node and get its actionIdentifier
 - **Parameters**:
   - `nodeName` (string, required): The name of the node to add (e.g., 'Spawn Actor from Class')
-  - `actionIdentifier` (string, required): The unique action identifier from search-blueprint-nodes spawnMetadata
+  - `actionIdentifier` (string, required): The unique action identifier obtained from the `spawnMetadata.actionIdentifier` field in `search-blueprint-nodes` results. This MUST be the exact value from the search results (note: `>` is used as a delimiter for multi-line identifiers).
   - `location` (object, optional): The location to spawn the node at
     - `x` (number, default: 0): X coordinate
     - `y` (number, default: 0): Y coordinate
@@ -243,6 +243,30 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `nodeId`: Unique ID of the spawned node
   - `graphName`: Name of the graph the node was added to
   - `blueprintName`: Name of the Blueprint containing the graph
+
+### connect-pins
+- **Location**: `Implementations/N2CMcpConnectPinsTool.cpp`
+- **Description**: Connect pins between Blueprint nodes using their GUIDs. Supports batch connections with transactional safety.
+- **Parameters**:
+  - `connections` (array, required): Array of pin connection objects to create. Each object has:
+    - `from` (object, required):
+      - `nodeGuid` (string, required): GUID of the source node.
+      - `pinGuid` (string, required): GUID of the source pin.
+      - `pinName` (string, optional): Pin name for fallback lookup if GUID match fails.
+      - `pinDirection` (string, optional, enum: `"EGPD_Input"`, `"EGPD_Output"`): Expected direction of the pin, for validation.
+    - `to` (object, required):
+      - `nodeGuid` (string, required): GUID of the target node.
+      - `pinGuid` (string, required): GUID of the target pin.
+      - `pinName` (string, optional): Pin name for fallback lookup if GUID match fails.
+      - `pinDirection` (string, optional, enum: `"EGPD_Input"`, `"EGPD_Output"`): Expected direction of the pin, for validation.
+  - `options` (object, optional):
+    - `transactionName` (string, default: "NodeToCode: Connect Pins"): Name for the undo transaction.
+    - `breakExistingLinks` (boolean, default: true): Whether to break existing links on the pins before creating the new connection.
+- **Requires Game Thread**: Yes
+- **Returns**: Object containing:
+  - `succeeded` (array of objects): Each object details a successful connection (`from`, `to`).
+  - `failed` (array of objects): Each object details a failed connection (`from`, `to`, `errorCode`, `reason`).
+  - `summary` (object): Contains `totalRequested`, `succeeded`, and `failed` counts.
 
 ### list-blueprint-functions
 - **Location**: `Implementations/N2CMcpListBlueprintFunctionsTool.cpp`
@@ -274,9 +298,9 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `blueprintPath` (string, optional): Asset path of the Blueprint. If not provided, uses focused Blueprint
   - `parameters` (array, optional): Array of parameter definitions, each containing:
     - `name` (string, required): Parameter name
-    - `type` (string, required): Parameter type (e.g., 'bool', 'int', 'float', 'string', 'vector', 'object')
+    - `type` (string, required): Type identifier for the parameter (e.g., "bool", "FVector", "object", "/Script/CoreUObject.Vector"). For maps, this is the VALUE type.
     - `direction` (string, optional, default: 'input'): Either 'input' or 'output'
-    - `subType` (string, optional): For object/class/struct/enum types, the specific type
+    - `subType` (string, optional): Sub-type identifier, used if `type` is generic (e.g., "object", "class", "struct", "enum"). Example: if `type` is "object", `subType` could be "Actor" or "/Script/Engine.Actor".
     - `container` (string, optional, default: 'none'): Container type ('none', 'array', 'set', 'map')
     - `keyType` (string, optional): For map containers, the key type
     - `isReference` (boolean, optional, default: false): Whether the parameter is passed by reference
@@ -301,27 +325,98 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `graphInfo`: Information about the created graph
   - `message`: Success message
 
+### open-blueprint-function
+- **Location**: `Implementations/N2CMcpOpenBlueprintFunctionTool.cpp`
+- **Description**: Opens a Blueprint function in the editor using its GUID. The function GUID can be obtained from `create-blueprint-function` or `list-blueprint-functions` tools.
+- **Parameters**:
+  - `functionGuid` (string, required): The GUID of the function to open.
+  - `blueprintPath` (string, optional): Asset path of the Blueprint. If not provided, searches in the focused Blueprint first.
+  - `centerView` (boolean, optional, default: true): If true, centers the graph view on the function entry node.
+  - `selectNodes` (boolean, optional, default: true): If true, selects all nodes in the function.
+- **Requires Game Thread**: Yes
+- **Returns**: Object containing:
+  - `success` (boolean): True if the function was opened successfully.
+  - `functionName` (string): Display name of the opened function.
+  - `functionGuid` (string): GUID of the opened function.
+  - `blueprintName` (string): Name of the Blueprint.
+  - `blueprintPath` (string): Asset path of the Blueprint.
+  - `graphName` (string): Internal name of the function graph.
+  - `editorState` (string): Indicates the state, e.g., "opened".
+
+### delete-blueprint-function
+- **Location**: `Implementations/N2CMcpDeleteBlueprintFunctionTool.cpp`
+- **Description**: Deletes a specific Blueprint function using its GUID. Supports reference detection and forced deletion.
+- **Parameters**:
+  - `functionGuid` (string, required): The GUID of the function to delete.
+  - `blueprintPath` (string, optional): Asset path of the Blueprint. If not provided, uses the currently focused Blueprint.
+  - `force` (boolean, optional, default: false): If true, bypasses confirmation checks and forces deletion even if the function has references (references will be removed).
+- **Requires Game Thread**: Yes
+- **Returns**: Object containing:
+  - `success` (boolean): True if the function was deleted successfully.
+  - `deletedFunction` (object): Contains `name` and `guid` of the deleted function.
+  - `referencesRemoved` (array of objects): Each object details a removed reference, containing `graphName`, `nodeId`, and `nodeTitle`.
+  - `blueprintPath` (string): Asset path of the Blueprint.
+  - `transactionId` (string): GUID of the undo transaction.
+
 ### create-variable
 - **Location**: `Implementations/N2CMcpCreateVariableTool.cpp`
-- **Description**: Creates a new variable in a Blueprint
+- **Description**: Creates a new member variable in the active Blueprint. For map variables: 'typeIdentifier' specifies the map's VALUE type, and 'mapKeyTypeIdentifier' specifies the map's KEY type.
 - **Parameters**:
-  - `variableName` (string, required): Name of the variable to create
-  - `variableType` (string, required): Type of the variable
-  - `blueprintPath` (string, optional): Asset path of the Blueprint. If not provided, uses focused Blueprint
-  - `category` (string, optional): Category for organizing the variable
-  - `isInstanceEditable` (boolean, optional): Whether the variable can be edited on instances
-  - `defaultValue` (string, optional): Default value for the variable
+  - `variableName` (string, required): Name for the new variable.
+  - `typeIdentifier` (string, required): Type identifier for the variable. For non-container types, this is the variable's type (e.g., 'bool', 'FVector', '/Script/Engine.Actor'). For 'array' or 'set' containers, this is the element type. For 'map' containers, this specifies the map's VALUE type; the KEY type is specified by 'mapKeyTypeIdentifier'.
+  - `blueprintPath` (string, optional): Asset path of the Blueprint. If not provided, uses the focused Blueprint.
+  - `defaultValue` (string, optional, default: ""): Optional default value for the variable.
+  - `category` (string, optional, default: "Default"): Category to organize the variable in.
+  - `isInstanceEditable` (boolean, optional, default: true): Whether the variable can be edited per-instance.
+  - `isBlueprintReadOnly` (boolean, optional, default: false): Whether the variable is read-only in Blueprint graphs.
+  - `tooltip` (string, optional, default: ""): Tooltip description for the variable.
+  - `replicationCondition` (string, optional, enum: `"none"`, `"replicated"`, `"repnotify"`, default: `"none"`): Network replication setting.
+  - `containerType` (string, optional, enum: `"none"`, `"array"`, `"set"`, `"map"`, default: `"none"`): Container type for the variable.
+  - `mapKeyTypeIdentifier` (string, optional): For 'map' containerType, this specifies the map's KEY type identifier (e.g., 'Name', 'int32', '/Script/CoreUObject.Guid'). Required if containerType is 'map'.
 - **Requires Game Thread**: Yes
-- **Returns**: Success/error information
+- **Returns**: Object containing:
+  - `success` (boolean): True if the variable was created successfully.
+  - `variableName` (string): The requested variable name.
+  - `actualName` (string): The actual unique name assigned to the variable.
+  - `blueprintName` (string): Name of the Blueprint where the variable was created.
+  - `typeInfo` (object): Detailed information about the resolved variable type, including `category`, `className`/`structName`/`enumName`/`typeName`, and `path`. For maps, this describes the value type; key type info is part of the map container description.
+  - `containerType` (string): The container type used (e.g., "none", "array", "set", "map").
+  - `message` (string): A success or error message.
 
 ### search-variable-types
 - **Location**: `Implementations/N2CMcpSearchVariableTypesTool.cpp`
-- **Description**: Searches for available variable types that can be used in Blueprints
+- **Description**: Searches for available variable types (primitives, classes, structs, enums) by name and returns matches with unique type identifiers.
 - **Parameters**:
-  - `searchTerm` (string, optional): Term to search for in type names
-  - `category` (string, optional): Filter by category (e.g., 'primitive', 'struct', 'object')
+  - `searchTerm` (string, required): The text query to search for type names.
+  - `category` (string, optional, enum: `"all"`, `"primitive"`, `"class"`, `"struct"`, `"enum"`, default: `"all"`): Filter results by type category.
+  - `includeEngineTypes` (boolean, optional, default: true): Include engine-provided types in results.
+  - `maxResults` (integer, optional, default: 50, min: 1, max: 200): Maximum number of results to return.
 - **Requires Game Thread**: Yes
-- **Returns**: Array of available types with their categories and paths
+- **Returns**: Object containing:
+  - `types` (array of objects): Each object represents a type and includes `typeName`, `typeIdentifier`, `category`, `description`, `icon` (optional), `parentClass` (for classes), `isAbstract` (for classes), and `values` (for enums).
+  - `totalMatches` (integer): The number of types found matching the criteria.
+
+### create-local-variable
+- **Location**: `Implementations/N2CMcpCreateLocalVariableTool.cpp`
+- **Description**: Creates a new local variable in the currently focused Blueprint function. For map variables: 'typeIdentifier' specifies the map's VALUE type, and 'mapKeyTypeIdentifier' specifies the map's KEY type.
+- **Parameters**:
+  - `variableName` (string, required): Name for the new local variable.
+  - `typeIdentifier` (string, required): Type identifier for the variable's value. For non-container types, this is the variable's type (e.g., 'bool', 'FVector', '/Script/Engine.Actor'). For 'array' or 'set' containers, this is the element type. For 'map' containers, this specifies the map's VALUE type; the KEY type is specified by 'mapKeyTypeIdentifier'.
+  - `defaultValue` (string, optional, default: ""): Optional default value for the variable.
+  - `tooltip` (string, optional, default: ""): Tooltip description for the variable.
+  - `containerType` (string, optional, enum: `"none"`, `"array"`, `"set"`, `"map"`, default: `"none"`): Container type for the variable.
+  - `mapKeyTypeIdentifier` (string, optional): For 'map' containerType, this specifies the map's KEY type identifier (e.g., 'Name', 'int32'). Required if containerType is 'map'.
+- **Requires Game Thread**: Yes
+- **Returns**: Object containing:
+  - `success` (boolean): True if the local variable was created successfully.
+  - `variableName` (string): The requested variable name.
+  - `actualName` (string): The actual unique name assigned to the local variable.
+  - `typeInfo` (object): Detailed information about the resolved variable type. For maps, this describes the value type.
+  - `containerType` (string): The container type used (e.g., "none", "array", "set", "map").
+  - `note` (string, optional): A note, especially for map variables, regarding Blueprint limitations.
+  - `functionName` (string): Name of the function where the local variable was created.
+  - `blueprintName` (string): Name of the Blueprint owning the function.
+  - `message` (string): A success or error message.
 
 ### list-overridable-functions
 - **Location**: `Implementations/N2CMcpListOverridableFunctionsTool.cpp`
