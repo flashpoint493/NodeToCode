@@ -77,9 +77,12 @@ private:
 
     /** Get the base path where translations are saved */
     FString GetTranslationBasePath() const;
-    
+
+public:    
     /** Get the appropriate file extension for the target language */
     FString GetFileExtensionForLanguage(EN2CCodeLanguage Language) const;
+    
+private:
     
     /** Create directory if it doesn't exist */
     bool EnsureDirectoryExists(const FString& DirectoryPath) const;

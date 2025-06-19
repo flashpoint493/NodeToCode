@@ -84,7 +84,7 @@ private:
     void RegisterToolbarForEditor(TSharedPtr<FBlueprintEditor> InEditor);
 
     /** Execute collect nodes for a specific editor */
-    void ExecuteCollectNodesForEditor(TWeakPtr<FBlueprintEditor> InEditor);
+    void TranslateBlueprintNodesForEditor(TWeakPtr<FBlueprintEditor> InEditor);
 
     /** Execute copy blueprint JSON to clipboard for a specific editor */
     void ExecuteCopyJsonForEditor(TWeakPtr<FBlueprintEditor> InEditor);

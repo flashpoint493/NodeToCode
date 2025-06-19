@@ -387,7 +387,7 @@ void FN2CEditorIntegration::RegisterToolbarForEditor(TSharedPtr<FBlueprintEditor
                 FString::Printf(TEXT("Node to Code collection triggered for Blueprint: %s"), *BlueprintName),
                 EN2CLogSeverity::Info
             );
-            ExecuteCollectNodesForEditor(WeakEditor);
+            TranslateBlueprintNodesForEditor(WeakEditor);
         }),
         FCanExecuteAction::CreateLambda([WeakEditor]()
         {
@@ -504,7 +504,7 @@ FName FN2CEditorIntegration::GetDefaultTheme(EN2CCodeLanguage Language) const
     return TEXT("Unreal Engine");
 }
 
-void FN2CEditorIntegration::ExecuteCollectNodesForEditor(TWeakPtr<FBlueprintEditor> InEditor)
+void FN2CEditorIntegration::TranslateBlueprintNodesForEditor(TWeakPtr<FBlueprintEditor> InEditor)
 {
     // Check if translation is already in progress
     UN2CLLMModule* LLMModule = UN2CLLMModule::Get();
