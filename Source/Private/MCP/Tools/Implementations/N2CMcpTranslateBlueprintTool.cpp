@@ -44,15 +44,13 @@ FMcpToolDefinition FN2CMcpTranslateBlueprintTool::GetDefinition() const
 
 FMcpToolCallResult FN2CMcpTranslateBlueprintTool::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-    // This tool is designed to be run asynchronously.
-    // If called directly (e.g., without a progressToken), it means it wasn't invoked for async handling.
-    // The FN2CMcpHttpServerManager::HandleMcpRequest checks for bIsLongRunningTool and progressToken.
-    // If it's a long-running tool and progressToken is present, it launches an async task.
-    // If progressToken is NOT present for a long-running tool, it should ideally return an error here.
-    // However, the current structure of FN2CMcpHttpServerManager will call this Execute method
-    // even for long-running tools if no progressToken is provided.
-    // For now, we'll log a warning and return an error if called synchronously.
+    // This tool is designed to be run asynchronously via SSE.
+    // If this Execute method is called directly, it means the async path in FN2CMcpHttpServerManager was not taken.
+    FN2CLogger::Get().LogWarning(TEXT("translate-focused-blueprint tool was called synchronously. This indicates an issue with async task setup or a client calling without SSE support."));
     
-    FN2CLogger::Get().LogWarning(TEXT("translate-focused-blueprint tool was called synchronously. This tool is designed for asynchronous execution via progressToken."));
-    return FMcpToolCallResult::CreateErrorResult(TEXT("The 'translate-focused-blueprint' tool must be called asynchronously with a '_meta.progressToken'."));
+    // Provide an error indicating that this tool expects asynchronous handling.
+    return FMcpToolCallResult::CreateErrorResult(
+        TEXT("The 'translate-focused-blueprint' tool is a long-running task and expects to be handled asynchronously via SSE. ")
+        TEXT("This synchronous execution path should not typically be reached. Check server logs for async setup issues.")
+    );
 }

@@ -38,6 +38,9 @@ public:
 		/** Task ID associated with this connection */
 		FGuid TaskId;
 
+		/** Internal unique ID for this connection context (distinct from SessionId or ProgressToken) */
+		FString ConnectionId;
+
 		/** Whether the connection is still active */
 		bool bIsActive = true;
 
@@ -60,8 +63,26 @@ public:
 	 * @param TaskId The async task ID
 	 * @return The connection ID, or empty string if failed
 	 */
+	UE_DEPRECATED(5.4, "Use CreateSSEConnectionAndGetResponse instead.")
 	FString CreateSSEConnection(const TSharedPtr<FHttpServerRequest>& Request, const FString& SessionId,
 		const TSharedPtr<FJsonValue>& OriginalRequestId, const FString& ProgressToken, const FGuid& TaskId);
+	
+	/**
+	 * Creates a new SSE connection and prepares the initial FHttpServerResponse object.
+	 * This response object will contain the necessary SSE headers and potentially the first event(s).
+	 * @param Request The original HTTP request that initiated this SSE stream.
+	 * @param SessionId The MCP session ID.
+	 * @param OriginalRequestId The original JSON-RPC request ID from the MCP request.
+	 * @param ProgressToken The progress token for this SSE stream.
+	 * @param TaskId The async task ID associated with this stream.
+	 * @return A TSharedPtr to an FHttpServerResponse object ready to be sent, or nullptr if failed.
+	 */
+	TSharedPtr<FHttpServerResponse> CreateSSEConnectionAndGetResponse(
+		const TSharedPtr<FHttpServerRequest>& Request,
+		const FString& SessionId,
+		const TSharedPtr<FJsonValue>& OriginalRequestId,
+		const FString& ProgressToken,
+		const FGuid& TaskId);
 
 	/**
 	 * Sends a progress notification over an SSE connection

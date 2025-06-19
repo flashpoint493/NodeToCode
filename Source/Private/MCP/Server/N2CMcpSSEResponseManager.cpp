@@ -48,6 +48,7 @@ FString FN2CMcpSSEResponseManager::CreateSSEConnection(const TSharedPtr<FHttpSer
 	Connection->TaskId = TaskId;
 	Connection->bIsActive = true;
 	Connection->ConnectionTime = FDateTime::Now();
+	Connection->ConnectionId = ConnectionId; // Store the generated ConnectionId
 
 	// Store connection
 	{
@@ -74,6 +75,70 @@ FString FN2CMcpSSEResponseManager::CreateSSEConnection(const TSharedPtr<FHttpSer
 	FN2CLogger::Get().Log(FString::Printf(TEXT("Created SSE connection %s for task %s"), *ConnectionId, *TaskId.ToString()), EN2CLogSeverity::Info);
 
 	return ConnectionId;
+}
+
+TSharedPtr<FHttpServerResponse> FN2CMcpSSEResponseManager::CreateSSEConnectionAndGetResponse(
+    const TSharedPtr<FHttpServerRequest>& Request, 
+    const FString& SessionId,
+    const TSharedPtr<FJsonValue>& OriginalRequestId, 
+    const FString& ProgressToken, 
+    const FGuid& TaskId)
+{
+    if (!Request.IsValid())
+    {
+        FN2CLogger::Get().LogError(TEXT("Cannot create SSE connection with invalid FHttpServerRequest object."));
+        return nullptr;
+    }
+
+    FString InternalConnectionId = FGuid::NewGuid().ToString(); // Internal server-side ID for the connection context
+
+    auto SseHttpResponse = MakeShared<FHttpServerResponse>();
+    SseHttpResponse->Code = EHttpServerResponseCodes::Ok;
+    SseHttpResponse->Headers.Add(TEXT("Content-Type"), { TEXT("text/event-stream") });
+    SseHttpResponse->Headers.Add(TEXT("Cache-Control"), { TEXT("no-cache") });
+    SseHttpResponse->Headers.Add(TEXT("Connection"), { TEXT("keep-alive") });
+    SseHttpResponse->Headers.Add(TEXT("Access-Control-Allow-Origin"), { TEXT("*") }); // For local dev
+    
+    if (!SessionId.IsEmpty())
+    {
+        SseHttpResponse->Headers.Add(TEXT("Mcp-Session-Id"), { SessionId });
+    }
+
+    auto ConnectionContext = MakeShared<FSSEConnection>();
+    ConnectionContext->Request = Request; 
+    ConnectionContext->Response = SseHttpResponse; // Store the response object
+    ConnectionContext->SessionId = SessionId;
+    ConnectionContext->OriginalRequestId = OriginalRequestId;
+    ConnectionContext->ProgressToken = ProgressToken;
+    ConnectionContext->TaskId = TaskId;
+    ConnectionContext->bIsActive = true;
+    ConnectionContext->ConnectionTime = FDateTime::Now();
+    ConnectionContext->ConnectionId = InternalConnectionId;
+
+    {
+        FScopeLock Lock(&ConnectionMapLock);
+        ActiveConnections.Add(InternalConnectionId, ConnectionContext);
+    }
+
+    // Prepare initial SSE events to be part of the first response body chunk
+    FString InitialEventsBody;
+    InitialEventsBody += FormatSSEEvent(TEXT(""), TEXT("comment: SSE connection established")); // SSE Comment
+
+    FJsonRpcNotification TaskStartedNotification;
+    TaskStartedNotification.Method = TEXT("nodetocode/taskStarted");
+    auto ParamsObject = MakeShared<FJsonObject>();
+    ParamsObject->SetStringField(TEXT("taskId"), TaskId.ToString());
+    ParamsObject->SetStringField(TEXT("progressToken"), ProgressToken);
+    TaskStartedNotification.Params = MakeShared<FJsonValueObject>(ParamsObject);
+    InitialEventsBody += FormatSSEEvent(TEXT("notification"), FJsonRpcUtils::SerializeNotification(TaskStartedNotification));
+
+    // Append initial events to the response body
+    FTCHARToUTF8 Converter(*InitialEventsBody);
+    SseHttpResponse->Body.Append((const uint8*)Converter.Get(), Converter.Length());
+
+    FN2CLogger::Get().Log(FString::Printf(TEXT("Created SSE connection context %s for task %s. Initial HTTP response prepared."), *InternalConnectionId, *TaskId.ToString()), EN2CLogSeverity::Info);
+
+    return SseHttpResponse;
 }
 
 bool FN2CMcpSSEResponseManager::SendProgressNotification(const FString& ConnectionId, const FJsonRpcNotification& ProgressNotification)

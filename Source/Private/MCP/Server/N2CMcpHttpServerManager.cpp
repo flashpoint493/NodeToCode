@@ -179,8 +179,8 @@ bool FN2CMcpHttpServerManager::HandleMcpRequest(const FHttpServerRequest& Reques
 	bool bIsLongRunningTool = false;
 	FString ToolName;
 	TSharedPtr<FJsonObject> ToolArguments;
-	TSharedPtr<FJsonValue> RequestId;
-	FString ProgressToken;
+	TSharedPtr<FJsonValue> RequestId; // This is the JSON-RPC request ID
+	FString ProgressToken;           // This is the MCP progress token for SSE
 	
 	// Parse the request to check if it's a tools/call
 	TSharedPtr<FJsonValue> JsonValue;
@@ -227,7 +227,17 @@ bool FN2CMcpHttpServerManager::HandleMcpRequest(const FHttpServerRequest& Reques
 						const TSharedPtr<FJsonObject>* MetaObj = nullptr;
 						if ((*ParamsObj)->TryGetObjectField(TEXT("_meta"), MetaObj) && MetaObj->IsValid())
 						{
-							(*MetaObj)->TryGetStringField(TEXT("progressToken"), ProgressToken);
+                            // PROGRESS TOKEN EXTRACTION
+                            FString ClientProvidedToken;
+							// Ensure _meta.progressToken is a string. If it's present but not a string, treat as invalid.
+							if ((*MetaObj)->TryGetStringField(TEXT("progressToken"), ClientProvidedToken) && !ClientProvidedToken.IsEmpty()) {
+                                ProgressToken = ClientProvidedToken;
+                            } else {
+                                if ((*MetaObj)->HasField(TEXT("progressToken"))) {
+                                    FN2CLogger::Get().LogWarning(TEXT("Client provided _meta.progressToken but it was not a valid string. Will generate a new one."), TEXT("MCP"));
+                                }
+                                // ProgressToken remains empty, will be generated below if needed.
+                            }
 						}
 					}
 				}
@@ -236,52 +246,70 @@ bool FN2CMcpHttpServerManager::HandleMcpRequest(const FHttpServerRequest& Reques
 	}
 	
 	// Handle long-running tools differently
-	if (bIsLongRunningTool && !ProgressToken.IsEmpty())
+    if (bIsLongRunningTool) // NEW CHECK: Always try async if tool is long-running
 	{
+        if (ProgressToken.IsEmpty()) // If client didn't provide one, or it was invalid
+        {
+            ProgressToken = FGuid::NewGuid().ToString(); // Server generates one
+            FN2CLogger::Get().Log(FString::Printf(TEXT("Generated progressToken %s for long-running tool %s as none was provided or was invalid."), *ProgressToken, *ToolName), EN2CLogSeverity::Info);
+        }
+
 		// First launch the async task to get the task ID
 		FGuid TaskId = FN2CToolAsyncTaskManager::Get().LaunchTask(
 			ToolName, 
 			ToolArguments, 
 			ProgressToken, 
-			CurrentSessionId, 
-			RequestId);
+			CurrentSessionId, // Assuming CurrentSessionId is correctly managed for the session
+			RequestId);      // JSON-RPC request ID
 		
 		if (TaskId.IsValid())
 		{
-			// Create SSE connection for the async tool
-			FString ConnectionId = FN2CMcpSSEResponseManager::Get().CreateSSEConnection(
-				MakeShareable(const_cast<FHttpServerRequest*>(&Request)), 
-				CurrentSessionId, 
-				RequestId, 
-				ProgressToken, 
-				TaskId);
-			
-			if (!ConnectionId.IsEmpty())
-			{
-				// The response is now being handled via SSE
-				// We need to return early here without calling OnComplete
-				// The SSE manager will handle the response
-				FN2CLogger::Get().Log(FString::Printf(TEXT("Launched async task %s for tool %s with SSE connection %s"), 
-					*TaskId.ToString(), *ToolName, *ConnectionId), EN2CLogSeverity::Info);
-				return true;
-			}
-			else
-			{
-				FN2CLogger::Get().LogError(TEXT("Failed to create SSE connection for long-running tool"));
-				// Cancel the task since we can't stream the response
-				FN2CToolAsyncTaskManager::Get().CancelTask(TaskId);
-				// Fall back to synchronous processing
-			}
+            // CreateSSEConnectionAndGetResponse will prepare the FHttpServerResponse for SSE
+            TSharedPtr<FHttpServerResponse> SseResponse = FN2CMcpSSEResponseManager::Get().CreateSSEConnectionAndGetResponse(
+                MakeShareable(const_cast<FHttpServerRequest*>(&Request)), // Original request
+                CurrentSessionId, 
+                RequestId, // Original JSON-RPC ID (can be null for notifications, but tools/call should have one)
+                ProgressToken, 
+                TaskId);
+
+            if (SseResponse.IsValid())
+            {
+                // Convert TSharedPtr to TUniquePtr for the OnComplete callback
+                TUniquePtr<FHttpServerResponse> UniqueSseResponse = MakeUnique<FHttpServerResponse>();
+                *UniqueSseResponse = *SseResponse; // Copy data
+
+                OnComplete(MoveTemp(UniqueSseResponse)); // Send the initial SSE headers and first events
+                FN2CLogger::Get().Log(FString::Printf(TEXT("Launched async task %s for tool %s. SSE stream initiated with progressToken %s."), 
+                    *TaskId.ToString(), *ToolName, *ProgressToken), EN2CLogSeverity::Info);
+                return true; // Signify async handling by SSE stream
+            }
+            else
+            {
+                FN2CLogger::Get().LogError(FString::Printf(TEXT("Failed to create/send initial SSE response for long-running tool %s. Task will be cancelled."),*ToolName), TEXT("MCP"));
+				FN2CToolAsyncTaskManager::Get().CancelTask(TaskId); // Cancel if SSE setup fails
+                // Fall through to synchronous error handling below
+            }
 		}
 		else
 		{
-			FN2CLogger::Get().LogError(FString::Printf(TEXT("Failed to launch async task for tool: %s"), *ToolName));
-			// Fall back to synchronous processing
+			FN2CLogger::Get().LogError(FString::Printf(TEXT("Failed to launch async task for tool: %s. Falling back to synchronous error response."), *ToolName), TEXT("MCP"));
+            // Fall through to synchronous error handling below
 		}
 	}
 	
-	// Process the request normally (synchronous)
-	FN2CMcpHttpRequestHandler::ProcessMcpRequest(RequestBody, ResponseBody, StatusCode, bWasInitializeCall);
+	// Process the request normally (synchronous) or handle errors from failed async setup
+    if (bIsLongRunningTool && ProgressToken.IsEmpty()) { // If it was supposed to be async but failed at some point above
+        ResponseBody = FJsonRpcUtils::SerializeResponse(
+            FJsonRpcUtils::CreateErrorResponse(RequestId, JsonRpcErrorCodes::InternalError, 
+                FString::Printf(TEXT("Failed to initiate asynchronous task execution for tool '%s'."), *ToolName)
+            )
+        );
+        StatusCode = 500; // Internal Server Error
+        // Ensure bWasInitializeCall is false for this error path
+        bWasInitializeCall = false; 
+    } else { // Standard synchronous processing for non-long-running tools or successfully handled async tools
+	    FN2CMcpHttpRequestHandler::ProcessMcpRequest(RequestBody, ResponseBody, StatusCode, bWasInitializeCall);
+    }
 
 	// Create response
 	TUniquePtr<FHttpServerResponse> Response = FHttpServerResponse::Create(ResponseBody, TEXT("application/json"));
