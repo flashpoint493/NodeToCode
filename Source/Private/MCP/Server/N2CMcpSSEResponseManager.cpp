@@ -57,7 +57,8 @@ FString FN2CMcpSSEResponseManager::CreateSSEConnection(const TSharedPtr<FHttpSer
 	}
 
 	// Send initial SSE comment to establish connection
-	WriteSSEEvent(Connection, TEXT(""), TEXT("Connection established"));
+	// The FormatSSEEvent will now correctly format this as an SSE comment line.
+	WriteSSEEvent(Connection, TEXT(""), TEXT("comment: Connection established"));
 
 	// Send initial task started notification
 	FJsonRpcNotification TaskStartedNotification;
@@ -122,7 +123,8 @@ TSharedPtr<FHttpServerResponse> FN2CMcpSSEResponseManager::CreateSSEConnectionAn
 
     // Prepare initial SSE events to be part of the first response body chunk
     FString InitialEventsBody;
-    InitialEventsBody += FormatSSEEvent(TEXT(""), TEXT("comment: SSE connection established")); // SSE Comment
+    // FormatSSEEvent will correctly format this as an SSE comment (e.g. ":comment: SSE connection established\n\n")
+    InitialEventsBody += FormatSSEEvent(TEXT(""), TEXT("comment: SSE connection established")); 
 
     FJsonRpcNotification TaskStartedNotification;
     TaskStartedNotification.Method = TEXT("nodetocode/taskStarted");
@@ -333,24 +335,37 @@ bool FN2CMcpSSEResponseManager::WriteSSEEvent(const TSharedPtr<FSSEConnection>& 
 FString FN2CMcpSSEResponseManager::FormatSSEEvent(const FString& EventType, const FString& Data) const
 {
 	FString SSEEvent;
-	
-	// Add event type if specified
-	if (!EventType.IsEmpty())
+
+	// Handle SSE comments
+	// If EventType is empty and Data starts with "comment:", treat as an SSE comment.
+	if (EventType.IsEmpty() && Data.StartsWith(TEXT("comment:")))
 	{
-		SSEEvent += FString::Printf(TEXT("event: %s\n"), *EventType);
+		// SSE comments start with a colon.
+		// Example: ": This is a comment"
+		// The "comment:" prefix is a convention for our internal Data string, 
+		// the actual SSE comment line starts with ':'
+		SSEEvent += FString::Printf(TEXT(":%s\n\n"), *Data); // Ensure double newline to terminate the comment/event
 	}
-	
-	// Split data into lines and format each line
-	TArray<FString> Lines;
-	Data.ParseIntoArray(Lines, TEXT("\n"), false);
-	
-	for (const FString& Line : Lines)
+	else
 	{
-		SSEEvent += FString::Printf(TEXT("data: %s\n"), *Line);
+		// Add event type if specified
+		if (!EventType.IsEmpty())
+		{
+			SSEEvent += FString::Printf(TEXT("event: %s\n"), *EventType);
+		}
+		
+		// Split data into lines and format each line
+		TArray<FString> Lines;
+		Data.ParseIntoArray(Lines, TEXT("\n"), false);
+		
+		for (const FString& Line : Lines)
+		{
+			SSEEvent += FString::Printf(TEXT("data: %s\n"), *Line);
+		}
+		
+		// End event with double newline
+		SSEEvent += TEXT("\n");
 	}
-	
-	// End event with double newline
-	SSEEvent += TEXT("\n");
 	
 	return SSEEvent;
 }
