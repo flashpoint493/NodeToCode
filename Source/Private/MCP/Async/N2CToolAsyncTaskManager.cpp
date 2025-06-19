@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
 #include "MCP/Async/N2CToolAsyncTaskManager.h"
+#include "MCP/Async/N2CTranslateBlueprintAsyncTask.h"
 #include "MCP/Server/N2CMcpHttpServerManager.h"
 #include "MCP/Server/N2CMcpJsonRpcTypes.h"
 #include "MCP/Tools/N2CMcpToolManager.h"
@@ -230,6 +231,10 @@ TSharedPtr<IN2CToolAsyncTask> FN2CToolAsyncTaskManager::CreateAsyncTask(const FS
 	// For now, we'll need to implement specific async task classes for each long-running tool
 	// This is a placeholder that returns nullptr - actual implementation will be added when updating specific tools
 	
+	if (ToolName == TEXT("translate-focused-blueprint"))
+	{
+		return MakeShared<FN2CTranslateBlueprintAsyncTask>(TaskId, ProgressToken, Arguments);
+	}
 	// TODO: Create factory method or registry for async task creation based on tool name
 	// Example: if (ToolName == "translate-blueprint") return MakeShared<FN2CTranslateBlueprintAsyncTask>(TaskId, ProgressToken, Arguments);
 	

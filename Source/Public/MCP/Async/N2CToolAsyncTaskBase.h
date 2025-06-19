@@ -55,6 +55,9 @@ protected:
 	 * @return true if cancelled (and error was reported), false if not cancelled
 	 */
 	bool CheckCancellationAndReport();
+	
+	/** Tool arguments */
+	TSharedPtr<FJsonObject> Arguments;
 
 private:
 	/** Unique task identifier */
@@ -65,9 +68,6 @@ private:
 
 	/** Name of the tool being executed */
 	FString ToolName;
-
-	/** Tool arguments */
-	TSharedPtr<FJsonObject> Arguments;
 
 	/** Thread-safe cancellation flag */
 	FThreadSafeBool bCancellationRequested;

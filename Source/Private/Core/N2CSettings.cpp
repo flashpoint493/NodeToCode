@@ -303,6 +303,53 @@ void UN2CSettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyChanged
     );
 }
 
+FString UN2CSettings::GetActiveApiKeyForProvider(EN2CLLMProvider InProvider) const
+{
+    if (!UserSecrets)
+    {
+        // Create and load secrets if not already done
+        UserSecrets = NewObject<UN2CUserSecrets>();
+        UserSecrets->LoadSecrets();
+    }
+
+    switch (InProvider)
+    {
+        case EN2CLLMProvider::OpenAI:
+            return UserSecrets->OpenAI_API_Key;
+        case EN2CLLMProvider::Anthropic:
+            return UserSecrets->Anthropic_API_Key;
+        case EN2CLLMProvider::Gemini:
+            return UserSecrets->Gemini_API_Key;
+        case EN2CLLMProvider::DeepSeek:
+            return UserSecrets->DeepSeek_API_Key;
+        case EN2CLLMProvider::LMStudio:
+            return TEXT("lm-studio"); // LM Studio just requires a dummy API key for its OpenAI endpoint
+        default:
+            return FString();
+    }
+}
+
+FString UN2CSettings::GetActiveModelForProvider(EN2CLLMProvider InProvider) const
+{
+    switch (InProvider)
+    {
+        case EN2CLLMProvider::OpenAI:
+            return FN2CLLMModelUtils::GetOpenAIModelValue(OpenAI_Model);
+        case EN2CLLMProvider::Anthropic:
+            return FN2CLLMModelUtils::GetAnthropicModelValue(AnthropicModel);
+        case EN2CLLMProvider::Gemini:
+            return FN2CLLMModelUtils::GetGeminiModelValue(Gemini_Model);
+        case EN2CLLMProvider::DeepSeek:
+            return FN2CLLMModelUtils::GetDeepSeekModelValue(DeepSeekModel);
+        case EN2CLLMProvider::Ollama:
+            return OllamaModel;
+        case EN2CLLMProvider::LMStudio:
+            return LMStudioModel;
+        default:
+            return FString();
+    }
+}
+
 #undef LOCTEXT_NAMESPACE
 const FN2CCodeEditorColors* UN2CSettings::GetThemeColors(EN2CCodeLanguage Language, const FName& ThemeName) const
 {

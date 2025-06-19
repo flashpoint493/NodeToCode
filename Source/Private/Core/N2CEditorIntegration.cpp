@@ -596,3 +596,114 @@ void FN2CEditorIntegration::TranslateFocusedBlueprintGraph()
     // Call the existing translation function with the active editor
     TranslateBlueprintNodesForEditor(ActiveEditor);
 }
+
+void FN2CEditorIntegration::TranslateFocusedBlueprintAsync(
+    const FString& ProviderIdOverride,
+    const FString& ModelIdOverride,
+    const FString& LanguageIdOverride,
+    FOnLLMResponseReceived OnComplete)
+{
+    // This initial part MUST run on GameThread if GetFocusedBlueprintAsJson is not thread-safe
+    // GetFocusedBlueprintAsJson itself handles some GameThread dispatching for its internal calls.
+    // However, the overall call to TranslateFocusedBlueprintAsync is expected from a worker thread.
+    // So, we'll dispatch the JSON retrieval to the game thread and wait.
+    
+    TPromise<FString> JsonPromise;
+    TFuture<FString> JsonFuture = JsonPromise.GetFuture();
+
+    AsyncTask(ENamedThreads::GameThread, [this, &JsonPromise]()
+    {
+        FString ErrorMsg;
+        FString JsonInput = GetFocusedBlueprintAsJson(false /*bPrettyPrint*/, ErrorMsg);
+        if (JsonInput.IsEmpty())
+        {
+            JsonPromise.SetValue(FString::Printf(TEXT("{\"error\":\"Failed to get Blueprint JSON: %s\"}"), *ErrorMsg));
+        }
+        else
+        {
+            JsonPromise.SetValue(JsonInput);
+        }
+    });
+
+    JsonFuture.Wait(); // Wait for the game thread task to complete
+    FString JsonInput = JsonFuture.Get();
+
+    if (JsonInput.StartsWith(TEXT("{\"error\":")))
+    {
+        OnComplete.ExecuteIfBound(JsonInput);
+        return;
+    }
+
+    UN2CLLMModule* LLMModule = UN2CLLMModule::Get();
+    if (!LLMModule || !LLMModule->IsInitialized())
+    {
+        // Attempt to initialize if not already
+        if (!LLMModule || !LLMModule->Initialize())
+        {
+             OnComplete.ExecuteIfBound(TEXT("{\"error\":\"LLMModule failed to initialize.\"}"));
+             return;
+        }
+    }
+    
+    const UN2CSettings* Settings = GetDefault<UN2CSettings>();
+    
+    FN2CLLMConfig RequestConfig = LLMModule->GetConfig(); // Start with default config from module
+
+    EN2CLLMProvider FinalProvider = RequestConfig.Provider;
+    if (!ProviderIdOverride.IsEmpty())
+    {
+        const UEnum* ProviderEnum = StaticEnum<EN2CLLMProvider>();
+        int64 EnumValue = ProviderEnum->GetValueByNameString(ProviderIdOverride, EGetByNameFlags::CaseSensitive);
+        if (EnumValue == INDEX_NONE) // Try with "EN2CLLMProvider::" prefix
+        {
+            EnumValue = ProviderEnum->GetValueByNameString(FString(TEXT("EN2CLLMProvider::")) + ProviderIdOverride, EGetByNameFlags::CaseSensitive);
+        }
+
+        if (EnumValue != INDEX_NONE)
+        {
+            FinalProvider = static_cast<EN2CLLMProvider>(EnumValue);
+        }
+        else
+        {
+            FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Invalid ProviderId '%s' provided. Using default: %s"), 
+                *ProviderIdOverride, *UEnum::GetValueAsString(FinalProvider)));
+        }
+    }
+    RequestConfig.Provider = FinalProvider;
+    RequestConfig.ApiKey = Settings->GetActiveApiKeyForProvider(FinalProvider); // Get API key for the potentially overridden provider
+
+    if (!ModelIdOverride.IsEmpty())
+    {
+        RequestConfig.Model = ModelIdOverride;
+    }
+    else
+    {
+        // If provider was overridden (or not), get the default model for the final provider
+        RequestConfig.Model = Settings->GetActiveModelForProvider(FinalProvider);
+    }
+    
+    EN2CCodeLanguage TargetLanguage = Settings->TargetLanguage; // Default from settings
+    if (!LanguageIdOverride.IsEmpty())
+    {
+        const UEnum* LangEnum = StaticEnum<EN2CCodeLanguage>();
+        FString SearchLangId = LanguageIdOverride;
+        int64 EnumValue = LangEnum->GetValueByNameString(SearchLangId, EGetByNameFlags::CaseSensitive);
+        if (EnumValue == INDEX_NONE) // Try with "EN2CCodeLanguage::" prefix
+        {
+            EnumValue = LangEnum->GetValueByNameString(FString(TEXT("EN2CCodeLanguage::")) + SearchLangId, EGetByNameFlags::CaseSensitive);
+        }
+
+        if (EnumValue != INDEX_NONE)
+        {
+            TargetLanguage = static_cast<EN2CCodeLanguage>(EnumValue);
+        }
+        else
+        {
+             FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Invalid LanguageId '%s' provided. Using default: %s"), 
+                *LanguageIdOverride, *UEnum::GetValueAsString(TargetLanguage)));
+        }
+    }
+
+    // Now call the LLMModule method that handles overrides
+    LLMModule->ProcessN2CJsonWithOverrides(JsonInput, RequestConfig, TargetLanguage, OnComplete);
+}

@@ -496,3 +496,87 @@ void UN2CLLMModule::InitializeProviderRegistry()
     
     FN2CLogger::Get().Log(TEXT("Provider registry initialized"), EN2CLogSeverity::Info, TEXT("LLMModule"));
 }
+
+void UN2CLLMModule::ProcessN2CJsonWithOverrides(
+    const FString& JsonInput,
+    const FN2CLLMConfig& RequestConfig,
+    EN2CCodeLanguage RequestLanguage,
+    const FOnLLMResponseReceived& OnComplete)
+{
+    CurrentStatus = EN2CSystemStatus::Processing;
+    // Note: We don't broadcast OnTranslationRequestSent here as this is for a specific tool call,
+    // not necessarily a UI-driven translation. The async task can report its own start.
+
+    FN2CLogger::Get().Log(
+        FString::Printf(TEXT("Processing N2C JSON with overrides. Provider: %s, Model: %s, Language: %s"),
+            *UEnum::GetValueAsString(RequestConfig.Provider), *RequestConfig.Model, *UEnum::GetValueAsString(RequestLanguage)),
+        EN2CLogSeverity::Info, TEXT("LLMModule")
+    );
+
+    TScriptInterface<IN2CLLMService> TempService = UN2CLLMProviderRegistry::Get()->CreateProvider(RequestConfig.Provider, this);
+    if (!TempService.GetInterface() || !TempService->Initialize(RequestConfig))
+    {
+        FString ErrorMsg = TEXT("Failed to create/initialize temporary service for override request.");
+        FN2CLogger::Get().LogError(ErrorMsg, TEXT("LLMModule"));
+        OnComplete.ExecuteIfBound(FString::Printf(TEXT("{\"error\":\"%s\"}"), *ErrorMsg));
+        CurrentStatus = EN2CSystemStatus::Error;
+        return;
+    }
+    
+    // Create a temporary prompt manager for this request to ensure correct language-specific prompt
+    UN2CSystemPromptManager* TempPromptManager = NewObject<UN2CSystemPromptManager>(this);
+    TempPromptManager->Initialize(RequestConfig); // Initialize with the request-specific config
+    FString SystemPrompt = TempPromptManager->GetLanguageSpecificPrompt(TEXT("CodeGen"), RequestLanguage);
+
+    TempService->SendRequest(JsonInput, SystemPrompt, FOnLLMResponseReceived::CreateLambda(
+        [this, TempService, OnComplete, RequestConfigCopy = RequestConfig](const FString& RawResponse)
+        {
+            FN2CTranslationResponse TranslationResponse;
+            UN2CResponseParserBase* Parser = TempService->GetResponseParser(); // Get parser from the temp service
+            bool bParseSuccess = Parser && Parser->ParseLLMResponse(RawResponse, TranslationResponse);
+
+            if (bParseSuccess)
+            {
+                CurrentStatus = EN2CSystemStatus::Idle; // Reset status after successful processing
+
+                TSharedPtr<FJsonObject> ResultJson = MakeShared<FJsonObject>();
+                TArray<TSharedPtr<FJsonValue>> GraphsJsonArray;
+                for (const auto& graph : TranslationResponse.Graphs)
+                {
+                    TSharedPtr<FJsonObject> GraphJson = MakeShared<FJsonObject>();
+                    GraphJson->SetStringField(TEXT("graph_name"), graph.GraphName);
+                    GraphJson->SetStringField(TEXT("graph_type"), graph.GraphType);
+                    GraphJson->SetStringField(TEXT("graph_class"), graph.GraphClass);
+                    
+                    TSharedPtr<FJsonObject> CodeJson = MakeShared<FJsonObject>();
+                    CodeJson->SetStringField(TEXT("graphDeclaration"), graph.Code.GraphDeclaration);
+                    CodeJson->SetStringField(TEXT("graphImplementation"), graph.Code.GraphImplementation);
+                    CodeJson->SetStringField(TEXT("implementationNotes"), graph.Code.ImplementationNotes);
+                    GraphJson->SetObjectField(TEXT("code"), CodeJson);
+                    
+                    GraphsJsonArray.Add(MakeShared<FJsonValueObject>(GraphJson));
+                }
+                ResultJson->SetArrayField(TEXT("graphs"), GraphsJsonArray);
+                
+                TSharedPtr<FJsonObject> UsageJson = MakeShared<FJsonObject>();
+                UsageJson->SetNumberField(TEXT("input_tokens"), TranslationResponse.Usage.InputTokens);
+                UsageJson->SetNumberField(TEXT("output_tokens"), TranslationResponse.Usage.OutputTokens);
+                ResultJson->SetObjectField(TEXT("usage"), UsageJson);
+                
+                FString OutputJsonString;
+                TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutputJsonString);
+                FJsonSerializer::Serialize(ResultJson.ToSharedRef(), Writer);
+
+                OnComplete.ExecuteIfBound(OutputJsonString);
+            }
+            else
+            {
+                CurrentStatus = EN2CSystemStatus::Error; // Set error status
+                FString ErrorDetail = FString::Printf(TEXT("{\"error\":\"Failed to parse LLM response from provider %s for model %s. Raw response snippet: %s\"}"),
+                    *UEnum::GetValueAsString(RequestConfigCopy.Provider), *RequestConfigCopy.Model, *RawResponse.Left(500));
+                FN2CLogger::Get().LogError(ErrorDetail, TEXT("LLMModule"));
+                OnComplete.ExecuteIfBound(ErrorDetail);
+            }
+        }
+    ));
+}

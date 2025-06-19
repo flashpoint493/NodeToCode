@@ -36,6 +36,14 @@ public:
         const FOnLLMResponseReceived& OnComplete
     );
 
+    /** Process N2C JSON through LLM with specific overrides for provider, model, and language */
+    void ProcessN2CJsonWithOverrides(
+        const FString& JsonInput,
+        const FN2CLLMConfig& RequestConfig,
+        EN2CCodeLanguage RequestLanguage,
+        const FOnLLMResponseReceived& OnComplete
+    );
+
     /** Get the current configuration */
     UFUNCTION(BlueprintCallable, Category = "Node to Code | LLM Module")
     const FN2CLLMConfig& GetConfig() const { return Config; }

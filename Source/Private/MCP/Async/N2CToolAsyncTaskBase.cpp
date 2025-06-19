@@ -4,10 +4,10 @@
 #include "Utils/N2CLogger.h"
 
 FN2CToolAsyncTaskBase::FN2CToolAsyncTaskBase(const FGuid& InTaskId, const FString& InProgressToken, const FString& InToolName, const TSharedPtr<FJsonObject>& InArguments)
-	: TaskId(InTaskId)
+	: Arguments(InArguments)
+	, TaskId(InTaskId)
 	, ProgressToken(InProgressToken)
 	, ToolName(InToolName)
-	, Arguments(InArguments)
 	, bCancellationRequested(false)
 	, bHasCompleted(false)
 {

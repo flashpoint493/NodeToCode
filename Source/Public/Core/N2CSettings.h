@@ -487,6 +487,12 @@ public:
     /** Get the model for the selected provider */
     FString GetActiveModel() const;
 
+    /** Get the API key for a specific provider */
+    FString GetActiveApiKeyForProvider(EN2CLLMProvider Provider) const;
+
+    /** Get the model for a specific provider */
+    FString GetActiveModelForProvider(EN2CLLMProvider Provider) const;
+
     /** Get the minimum severity level for logging */
     EN2CLogSeverity GetMinLogSeverity() const { return MinSeverity; }
 
