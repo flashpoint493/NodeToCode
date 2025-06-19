@@ -10,6 +10,10 @@
 #include "MCP/Resources/N2CMcpResourceManager.h"
 #include "MCP/Prompts/N2CMcpPromptManager.h"
 #include "MCP/Validation/N2CMcpRequestValidator.h"
+#include "MCP/Server/N2CMcpHttpServerManager.h"
+#include "MCP/Server/N2CMcpSSEResponseManager.h"
+#include "MCP/Async/N2CToolAsyncTaskManager.h"
+#include "HttpServerRequest.h"
 
 // Define supported protocol versions in order of preference (newest first)
 const TArray<FString> FN2CMcpHttpRequestHandler::SUPPORTED_PROTOCOL_VERSIONS = {
@@ -214,6 +218,10 @@ bool FN2CMcpHttpRequestHandler::DispatchMethod(const FString& Method, const TSha
 	else if (Method == TEXT("prompts/get"))
 	{
 		return HandlePromptsGet(Params, Id, OutResponse);
+	}
+	else if (Method == TEXT("nodetocode/cancelTask"))
+	{
+		return HandleCancelTask(Params, Id, OutResponse);
 	}
 	else
 	{
@@ -780,6 +788,69 @@ bool FN2CMcpHttpRequestHandler::HandlePromptsGet(const TSharedPtr<FJsonValue>& P
 
 	// Create success response
 	OutResponse = FJsonRpcUtils::CreateSuccessResponse(Id, MakeShareable(new FJsonValueObject(ResultJson)));
+
+	return true;
+}
+
+bool FN2CMcpHttpRequestHandler::HandleCancelTask(const TSharedPtr<FJsonValue>& Params, const TSharedPtr<FJsonValue>& Id, FJsonRpcResponse& OutResponse)
+{
+	FN2CLogger::Get().Log(TEXT("Processing nodetocode/cancelTask request"), EN2CLogSeverity::Info);
+
+	// Validate params using the validation framework
+	TSharedPtr<FJsonObject> ParamsObject;
+	FString ValidationError;
+	if (!FN2CMcpRequestValidator::ValidateParamsIsObject(Params, ParamsObject, ValidationError))
+	{
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("nodetocode/cancelTask validation failed: %s"), *ValidationError));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, ValidationError);
+		return true;
+	}
+
+	// Extract progress token
+	FString ProgressToken;
+	if (!ParamsObject->TryGetStringField(TEXT("progressToken"), ProgressToken))
+	{
+		FN2CLogger::Get().LogWarning(TEXT("nodetocode/cancelTask missing required parameter: progressToken"));
+		OutResponse = FJsonRpcUtils::CreateErrorResponse(Id, JsonRpcErrorCodes::InvalidParams, TEXT("Missing required parameter: progressToken"));
+		return true;
+	}
+
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Attempting to cancel task with progress token: %s"), *ProgressToken), EN2CLogSeverity::Info);
+
+	// Attempt to cancel the task
+	bool bCancelled = FN2CToolAsyncTaskManager::Get().CancelTaskByProgressToken(ProgressToken);
+
+	// Create result object
+	TSharedPtr<FJsonObject> ResultObject = MakeShareable(new FJsonObject);
+	
+	if (bCancelled)
+	{
+		ResultObject->SetStringField(TEXT("status"), TEXT("cancellation_initiated"));
+		FN2CLogger::Get().Log(FString::Printf(TEXT("Successfully initiated cancellation for task with progress token: %s"), *ProgressToken), EN2CLogSeverity::Info);
+	}
+	else
+	{
+		// Task not found or already completed
+		auto TaskContext = FN2CToolAsyncTaskManager::Get().GetTaskContextByProgressToken(ProgressToken);
+		if (!TaskContext.IsValid())
+		{
+			ResultObject->SetStringField(TEXT("status"), TEXT("task_not_found"));
+			FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Task not found for progress token: %s"), *ProgressToken));
+		}
+		else if (!FN2CToolAsyncTaskManager::Get().IsTaskRunning(TaskContext->TaskId))
+		{
+			ResultObject->SetStringField(TEXT("status"), TEXT("task_already_completed"));
+			FN2CLogger::Get().Log(FString::Printf(TEXT("Task already completed for progress token: %s"), *ProgressToken), EN2CLogSeverity::Info);
+		}
+		else
+		{
+			ResultObject->SetStringField(TEXT("status"), TEXT("cancellation_not_supported"));
+			FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Task does not support cancellation: %s"), *ProgressToken));
+		}
+	}
+
+	// Create success response
+	OutResponse = FJsonRpcUtils::CreateSuccessResponse(Id, MakeShareable(new FJsonValueObject(ResultObject)));
 
 	return true;
 }

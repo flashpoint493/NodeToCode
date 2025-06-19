@@ -29,6 +29,10 @@ struct NODETOCODE_API FMcpToolDefinition
 	/** Optional annotations for the tool (e.g., readOnlyHint) */
 	TSharedPtr<FJsonObject> Annotations;
 
+	/** Whether this tool is long-running and should use async execution */
+	UPROPERTY()
+	bool bIsLongRunning = false;
+
 	FMcpToolDefinition()
 	{
 	}

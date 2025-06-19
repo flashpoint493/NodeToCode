@@ -13,6 +13,8 @@
 #include "MCP/Prompts/N2CMcpPromptManager.h"
 #include "MCP/Prompts/Implementations/N2CMcpCodeGenerationPrompt.h"
 #include "Core/N2CSettings.h"
+#include "MCP/Server/N2CMcpSSEResponseManager.h"
+#include "MCP/Async/N2CToolAsyncTaskManager.h"
 
 FN2CMcpHttpServerManager& FN2CMcpHttpServerManager::Get()
 {
@@ -173,7 +175,112 @@ bool FN2CMcpHttpServerManager::HandleMcpRequest(const FHttpServerRequest& Reques
 		ClientSentSessionId = (*SessionIdHeaders)[0];
 	}
 
-	// Process the request
+	// Check if this is a tools/call request for a long-running tool
+	bool bIsLongRunningTool = false;
+	FString ToolName;
+	TSharedPtr<FJsonObject> ToolArguments;
+	TSharedPtr<FJsonValue> RequestId;
+	FString ProgressToken;
+	
+	// Parse the request to check if it's a tools/call
+	TSharedPtr<FJsonValue> JsonValue;
+	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(RequestBody);
+	if (FJsonSerializer::Deserialize(Reader, JsonValue) && JsonValue.IsValid() && JsonValue->Type == EJson::Object)
+	{
+		TSharedPtr<FJsonObject> RequestObject = JsonValue->AsObject();
+		FString Method;
+		if (RequestObject->TryGetStringField(TEXT("method"), Method) && Method == TEXT("tools/call"))
+		{
+			// Extract the tool name and check if it's long-running
+			const TSharedPtr<FJsonObject>* ParamsObj = nullptr;
+			if (RequestObject->TryGetObjectField(TEXT("params"), ParamsObj) && ParamsObj->IsValid())
+			{
+				(*ParamsObj)->TryGetStringField(TEXT("name"), ToolName);
+				
+				// Check if tool is long-running
+				if (!ToolName.IsEmpty())
+				{
+					const FMcpToolDefinition* ToolDef = FN2CMcpToolManager::Get().GetToolDefinition(ToolName);
+					if (ToolDef && ToolDef->bIsLongRunning)
+					{
+						bIsLongRunningTool = true;
+						
+						// Extract arguments
+						const TSharedPtr<FJsonObject>* ArgsObj = nullptr;
+						if ((*ParamsObj)->TryGetObjectField(TEXT("arguments"), ArgsObj) && ArgsObj->IsValid())
+						{
+							ToolArguments = *ArgsObj;
+						}
+						else
+						{
+							ToolArguments = MakeShareable(new FJsonObject);
+						}
+						
+						// Extract request ID
+						RequestId = RequestObject->TryGetField(TEXT("id"));
+						if (!RequestId.IsValid())
+						{
+							RequestId = MakeShareable(new FJsonValueNull());
+						}
+						
+						// Extract progress token from _meta
+						const TSharedPtr<FJsonObject>* MetaObj = nullptr;
+						if ((*ParamsObj)->TryGetObjectField(TEXT("_meta"), MetaObj) && MetaObj->IsValid())
+						{
+							(*MetaObj)->TryGetStringField(TEXT("progressToken"), ProgressToken);
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	// Handle long-running tools differently
+	if (bIsLongRunningTool && !ProgressToken.IsEmpty())
+	{
+		// First launch the async task to get the task ID
+		FGuid TaskId = FN2CToolAsyncTaskManager::Get().LaunchTask(
+			ToolName, 
+			ToolArguments, 
+			ProgressToken, 
+			CurrentSessionId, 
+			RequestId);
+		
+		if (TaskId.IsValid())
+		{
+			// Create SSE connection for the async tool
+			FString ConnectionId = FN2CMcpSSEResponseManager::Get().CreateSSEConnection(
+				MakeShareable(const_cast<FHttpServerRequest*>(&Request)), 
+				CurrentSessionId, 
+				RequestId, 
+				ProgressToken, 
+				TaskId);
+			
+			if (!ConnectionId.IsEmpty())
+			{
+				// The response is now being handled via SSE
+				// We need to return early here without calling OnComplete
+				// The SSE manager will handle the response
+				FN2CLogger::Get().Log(FString::Printf(TEXT("Launched async task %s for tool %s with SSE connection %s"), 
+					*TaskId.ToString(), *ToolName, *ConnectionId), EN2CLogSeverity::Info);
+				return true;
+			}
+			else
+			{
+				FN2CLogger::Get().LogError(TEXT("Failed to create SSE connection for long-running tool"));
+				// Cancel the task since we can't stream the response
+				FN2CToolAsyncTaskManager::Get().CancelTask(TaskId);
+				// Fall back to synchronous processing
+			}
+		}
+		else
+		{
+			FN2CLogger::Get().LogError(FString::Printf(TEXT("Failed to launch async task for tool: %s"), *ToolName));
+			// Fall back to synchronous processing
+		}
+	}
+	
+	// Process the request normally (synchronous)
 	FN2CMcpHttpRequestHandler::ProcessMcpRequest(RequestBody, ResponseBody, StatusCode, bWasInitializeCall);
 
 	// Create response
@@ -476,4 +583,73 @@ void FN2CMcpHttpServerManager::SetSessionProtocolVersion(const FString& SessionI
 	
 	FN2CLogger::Get().Log(FString::Printf(TEXT("Set protocol version '%s' for session: %s"), 
 		*ProtocolVersion, *SessionId), EN2CLogSeverity::Debug);
+}
+
+void FN2CMcpHttpServerManager::SendAsyncTaskProgress(const FString& SessionId, const FJsonRpcNotification& ProgressNotification)
+{
+	// Find the SSE connection for this progress notification
+	if (ProgressNotification.Params.IsValid() && ProgressNotification.Params->Type == EJson::Object)
+	{
+		TSharedPtr<FJsonObject> ParamsObj = ProgressNotification.Params->AsObject();
+		FString ProgressToken;
+		if (ParamsObj->TryGetStringField(TEXT("progressToken"), ProgressToken))
+		{
+			FString ConnectionId = FN2CMcpSSEResponseManager::Get().FindConnectionByProgressToken(ProgressToken);
+			if (!ConnectionId.IsEmpty())
+			{
+				FN2CMcpSSEResponseManager::Get().SendProgressNotification(ConnectionId, ProgressNotification);
+			}
+			else
+			{
+				FN2CLogger::Get().LogWarning(FString::Printf(TEXT("No SSE connection found for progress token: %s"), *ProgressToken));
+			}
+		}
+	}
+}
+
+void FN2CMcpHttpServerManager::SendAsyncTaskResponse(const FString& SessionId, const TSharedPtr<FJsonValue>& OriginalRequestId, const FMcpToolCallResult& Result)
+{
+	// Find the task context to get the connection info
+	auto TaskContext = FN2CToolAsyncTaskManager::Get().GetTaskContextByProgressToken(SessionId);
+	if (!TaskContext.IsValid())
+	{
+		FN2CLogger::Get().LogError(FString::Printf(TEXT("No task context found for session: %s"), *SessionId));
+		return;
+	}
+
+	// Find the SSE connection
+	FString ConnectionId = FN2CMcpSSEResponseManager::Get().FindConnectionByTaskId(TaskContext->TaskId);
+	if (ConnectionId.IsEmpty())
+	{
+		FN2CLogger::Get().LogError(FString::Printf(TEXT("No SSE connection found for task: %s"), *TaskContext->TaskId.ToString()));
+		return;
+	}
+
+	// Create the JSON-RPC response
+	FJsonRpcResponse Response;
+	Response.Id = OriginalRequestId;
+	
+	if (Result.bIsError)
+	{
+		// Create error response
+		FString ErrorMessage = TEXT("Tool execution failed");
+		
+		// Extract error message from the result content
+		if (Result.Content.Num() > 0 && Result.Content[0].IsValid())
+		{
+			Result.Content[0]->TryGetStringField(TEXT("text"), ErrorMessage);
+		}
+		
+		// Create error object
+		FJsonRpcError ErrorObj(-32603, ErrorMessage);
+		Response.Error = ErrorObj.ToJson();
+	}
+	else
+	{
+		// Create success response with the tool result
+		Response.Result = MakeShared<FJsonValueObject>(Result.ToJson());
+	}
+
+	// Send the final response and close the SSE connection
+	FN2CMcpSSEResponseManager::Get().SendFinalResponse(ConnectionId, Response);
 }

@@ -32,7 +32,7 @@ public class NodeToCode : ModuleRules
 				"ToolMenus",
 				"ApplicationCore",
 				"Projects",
-				"HttpServer"
+				"HTTPServer"
 			}
 		);
         

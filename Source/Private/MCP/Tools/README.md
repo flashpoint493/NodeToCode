@@ -35,6 +35,166 @@ Tools are automatically registered when the plugin loads using static initializa
 - Uses the `REGISTER_MCP_TOOL` macro in its .cpp file
 - Is automatically registered with the MCP tool manager when the server starts
 
+## Long-Running Tools and Async Execution
+
+NodeToCode now supports asynchronous execution for long-running tools (e.g., LLM translation, complex analysis). This prevents the MCP server from timing out and provides progress feedback to clients.
+
+### How Async Tools Work
+
+1. **Tool Declaration**: Mark a tool as long-running by setting `bIsLongRunning = true` in its definition
+2. **SSE Streaming**: Long-running tools use Server-Sent Events (SSE) to stream progress and results
+3. **Progress Reporting**: Tools can report progress incrementally during execution
+4. **Cancellation**: Clients can cancel running tasks using the `nodetocode/cancelTask` method
+
+### Creating a Long-Running Tool
+
+To create a long-running tool, you need to:
+
+1. Mark the tool as long-running in its definition
+2. Create an async task class that implements `IN2CToolAsyncTask`
+3. Register the async task in the tool manager
+
+Here's an example:
+
+```cpp
+// In your tool's GetDefinition() method
+FMcpToolDefinition FN2CMcpLongRunningTool::GetDefinition() const
+{
+    FMcpToolDefinition Definition(
+        TEXT("long-running-tool"),
+        TEXT("A tool that takes time to complete")
+    );
+    
+    // Mark as long-running
+    Definition.bIsLongRunning = true;
+    
+    // Define input schema as usual
+    Definition.InputSchema = BuildInputSchema(Properties, Required);
+    
+    return Definition;
+}
+```
+
+### Creating an Async Task
+
+Create a task class that inherits from `FN2CToolAsyncTaskBase`:
+
+```cpp
+// N2CMyAsyncTask.h
+#pragma once
+
+#include "MCP/Async/N2CToolAsyncTaskBase.h"
+
+class FN2CMyAsyncTask : public FN2CToolAsyncTaskBase
+{
+public:
+    FN2CMyAsyncTask(const FGuid& TaskId, const FString& ProgressToken, 
+        const TSharedPtr<FJsonObject>& Arguments)
+        : FN2CToolAsyncTaskBase(TaskId, ProgressToken, TEXT("long-running-tool"), Arguments)
+    {
+    }
+
+    virtual void Execute() override;
+};
+
+// N2CMyAsyncTask.cpp
+void FN2CMyAsyncTask::Execute()
+{
+    // Check for cancellation at the start
+    if (CheckCancellationAndReport())
+    {
+        return;
+    }
+
+    // Report initial progress
+    ReportProgress(0.0f, TEXT("Starting processing..."));
+
+    // Simulate long-running work
+    for (int32 i = 0; i < 100; i++)
+    {
+        // Check cancellation periodically
+        if (CheckCancellationAndReport())
+        {
+            return;
+        }
+
+        // Do some work...
+        FPlatformProcess::Sleep(0.1f);
+
+        // Report progress
+        float Progress = (i + 1) / 100.0f;
+        ReportProgress(Progress, FString::Printf(TEXT("Processing step %d of 100"), i + 1));
+    }
+
+    // Report completion
+    FMcpToolCallResult Result = FMcpToolCallResult::CreateTextResult(TEXT("Processing complete!"));
+    ReportComplete(Result);
+}
+```
+
+### Registering the Async Task
+
+Update `FN2CToolAsyncTaskManager::CreateAsyncTask` to create your task:
+
+```cpp
+if (ToolName == TEXT("long-running-tool"))
+{
+    return MakeShared<FN2CMyAsyncTask>(TaskId, ProgressToken, Arguments);
+}
+```
+
+### Client Usage with Progress
+
+When calling a long-running tool, clients should provide a progress token:
+
+```bash
+# Call with progress token
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "long-running-tool",
+      "arguments": {...},
+      "_meta": {
+        "progressToken": "unique-progress-token-123"
+      }
+    },
+    "id": 1
+  }'
+
+# The response will be streamed as SSE events:
+# event: notification
+# data: {"jsonrpc":"2.0","method":"nodetocode/taskStarted","params":{"taskId":"...","progressToken":"unique-progress-token-123"}}
+#
+# event: progress
+# data: {"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"unique-progress-token-123","progress":0.25,"message":"Processing step 25 of 100"}}
+#
+# event: response
+# data: {"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"Processing complete!"}]}}
+```
+
+### Cancelling a Task
+
+To cancel a running task:
+
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "nodetocode/cancelTask",
+    "params": {
+      "progressToken": "unique-progress-token-123"
+    },
+    "id": 2
+  }'
+
+# Response:
+# {"jsonrpc":"2.0","id":2,"result":{"status":"cancellation_initiated"}}
+```
+
 ## Creating a New MCP Tool
 
 Follow these steps to add a new MCP tool:

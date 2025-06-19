@@ -10,6 +10,7 @@
 #include "HAL/CriticalSection.h"
 #include "MCP/Server/IN2CMcpNotificationChannel.h"
 #include "MCP/Server/N2CMcpJsonRpcTypes.h"
+#include "MCP/Tools/N2CMcpToolTypes.h"
 
 /**
  * Manages the HTTP server for Model Context Protocol (MCP) communication.
@@ -22,6 +23,21 @@ public:
 	 * Gets the singleton instance of the MCP HTTP server manager.
 	 */
 	static FN2CMcpHttpServerManager& Get();
+
+	/**
+	 * Sends an async task progress notification to the appropriate SSE stream
+	 * @param SessionId The session ID
+	 * @param ProgressNotification The progress notification to send
+	 */
+	void SendAsyncTaskProgress(const FString& SessionId, const FJsonRpcNotification& ProgressNotification);
+
+	/**
+	 * Sends the final async task response and closes the SSE stream
+	 * @param SessionId The session ID
+	 * @param OriginalRequestId The original request ID
+	 * @param Result The task result
+	 */
+	void SendAsyncTaskResponse(const FString& SessionId, const TSharedPtr<FJsonValue>& OriginalRequestId, const FMcpToolCallResult& Result);
 
 	/**
 	 * Initializes and starts the HTTP server on the specified port.
