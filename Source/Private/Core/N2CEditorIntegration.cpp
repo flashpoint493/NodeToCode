@@ -581,3 +581,18 @@ void FN2CEditorIntegration::TranslateBlueprintNodesForEditor(TWeakPtr<FBlueprint
         FN2CLogger::Get().LogError(TEXT("Failed to initialize LLM Module"));
     }
 }
+
+void FN2CEditorIntegration::TranslateFocusedBlueprintGraph()
+{
+    // Get the latest active blueprint editor
+    TSharedPtr<FBlueprintEditor> ActiveEditor = GetActiveBlueprintEditor();
+    
+    if (!ActiveEditor.IsValid())
+    {
+        FN2CLogger::Get().LogError(TEXT("TranslateFocusedBlueprintGraph: No active Blueprint editor found"));
+        return;
+    }
+    
+    // Call the existing translation function with the active editor
+    TranslateBlueprintNodesForEditor(ActiveEditor);
+}

@@ -62,6 +62,9 @@ public:
      */
     FString GetFocusedBlueprintAsJson(bool bPrettyPrint, FString& OutErrorMsg);
 
+    /** Simple wrapper function that translates the focused Blueprint graph using the latest active editor */
+    void TranslateFocusedBlueprintGraph();
+
 private:
     /** Constructor */
     FN2CEditorIntegration() = default;
