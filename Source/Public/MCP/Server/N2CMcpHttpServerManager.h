@@ -33,11 +33,11 @@ public:
 
 	/**
 	 * Sends the final async task response and closes the SSE stream
-	 * @param SessionId The session ID
-	 * @param OriginalRequestId The original request ID
+	 * @param TaskId The ID of the completed task
+	 * @param OriginalRequestId The original request ID from the MCP client
 	 * @param Result The task result
 	 */
-	void SendAsyncTaskResponse(const FString& SessionId, const TSharedPtr<FJsonValue>& OriginalRequestId, const FMcpToolCallResult& Result);
+	void SendAsyncTaskResponse(const FGuid& TaskId, const TSharedPtr<FJsonValue>& OriginalRequestId, const FMcpToolCallResult& Result);
 
 	/**
 	 * Initializes and starts the HTTP server on the specified port.

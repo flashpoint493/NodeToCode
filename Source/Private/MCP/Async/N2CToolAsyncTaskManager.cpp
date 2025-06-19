@@ -255,7 +255,8 @@ void FN2CToolAsyncTaskManager::OnTaskCompleted(const FGuid& TaskId, const FMcpTo
 	FN2CLogger::Get().Log(FString::Printf(TEXT("Task %s completed, sending final response"), *TaskId.ToString()), EN2CLogSeverity::Info);
 
 	// Send the response through the HTTP server manager
-	FN2CMcpHttpServerManager::Get().SendAsyncTaskResponse(TaskContext->SessionId, TaskContext->OriginalRequestId, Result);
+	// Pass TaskId directly, as SessionId was causing lookup issues.
+	FN2CMcpHttpServerManager::Get().SendAsyncTaskResponse(TaskId, TaskContext->OriginalRequestId, Result);
 }
 
 void FN2CToolAsyncTaskManager::OnTaskProgress(const FGuid& TaskId, float Progress, const FString& Message)

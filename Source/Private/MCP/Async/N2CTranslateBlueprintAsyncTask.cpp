@@ -50,9 +50,16 @@ void FN2CTranslateBlueprintAsyncTask::Execute()
     );
 
     // Wait for LLM completion or cancellation
-    float WaitProgress = 0.1f;
+    float WaitProgress = 0.1f; // Initial progress after BP data prep
     const float MaxWaitTimeSeconds = 3600.0f; // Max wait time (e.g., 1 hour)
     const float StartTime = FPlatformTime::Seconds();
+    const float ProgressUpdateIntervalSeconds = 0.2f; // How often we check/update progress
+    const float TotalProgressSpanForWait = 0.85f; // Progress from 0.1 (initial) to 0.95 (before completion)
+
+    // Calculate increment per cycle to make progress span MaxWaitTimeSeconds
+    // Ensure CyclesInMaxWait is not zero to prevent division by zero, though MaxWaitTimeSeconds is large.
+    const float CyclesInMaxWait = (MaxWaitTimeSeconds > 0 && ProgressUpdateIntervalSeconds > 0) ? (MaxWaitTimeSeconds / ProgressUpdateIntervalSeconds) : 1.0f;
+    const float IncrementPerCycle = TotalProgressSpanForWait / CyclesInMaxWait;
 
     while (!bLLMOperationCompleted)
     {
@@ -70,12 +77,13 @@ void FN2CTranslateBlueprintAsyncTask::Execute()
             return;
         }
         
-        if (LLMCompleteEvent->Wait(FTimespan::FromMilliseconds(200))) // Check every 200ms
+        if (LLMCompleteEvent->Wait(FTimespan::FromSeconds(ProgressUpdateIntervalSeconds))) // Check with defined interval
         {
             // Event was triggered, bLLMOperationCompleted should be true. Loop will exit.
         }
 
-        WaitProgress = FMath::Min(WaitProgress + 0.001f, 0.95f); // Increment progress very slowly
+        // Increment progress based on the calculated per-cycle increment
+        WaitProgress = FMath::Min(WaitProgress + IncrementPerCycle, 0.95f); 
         ReportProgress(WaitProgress, TEXT("Waiting for LLM response..."));
     }
     

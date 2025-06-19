@@ -635,21 +635,13 @@ void FN2CMcpHttpServerManager::SendAsyncTaskProgress(const FString& SessionId, c
 	}
 }
 
-void FN2CMcpHttpServerManager::SendAsyncTaskResponse(const FString& SessionId, const TSharedPtr<FJsonValue>& OriginalRequestId, const FMcpToolCallResult& Result)
+void FN2CMcpHttpServerManager::SendAsyncTaskResponse(const FGuid& TaskId, const TSharedPtr<FJsonValue>& OriginalRequestId, const FMcpToolCallResult& Result)
 {
-	// Find the task context to get the connection info
-	auto TaskContext = FN2CToolAsyncTaskManager::Get().GetTaskContextByProgressToken(SessionId);
-	if (!TaskContext.IsValid())
-	{
-		FN2CLogger::Get().LogError(FString::Printf(TEXT("No task context found for session: %s"), *SessionId));
-		return;
-	}
-
-	// Find the SSE connection
-	FString ConnectionId = FN2CMcpSSEResponseManager::Get().FindConnectionByTaskId(TaskContext->TaskId);
+	// Find the SSE connection using the TaskId
+	FString ConnectionId = FN2CMcpSSEResponseManager::Get().FindConnectionByTaskId(TaskId);
 	if (ConnectionId.IsEmpty())
 	{
-		FN2CLogger::Get().LogError(FString::Printf(TEXT("No SSE connection found for task: %s"), *TaskContext->TaskId.ToString()));
+		FN2CLogger::Get().LogError(FString::Printf(TEXT("No SSE connection found for task: %s"), *TaskId.ToString()));
 		return;
 	}
 
