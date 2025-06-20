@@ -650,6 +650,25 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `currentProvider`: Currently selected provider in settings
   - `configuredProviderCount`: Number of providers that are configured and available
 
+### get-custom-translation-output-directory
+- **Location**: `Implementations/N2CMcpGetCustomTranslationOutputDirectoryTool.cpp`
+- **Description**: Returns the custom translation output directory configuration from NodeToCode settings. Shows whether a custom directory is set or if the default location is being used
+- **Parameters**: None
+- **Requires Game Thread**: Yes (accessing UObject settings)
+- **Returns**: Object containing:
+  - `isCustomDirectorySet`: Boolean indicating if a custom directory is configured
+  - `customDirectory` (if custom is set): The configured custom directory path
+  - `defaultDirectory` (if using default): The default directory path (ProjectSaved/NodeToCode/Translations)
+  - `absolutePath`: The absolute path to the output directory (resolved from relative paths)
+  - `directoryExists`: Boolean indicating if the directory currently exists
+  - `status`: Human-readable status message about the directory configuration
+  - `projectDirectory`: Path to the project file for context
+  - `projectSavedDirectory`: Path to the project's Saved directory
+  - `usage`: Object containing:
+    - `description`: Explanation of what this directory is used for
+    - `structure`: Format of subdirectories created for each translation
+    - `autoCreateIfMissing`: Whether the directory is created automatically if missing
+
 ## Example Workflows
 
 ### Searching and Adding Blueprint Nodes

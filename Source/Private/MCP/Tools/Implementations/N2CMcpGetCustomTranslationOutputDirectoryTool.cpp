@@ -1,0 +1,118 @@
+// Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
+
+#include "N2CMcpGetCustomTranslationOutputDirectoryTool.h"
+#include "MCP/Tools/N2CMcpToolRegistry.h"
+#include "Core/N2CSettings.h"
+#include "Utils/N2CLogger.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+#include "Misc/Paths.h"
+
+// Auto-register this tool
+REGISTER_MCP_TOOL(FN2CMcpGetCustomTranslationOutputDirectoryTool)
+
+FMcpToolDefinition FN2CMcpGetCustomTranslationOutputDirectoryTool::GetDefinition() const
+{
+    FMcpToolDefinition Definition(
+        TEXT("get-custom-translation-output-directory"),
+        TEXT("Returns the custom translation output directory configuration from NodeToCode settings. Shows whether a custom directory is set or if the default location is being used.")
+    );
+    
+    // This tool takes no input parameters
+    Definition.InputSchema = BuildEmptyObjectSchema();
+    
+    // Add read-only annotation
+    AddReadOnlyAnnotation(Definition);
+    
+    return Definition;
+}
+
+FMcpToolCallResult FN2CMcpGetCustomTranslationOutputDirectoryTool::Execute(const TSharedPtr<FJsonObject>& Arguments)
+{
+    FN2CLogger::Get().Log(TEXT("Executing get-custom-translation-output-directory tool"), EN2CLogSeverity::Debug);
+    
+    // Execute on Game Thread to access settings
+    return ExecuteOnGameThread([this]() -> FMcpToolCallResult
+    {
+        // Get current settings
+        const UN2CSettings* Settings = GetDefault<UN2CSettings>();
+        if (!Settings)
+        {
+            FN2CLogger::Get().LogError(TEXT("Failed to get NodeToCode settings"));
+            return FMcpToolCallResult::CreateErrorResult(TEXT("Failed to retrieve plugin settings"));
+        }
+        
+        // Build the response JSON
+        TSharedPtr<FJsonObject> ResponseObject = MakeShareable(new FJsonObject);
+        
+        // Check if custom directory is set
+        bool bIsCustomDirectorySet = !Settings->CustomTranslationOutputDirectory.Path.IsEmpty();
+        ResponseObject->SetBoolField(TEXT("isCustomDirectorySet"), bIsCustomDirectorySet);
+        
+        if (bIsCustomDirectorySet)
+        {
+            // Custom directory is set
+            FString CustomPath = Settings->CustomTranslationOutputDirectory.Path;
+            ResponseObject->SetStringField(TEXT("customDirectory"), CustomPath);
+            
+            // Check if the directory exists
+            bool bDirectoryExists = FPaths::DirectoryExists(CustomPath);
+            ResponseObject->SetBoolField(TEXT("directoryExists"), bDirectoryExists);
+            
+            // Convert to absolute path if relative
+            FString AbsolutePath = FPaths::ConvertRelativePathToFull(CustomPath);
+            ResponseObject->SetStringField(TEXT("absolutePath"), AbsolutePath);
+            
+            // Add directory status message
+            if (bDirectoryExists)
+            {
+                ResponseObject->SetStringField(TEXT("status"), TEXT("Custom directory is set and exists"));
+            }
+            else
+            {
+                ResponseObject->SetStringField(TEXT("status"), TEXT("Custom directory is set but does not exist (will be created when needed)"));
+            }
+        }
+        else
+        {
+            // Using default directory
+            FString DefaultPath = FPaths::ProjectSavedDir() / TEXT("NodeToCode") / TEXT("Translations");
+            ResponseObject->SetStringField(TEXT("defaultDirectory"), DefaultPath);
+            
+            // Convert to absolute path
+            FString AbsolutePath = FPaths::ConvertRelativePathToFull(DefaultPath);
+            ResponseObject->SetStringField(TEXT("absolutePath"), AbsolutePath);
+            
+            // Check if the default directory exists
+            bool bDirectoryExists = FPaths::DirectoryExists(DefaultPath);
+            ResponseObject->SetBoolField(TEXT("directoryExists"), bDirectoryExists);
+            
+            ResponseObject->SetStringField(TEXT("status"), TEXT("Using default directory"));
+        }
+        
+        // Add information about the project directory for context
+        ResponseObject->SetStringField(TEXT("projectDirectory"), FPaths::GetProjectFilePath());
+        ResponseObject->SetStringField(TEXT("projectSavedDirectory"), FPaths::ProjectSavedDir());
+        
+        // Add usage information
+        TSharedPtr<FJsonObject> UsageObject = MakeShareable(new FJsonObject);
+        UsageObject->SetStringField(TEXT("description"), TEXT("This directory is where NodeToCode saves all translation outputs including generated code files and N2C JSON files"));
+        UsageObject->SetStringField(TEXT("structure"), TEXT("Each translation creates a timestamped subdirectory: {BlueprintName}_{YYYY-MM-DD-HH.MM.SS}"));
+        UsageObject->SetBoolField(TEXT("autoCreateIfMissing"), true);
+        ResponseObject->SetObjectField(TEXT("usage"), UsageObject);
+        
+        FN2CLogger::Get().Log(
+            FString::Printf(TEXT("Translation output directory: %s"), 
+                bIsCustomDirectorySet ? TEXT("Custom directory configured") : TEXT("Using default directory")), 
+            EN2CLogSeverity::Info
+        );
+        
+        // Convert JSON to string for the result
+        FString OutputString;
+        TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutputString);
+        FJsonSerializer::Serialize(ResponseObject.ToSharedRef(), Writer);
+        
+        return FMcpToolCallResult::CreateTextResult(OutputString);
+    });
+}
