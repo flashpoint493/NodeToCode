@@ -53,7 +53,7 @@ void FN2CTranslateBlueprintAsyncTask::Execute()
     float WaitProgress = 0.1f; // Initial progress after BP data prep
     const float MaxWaitTimeSeconds = 3600.0f; // Max wait time (e.g., 1 hour)
     const float StartTime = FPlatformTime::Seconds();
-    const float ProgressUpdateIntervalSeconds = 0.5f; // How often we check/update progress (increased from 0.2)
+    const float ProgressUpdateIntervalSeconds = 0.5f; // How often we check/update progress
     const float TotalProgressSpanForWait = 0.85f; // Progress from 0.1 (initial) to 0.95 (before completion)
 
     // Calculate increment per cycle to make progress span MaxWaitTimeSeconds

@@ -233,15 +233,11 @@ void FN2CToolAsyncTaskManager::CancelAllTasks()
 TSharedPtr<IN2CToolAsyncTask> FN2CToolAsyncTaskManager::CreateAsyncTask(const FString& ToolName, const FGuid& TaskId, 
 	const FString& ProgressToken, const TSharedPtr<FJsonObject>& Arguments)
 {
-	// For now, we'll need to implement specific async task classes for each long-running tool
-	// This is a placeholder that returns nullptr - actual implementation will be added when updating specific tools
 	
 	if (ToolName == TEXT("translate-focused-blueprint"))
 	{
 		return MakeShared<FN2CTranslateBlueprintAsyncTask>(TaskId, ProgressToken, Arguments);
 	}
-	// TODO: Create factory method or registry for async task creation based on tool name
-	// Example: if (ToolName == "translate-blueprint") return MakeShared<FN2CTranslateBlueprintAsyncTask>(TaskId, ProgressToken, Arguments);
 	
 	FN2CLogger::Get().LogWarning(FString::Printf(TEXT("No async task implementation found for tool: %s. TaskId: %s"), *ToolName, *TaskId.ToString()));
 	return nullptr;
