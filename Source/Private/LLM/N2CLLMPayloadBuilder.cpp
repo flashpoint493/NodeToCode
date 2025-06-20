@@ -16,7 +16,7 @@ void UN2CLLMPayloadBuilder::Initialize(const FString& InModelName)
     
     // Set default values
     SetTemperature(0.0f);
-    SetMaxTokens(8192);
+    SetMaxTokens(16000);
 }
 
 void UN2CLLMPayloadBuilder::SetModel(const FString& InModelName)
@@ -372,7 +372,7 @@ void UN2CLLMPayloadBuilder::ConfigureForGemini()
     
     // Set temperature and maxOutputTokens in generationConfig
     SetTemperature(0.0f);
-    SetMaxTokens(8192);
+    SetMaxTokens(16000);
 }
 
 void UN2CLLMPayloadBuilder::ConfigureForDeepSeek()

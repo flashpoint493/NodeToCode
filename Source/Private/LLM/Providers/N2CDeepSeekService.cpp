@@ -45,7 +45,7 @@ FString UN2CDeepSeekService::FormatRequestPayload(const FString& UserMessage, co
     
     // Set common parameters
     PayloadBuilder->SetTemperature(0.0f);
-    PayloadBuilder->SetMaxTokens(8000);
+    PayloadBuilder->SetMaxTokens(16000);
     
     // Try prepending source files to the user message
     FString FinalUserMessage = UserMessage;
