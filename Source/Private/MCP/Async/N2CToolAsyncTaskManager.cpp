@@ -4,9 +4,12 @@
 #include "MCP/Async/N2CTranslateBlueprintAsyncTask.h"
 #include "MCP/Server/N2CMcpHttpServerManager.h"
 #include "MCP/Server/N2CMcpJsonRpcTypes.h"
+#include "MCP/Server/N2CSseServer.h"
 #include "MCP/Tools/N2CMcpToolManager.h"
 #include "Utils/N2CLogger.h"
 #include "Async/TaskGraphInterfaces.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonSerializer.h"
 
 FN2CToolAsyncTaskManager& FN2CToolAsyncTaskManager::Get()
 {
@@ -254,9 +257,27 @@ void FN2CToolAsyncTaskManager::OnTaskCompleted(const FGuid& TaskId, const FMcpTo
 	// Send the final JSON-RPC response via the SSE stream
 	FN2CLogger::Get().Log(FString::Printf(TEXT("Task %s completed, sending final response"), *TaskId.ToString()), EN2CLogSeverity::Info);
 
-	// Send the response through the HTTP server manager
-	// Pass TaskId directly, as SessionId was causing lookup issues.
-	FN2CMcpHttpServerManager::Get().SendAsyncTaskResponse(TaskId, TaskContext->OriginalRequestId, Result);
+	// Create the JSON-RPC response
+	FJsonRpcResponse Response;
+	Response.Id = TaskContext->OriginalRequestId;
+	// Convert the tool result to JSON Value
+	Response.Result = MakeShared<FJsonValueObject>(Result.ToJson());
+
+	// Serialize to JSON string
+	FString ResponseJson = FJsonRpcUtils::SerializeResponse(Response);
+	if (!ResponseJson.IsEmpty())
+	{
+		// Push the final response to the SSE stream
+		std::string SseMessage = NodeToCodeSseServer::FormatSseMessage(TEXT("response"), ResponseJson);
+		NodeToCodeSseServer::PushFormattedSseEventToClient(TaskId, SseMessage);
+	}
+	else
+	{
+		FN2CLogger::Get().LogError(FString::Printf(TEXT("Failed to serialize response for task %s"), *TaskId.ToString()));
+	}
+
+	// Signal the SSE connection to close after sending the response
+	NodeToCodeSseServer::SignalSseClientCompletion(TaskId);
 }
 
 void FN2CToolAsyncTaskManager::OnTaskProgress(const FGuid& TaskId, float Progress, const FString& Message)
@@ -286,6 +307,16 @@ void FN2CToolAsyncTaskManager::OnTaskProgress(const FGuid& TaskId, float Progres
 	FN2CLogger::Get().Log(FString::Printf(TEXT("Task %s progress: %.1f%% - %s"), 
 		*TaskId.ToString(), Progress * 100.0f, *Message), EN2CLogSeverity::Debug);
 
-	// Send the progress through the HTTP server manager
-	FN2CMcpHttpServerManager::Get().SendAsyncTaskProgress(TaskContext->SessionId, ProgressNotification);
+	// Serialize the notification to JSON
+	FString NotificationJson = FJsonRpcUtils::SerializeNotification(ProgressNotification);
+	if (!NotificationJson.IsEmpty())
+	{
+		// Push the progress notification to the SSE stream
+		std::string SseMessage = NodeToCodeSseServer::FormatSseMessage(TEXT("progress"), NotificationJson);
+		NodeToCodeSseServer::PushFormattedSseEventToClient(TaskId, SseMessage);
+	}
+	else
+	{
+		FN2CLogger::Get().LogError(FString::Printf(TEXT("Failed to serialize progress notification for task %s"), *TaskId.ToString()));
+	}
 }

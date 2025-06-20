@@ -1,15 +1,21 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
 using UnrealBuildTool;
+using System.IO;
 
 public class NodeToCode : ModuleRules
 {
 	public NodeToCode(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+		
+		// Get the absolute path to the ThirdParty directory
+		// Using PluginDirectory property which UBT provides
+		string ThirdPartyPath = Path.Combine(PluginDirectory, "ThirdParty", "cpp-httplib");
         
 		PrivateIncludePaths.AddRange(
 			new string[] {
+				ThirdPartyPath  // For httplib.h
 			}
 		);
         
@@ -48,5 +54,10 @@ public class NodeToCode : ModuleRules
 				"AssetRegistry"           // For asset path resolution
 			}
 		);
+
+		// --- httplib.h Integration ---
+		// httplib.h is header-only and requires C++11 features at a minimum.
+		// Modern UE (5.x) uses C++17 or C++20 by default, so this should be fine.
+		// httplib.h handles its own Windows socket library linking via #pragma comment(lib, "ws2_32.lib").
 	}
 }

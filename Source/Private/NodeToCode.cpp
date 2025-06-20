@@ -16,6 +16,7 @@
 #include "Framework/Notifications/NotificationManager.h"
 #include "Widgets/Notifications/SNotificationList.h"
 #include "MCP/Server/N2CMcpHttpServerManager.h"
+#include "MCP/Server/N2CSseServer.h"
 #if WITH_EDITOR
 #include "UnrealEdMisc.h"
 #endif
@@ -102,10 +103,25 @@ void FNodeToCodeModule::StartupModule()
     {
         FN2CLogger::Get().LogError(TEXT("Failed to start MCP HTTP server"), TEXT("NodeToCode"));
     }
+    
+    // Start SSE server for long-running operations
+    int32 SsePort = McpPort + 1;
+    if (NodeToCodeSseServer::StartSseServer(SsePort))
+    {
+        FN2CLogger::Get().Log(FString::Printf(TEXT("SSE server started on port %d"), SsePort), EN2CLogSeverity::Info);
+    }
+    else
+    {
+        FN2CLogger::Get().LogError(FString::Printf(TEXT("Failed to start SSE server on port %d"), SsePort));
+    }
 }
 
 void FNodeToCodeModule::ShutdownModule()
 {
+    // Stop SSE server
+    NodeToCodeSseServer::StopSseServer();
+    FN2CLogger::Get().Log(TEXT("SSE server stopped"), EN2CLogSeverity::Info);
+    
     // Stop MCP HTTP server
     FN2CMcpHttpServerManager::Get().StopServer();
     FN2CLogger::Get().Log(TEXT("MCP HTTP server stopped"), EN2CLogSeverity::Info);
