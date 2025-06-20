@@ -6,11 +6,11 @@
 #include "MCP/Tools/N2CMcpToolBase.h"
 
 /**
- * MCP tool that returns the custom translation output directory configuration.
- * This tool queries the NodeToCode settings to get the custom output directory
+ * MCP tool that returns the translation output directory configuration.
+ * This tool queries the NodeToCode settings to get the output directory
  * path where translations are saved, or indicates if the default path is being used.
  */
-class FN2CMcpGetCustomTranslationOutputDirectoryTool : public FN2CMcpToolBase
+class FN2CMcpGetTranslationOutputDirectoryTool : public FN2CMcpToolBase
 {
 public:
     // IN2CMcpTool interface

@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
-#include "N2CMcpGetCustomTranslationOutputDirectoryTool.h"
+#include "N2CMcpGetTranslationOutputDirectoryTool.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "Core/N2CSettings.h"
 #include "Utils/N2CLogger.h"
@@ -10,13 +10,13 @@
 #include "Misc/Paths.h"
 
 // Auto-register this tool
-REGISTER_MCP_TOOL(FN2CMcpGetCustomTranslationOutputDirectoryTool)
+REGISTER_MCP_TOOL(FN2CMcpGetTranslationOutputDirectoryTool)
 
-FMcpToolDefinition FN2CMcpGetCustomTranslationOutputDirectoryTool::GetDefinition() const
+FMcpToolDefinition FN2CMcpGetTranslationOutputDirectoryTool::GetDefinition() const
 {
     FMcpToolDefinition Definition(
-        TEXT("get-custom-translation-output-directory"),
-        TEXT("Returns the custom translation output directory configuration from NodeToCode settings. Shows whether a custom directory is set or if the default location is being used.")
+        TEXT("get-translation-output-directory"),
+        TEXT("Returns the translation output directory configuration from NodeToCode settings. Shows whether a custom directory is set or if the default location is being used.")
     );
     
     // This tool takes no input parameters
@@ -28,9 +28,9 @@ FMcpToolDefinition FN2CMcpGetCustomTranslationOutputDirectoryTool::GetDefinition
     return Definition;
 }
 
-FMcpToolCallResult FN2CMcpGetCustomTranslationOutputDirectoryTool::Execute(const TSharedPtr<FJsonObject>& Arguments)
+FMcpToolCallResult FN2CMcpGetTranslationOutputDirectoryTool::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-    FN2CLogger::Get().Log(TEXT("Executing get-custom-translation-output-directory tool"), EN2CLogSeverity::Debug);
+    FN2CLogger::Get().Log(TEXT("Executing get-translation-output-directory tool"), EN2CLogSeverity::Debug);
     
     // Execute on Game Thread to access settings
     return ExecuteOnGameThread([this]() -> FMcpToolCallResult

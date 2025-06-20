@@ -650,9 +650,9 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `currentProvider`: Currently selected provider in settings
   - `configuredProviderCount`: Number of providers that are configured and available
 
-### get-custom-translation-output-directory
-- **Location**: `Implementations/N2CMcpGetCustomTranslationOutputDirectoryTool.cpp`
-- **Description**: Returns the custom translation output directory configuration from NodeToCode settings. Shows whether a custom directory is set or if the default location is being used
+### get-translation-output-directory
+- **Location**: `Implementations/N2CMcpGetTranslationOutputDirectoryTool.cpp`
+- **Description**: Returns the translation output directory configuration from NodeToCode settings. Shows whether a custom directory is set or if the default location is being used
 - **Parameters**: None
 - **Requires Game Thread**: Yes (accessing UObject settings)
 - **Returns**: Object containing:
