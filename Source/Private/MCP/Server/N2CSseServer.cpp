@@ -30,6 +30,7 @@ namespace NodeToCodeSseServer
         std::condition_variable cv;
         std::atomic<bool> stop_requested{false};
         FGuid taskId;
+        std::atomic<bool> is_http_stream_active{false}; // True when httplib is actively using this for a response stream
     };
 
     // Map for active SSE clients
@@ -41,6 +42,40 @@ namespace NodeToCodeSseServer
     std::unique_ptr<std::thread> GSseServerThreadPtr; // Use unique_ptr for better management
     std::atomic<bool> GbSseServerIsRunning{false};
     int32 GSseServerPort = -1;
+
+    void PrepareSseStreamForTask(const FGuid& TaskId)
+    {
+        FScopeLock Lock(&GActiveSseClientsMutex);
+        if (GActiveSseClients.Contains(TaskId))
+        {
+            FN2CLogger::Get().LogWarning(FString::Printf(TEXT("SSE: PrepareSseStreamForTask called for already existing TaskId %s."), *TaskId.ToString()));
+            // Potentially retrieve and return existing, or just log and proceed if behavior is idempotent.
+            // For now, just ensure it exists.
+            return;
+        }
+        auto NewClientConn = MakeShared<SseClientConnection>();
+        NewClientConn->taskId = TaskId;
+        // is_http_stream_active defaults to false
+        GActiveSseClients.Add(TaskId, NewClientConn);
+        FN2CLogger::Get().Log(FString::Printf(TEXT("SSE: Prepared stream context for TaskId %s. Client connection pending."), *TaskId.ToString()), EN2CLogSeverity::Info);
+    }
+
+    void CleanupStreamForCompletedTask(const FGuid& TaskId)
+    {
+        FScopeLock Lock(&GActiveSseClientsMutex);
+        TSharedPtr<SseClientConnection>* FoundConnPtr = GActiveSseClients.Find(TaskId);
+        if (FoundConnPtr && FoundConnPtr->IsValid())
+        {
+            // If the task is marked to stop (completed/cancelled) AND httplib is not actively streaming for it,
+            // then it's safe to clean up. This handles cases where client never connected.
+            if ((*FoundConnPtr)->stop_requested.load() && !(*FoundConnPtr)->is_http_stream_active.load()) {
+                GActiveSseClients.Remove(TaskId);
+                FN2CLogger::Get().Log(FString::Printf(TEXT("SSE: Cleaned up orphaned/completed stream for TaskId %s."), *TaskId.ToString()), EN2CLogSeverity::Info);
+            }
+            // If is_http_stream_active is true, the releaser lambda will handle cleanup when the stream ends.
+            // If stop_requested is false, the task isn't fully done from SSE perspective, so don't remove yet.
+        }
+    }
 
     std::string FormatSseMessage(const FString& EventType, const FString& JsonData)
     {
@@ -154,29 +189,43 @@ namespace NodeToCodeSseServer
                 return;
             }
 
-            FN2CLogger::Get().Log(FString::Printf(TEXT("SSE: Client connected for TaskId: %s"), *TaskIdStr), EN2CLogSeverity::Info);
+            TSharedPtr<SseClientConnection> ClientConn;
+            {
+                FScopeLock Lock(&GActiveSseClientsMutex);
+                TSharedPtr<SseClientConnection>* FoundConnPtr = GActiveSseClients.Find(TaskId);
+                if (FoundConnPtr && FoundConnPtr->IsValid()) {
+                    ClientConn = *FoundConnPtr;
+                    if (ClientConn->is_http_stream_active.load()) {
+                        FN2CLogger::Get().LogWarning(FString::Printf(TEXT("SSE: TaskId %s already has an active HTTP stream. Rejecting new connection."), *TaskIdStr));
+                        res.status = 409; // Conflict
+                        res.set_content("Task ID already has an active SSE stream.", "text/plain");
+                        return;
+                    }
+                    if (ClientConn->stop_requested.load() && ClientConn->event_queue.empty()) {
+                         FN2CLogger::Get().LogWarning(FString::Printf(TEXT("SSE: Client connected for TaskId %s, but task was already completed/cancelled and queue is empty."), *TaskIdStr));
+                         res.status = 410; // Gone
+                         res.set_content("Task already completed or cancelled.", "text/plain");
+                         // The releaser lambda won't be called if we return early, so clean up here.
+                         GActiveSseClients.Remove(TaskId);
+                         return;
+                    }
+                }
+            }
+
+            if (!ClientConn) {
+                FN2CLogger::Get().LogError(FString::Printf(TEXT("SSE: Client connected for TaskId %s, but no SseClientConnection was pre-registered. This indicates an internal error."), *TaskIdStr));
+                res.status = 500; // Internal Server Error
+                res.set_content("Internal server error: SSE stream context not found.", "text/plain");
+                return;
+            }
+
+            FN2CLogger::Get().Log(FString::Printf(TEXT("SSE: Client connected for TaskId: %s. Activating stream."), *TaskIdStr), EN2CLogSeverity::Info);
+            ClientConn->is_http_stream_active.store(true); // Mark as active for httplib streaming
 
             res.set_header("Content-Type", "text/event-stream");
             res.set_header("Cache-Control", "no-cache");
             res.set_header("Connection", "keep-alive");
             res.set_header("Access-Control-Allow-Origin", "*"); 
-
-            auto ClientConn = MakeShared<SseClientConnection>();
-            ClientConn->taskId = TaskId;
-
-            {
-                FScopeLock Lock(&GActiveSseClientsMutex);
-                if (GActiveSseClients.Contains(TaskId))
-                {
-                    // Handle scenario where a client reconnects for an existing task.
-                    // Option: Reject (only one SSE stream per task)
-                    FN2CLogger::Get().LogWarning(FString::Printf(TEXT("SSE: TaskId %s already has an active SSE connection. Rejecting new connection."), *TaskIdStr));
-                    res.status = 409; // Conflict
-                    res.set_content("Task ID already has an active SSE stream.", "text/plain");
-                    return;
-                }
-                GActiveSseClients.Add(TaskId, ClientConn);
-            }
             
             // Send an initial comment to establish the connection immediately.
             std::string InitialComment = FormatSseMessage(TEXT(""), TEXT(": SSE connection established for task ") + TaskIdStr);
@@ -233,9 +282,14 @@ namespace NodeToCodeSseServer
                     
                     return true; // Continue providing data
                 },
-                [TaskId, TaskIdStr](bool success) { // Releaser lambda
+                [ClientConn, TaskId, TaskIdStr](bool success) { // Releaser lambda, capture ClientConn
+                    ClientConn->is_http_stream_active.store(false); // Mark as no longer active
                     FScopeLock Lock(&GActiveSseClientsMutex);
-                    GActiveSseClients.Remove(TaskId);
+                    // Only remove if it's still the same instance and hasn't been replaced or already removed.
+                    TSharedPtr<SseClientConnection>* CurrentEntry = GActiveSseClients.Find(TaskId);
+                    if (CurrentEntry && CurrentEntry->Get() == ClientConn.Get()) {
+                         GActiveSseClients.Remove(TaskId);
+                    }
                     FN2CLogger::Get().Log(FString::Printf(TEXT("SSE: Connection for TaskId %s (Path: %s) released by httplib. Success: %d"), *TaskId.ToString(), *TaskIdStr, success), EN2CLogSeverity::Info);
                 }
             );

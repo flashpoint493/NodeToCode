@@ -255,15 +255,21 @@ bool FN2CMcpHttpServerManager::HandleMcpRequest(const FHttpServerRequest& Reques
             FN2CLogger::Get().Log(FString::Printf(TEXT("Generated progressToken %s for long-running tool %s"), *ProgressToken, *ToolName), EN2CLogSeverity::Info);
         }
 
-		// Launch the async task to get the task ID
-		FGuid TaskId = FN2CToolAsyncTaskManager::Get().LaunchTask(
+        FGuid TaskId = FGuid::NewGuid(); // Generate TaskId for the SSE stream and async task.
+
+        // PREPARE SSE STREAM FOR THIS TASK ID
+        NodeToCodeSseServer::PrepareSseStreamForTask(TaskId);
+
+		// Launch the async task, passing the generated TaskId
+		FGuid LaunchedTaskId = FN2CToolAsyncTaskManager::Get().LaunchTask(
+            TaskId, // Pass the pre-generated TaskId
 			ToolName, 
 			ToolArguments, 
 			ProgressToken, 
 			CurrentSessionId,
 			RequestId);
 		
-		if (TaskId.IsValid())
+		if (LaunchedTaskId.IsValid() && LaunchedTaskId == TaskId) // Ensure the launched task used our ID
 		{
 			// Build the SSE URL
 			int32 SsePort = NodeToCodeSseServer::GetSseServerPort();

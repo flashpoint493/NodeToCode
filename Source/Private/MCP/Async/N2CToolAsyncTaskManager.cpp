@@ -17,10 +17,10 @@ FN2CToolAsyncTaskManager& FN2CToolAsyncTaskManager::Get()
 	return Instance;
 }
 
-FGuid FN2CToolAsyncTaskManager::LaunchTask(const FString& ToolName, const TSharedPtr<FJsonObject>& Arguments, 
+FGuid FN2CToolAsyncTaskManager::LaunchTask(const FGuid& InTaskId, const FString& ToolName, const TSharedPtr<FJsonObject>& Arguments,
 	const FString& ProgressToken, const FString& SessionId, const TSharedPtr<FJsonValue>& OriginalRequestId)
 {
-	FGuid TaskId = FGuid::NewGuid();
+	FGuid TaskId = InTaskId; // USE THE PASSED-IN TASK ID
 	
 	// Create the async task
 	TSharedPtr<IN2CToolAsyncTask> AsyncTask = CreateAsyncTask(ToolName, TaskId, ProgressToken, Arguments);
@@ -197,14 +197,16 @@ void FN2CToolAsyncTaskManager::CleanupCompletedTasks()
 		}
 	}
 
-	for (const FGuid& TaskId : TasksToRemove)
+	for (const FGuid& TaskIdToRemove : TasksToRemove) // Renamed TaskId to TaskIdToRemove for clarity
 	{
-		auto TaskContext = RunningTasks.Find(TaskId);
-		if (TaskContext && TaskContext->IsValid())
+		auto TaskContextPtr = RunningTasks.Find(TaskIdToRemove);
+		if (TaskContextPtr && TaskContextPtr->IsValid())
 		{
-			ProgressTokenToTaskId.Remove((*TaskContext)->ProgressToken);
+			// Call the new cleanup function in NodeToCodeSseServer
+			NodeToCodeSseServer::CleanupStreamForCompletedTask((*TaskContextPtr)->TaskId);
+			ProgressTokenToTaskId.Remove((*TaskContextPtr)->ProgressToken);
 		}
-		RunningTasks.Remove(TaskId);
+		RunningTasks.Remove(TaskIdToRemove);
 	}
 
 	if (TasksToRemove.Num() > 0)
@@ -241,7 +243,7 @@ TSharedPtr<IN2CToolAsyncTask> FN2CToolAsyncTaskManager::CreateAsyncTask(const FS
 	// TODO: Create factory method or registry for async task creation based on tool name
 	// Example: if (ToolName == "translate-blueprint") return MakeShared<FN2CTranslateBlueprintAsyncTask>(TaskId, ProgressToken, Arguments);
 	
-	FN2CLogger::Get().LogWarning(FString::Printf(TEXT("No async task implementation found for tool: %s"), *ToolName));
+	FN2CLogger::Get().LogWarning(FString::Printf(TEXT("No async task implementation found for tool: %s. TaskId: %s"), *ToolName, *TaskId.ToString()));
 	return nullptr;
 }
 

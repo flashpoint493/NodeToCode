@@ -63,7 +63,7 @@ public:
 	 * @param OriginalRequestId The original request ID from the connector
 	 * @return The unique task ID
 	 */
-	FGuid LaunchTask(const FString& ToolName, const TSharedPtr<FJsonObject>& Arguments, 
+	FGuid LaunchTask(const FGuid& InTaskId, const FString& ToolName, const TSharedPtr<FJsonObject>& Arguments, 
 		const FString& ProgressToken, const FString& SessionId, const TSharedPtr<FJsonValue>& OriginalRequestId);
 
 	/**

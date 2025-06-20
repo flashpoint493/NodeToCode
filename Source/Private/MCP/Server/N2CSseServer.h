@@ -25,6 +25,20 @@ namespace NodeToCodeSseServer
     struct SseClientConnection; // Forward declaration
 
     /**
+     * Prepares an SSE stream context for a given TaskId.
+     * This should be called when an async task is launched and an SSE connection is expected.
+     * @param TaskId The Task ID for which to prepare the stream.
+     */
+    void PrepareSseStreamForTask(const FGuid& TaskId);
+
+    /**
+     * Cleans up a stream context for a task that has completed or been cancelled,
+     * especially if the client never connected to the SSE endpoint.
+     * @param TaskId The Task ID of the completed/cancelled task.
+     */
+    void CleanupStreamForCompletedTask(const FGuid& TaskId);
+
+    /**
      * Starts the SSE HTTP server on a separate thread.
      * @param Port The port number for the SSE server to listen on.
      * @return True if the server started successfully, false otherwise.
