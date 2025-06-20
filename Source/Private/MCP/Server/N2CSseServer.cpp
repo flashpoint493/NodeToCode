@@ -303,29 +303,52 @@ namespace NodeToCodeSseServer
             );
         });
         
-        GbSseServerIsRunning.store(false); // Will be set to true after listen starts
+        GbSseServerIsRunning.store(false); // Ensure it's false before starting thread
         GSseServerThreadPtr = std::make_unique<std::thread>([Port]() {
             FN2CLogger::Get().Log(FString::Printf(TEXT("SSE: httplib server thread starting, attempting to listen on 0.0.0.0:%d"), Port), EN2CLogSeverity::Info);
-            GbSseServerIsRunning.store(true); // Server is now considered running
-            bool bListenSuccess = GSseHttpServer->listen("0.0.0.0", Port);
-            GbSseServerIsRunning.store(false); // Server stopped listening
+            // GbSseServerIsRunning.store(true); // MOVED: Set this after listen() call or based on is_running()
+            
+            bool bListenSuccess = GSseHttpServer->listen("0.0.0.0", Port); // This is blocking
+            
+            // After listen() returns (i.e., server stopped or failed to start)
+            GbSseServerIsRunning.store(false); 
 
             if (!bListenSuccess) {
-                FN2CLogger::Get().LogError(FString::Printf(TEXT("SSE: httplib server failed to listen on port %d or stopped unexpectedly."), Port));
+                // This log might appear if stop() was called, or if listen failed.
+                // httplib's listen() returns true if it started successfully and then was stopped.
+                // It returns false if it failed to bind/listen initially.
+                // However, the documentation is a bit sparse on return values for listen().
+                // We'll rely more on is_running() for status.
+                FN2CLogger::Get().LogError(FString::Printf(TEXT("SSE: httplib server listen() call returned. This may indicate a failure to bind or that the server was stopped. Port: %d"), Port));
             } else {
-                 FN2CLogger::Get().Log(TEXT("SSE: httplib server finished listening."), EN2CLogSeverity::Info);
+                 FN2CLogger::Get().Log(TEXT("SSE: httplib server finished listening (listen() returned true)."), EN2CLogSeverity::Info);
             }
         });
-        
-        // Brief sleep to allow the server thread to start listening
-        FPlatformProcess::Sleep(0.25f); // Increased sleep duration
-        if (!GbSseServerIsRunning.load() && GSseHttpServer->is_running()) { // Double check after sleep
-             GbSseServerIsRunning.store(true);
-             FN2CLogger::Get().Log(TEXT("SSE: httplib server confirmed running after sleep."), EN2CLogSeverity::Info);
-        } else if (!GbSseServerIsRunning.load()) {
-            FN2CLogger::Get().Log(TEXT("SSE: httplib server not confirmed running after sleep and thread start."), EN2CLogSeverity::Warning);
+
+        // Wait for the server to actually start running
+        int MaxWaitAttempts = 20; // e.g., 20 * 100ms = 2 seconds
+        int Attempts = 0;
+        while (Attempts < MaxWaitAttempts)
+        {
+            FPlatformProcess::Sleep(0.1f); // Wait 100ms
+            if (GSseHttpServer->is_running()) {
+                GbSseServerIsRunning.store(true);
+                FN2CLogger::Get().Log(FString::Printf(TEXT("SSE: httplib server confirmed running on port %d after %d attempts."), Port, Attempts + 1), EN2CLogSeverity::Info);
+                break;
+            }
+            Attempts++;
         }
 
+        if (!GbSseServerIsRunning.load()) {
+            FN2CLogger::Get().LogError(FString::Printf(TEXT("SSE: httplib server failed to start running on port %d after %d attempts."), Port, MaxWaitAttempts));
+            // If the server thread didn't start, try to join it to clean up
+            if (GSseServerThreadPtr && GSseServerThreadPtr->joinable()) {
+                GSseHttpServer->stop(); // Ensure listen call can exit
+                GSseServerThreadPtr->join();
+            }
+            GSseServerThreadPtr.reset();
+            return false;
+        }
 
         return GbSseServerIsRunning.load();
     }
