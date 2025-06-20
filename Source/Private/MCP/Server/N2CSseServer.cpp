@@ -177,6 +177,14 @@ namespace NodeToCodeSseServer
         // Example: /mcp/events/123e4567-e89b-12d3-a456-426614174000
         GSseHttpServer->Get(R"(/mcp/events/([0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}))",
             [](const httplib::Request& req, httplib::Response& res) {
+
+            FN2CLogger::Get().Log(FString::Printf(TEXT("SSE: HTTP GET request received for path: %s"), UTF8_TO_TCHAR(req.path.c_str())), EN2CLogSeverity::Info);
+            if (req.matches.size() > 1) {
+                FN2CLogger::Get().Log(FString::Printf(TEXT("SSE: Matched TaskId from URL: %s"), UTF8_TO_TCHAR(req.matches[1].str().c_str())), EN2CLogSeverity::Info);
+            } else {
+                FN2CLogger::Get().LogWarning(FString::Printf(TEXT("SSE: Path %s matched regex route, but no TaskId captured. Matches.size: %d"), UTF8_TO_TCHAR(req.path.c_str()), req.matches.size()));
+                // This indicates a problem with the regex or httplib's matching.
+            }
             
             FGuid TaskId;
             FString TaskIdStr = UTF8_TO_TCHAR(req.matches[1].str().c_str());
@@ -310,10 +318,14 @@ namespace NodeToCodeSseServer
         });
         
         // Brief sleep to allow the server thread to start listening
-        FPlatformProcess::Sleep(0.1f); 
+        FPlatformProcess::Sleep(0.25f); // Increased sleep duration
         if (!GbSseServerIsRunning.load() && GSseHttpServer->is_running()) { // Double check after sleep
              GbSseServerIsRunning.store(true);
+             FN2CLogger::Get().Log(TEXT("SSE: httplib server confirmed running after sleep."), EN2CLogSeverity::Info);
+        } else if (!GbSseServerIsRunning.load()) {
+            FN2CLogger::Get().Log(TEXT("SSE: httplib server not confirmed running after sleep and thread start."), EN2CLogSeverity::Warning);
         }
+
 
         return GbSseServerIsRunning.load();
     }
