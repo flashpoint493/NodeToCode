@@ -230,35 +230,104 @@ bool FN2CMcpContentBrowserUtils::IsPathAllowed(const FString& Path)
 
 bool FN2CMcpContentBrowserUtils::EnumerateItemsAtPath(const FString& Path, bool bIncludeFolders, bool bIncludeFiles, TArray<FContentBrowserItem>& OutItems)
 {
-	// Get the content browser data subsystem
-	UContentBrowserDataSubsystem* ContentBrowserData = GEditor->GetEditorSubsystem<UContentBrowserDataSubsystem>();
-	if (!ContentBrowserData)
-	{
-		FN2CLogger::Get().LogError(TEXT("Content browser data subsystem not available"));
-		return false;
-	}
+	OutItems.Reset();
 	
-	// Set up filter
-	FContentBrowserDataFilter Filter;
+	FN2CLogger::Get().Log(FString::Printf(TEXT("EnumerateItemsAtPath: Path='%s', IncludeFolders=%d, IncludeFiles=%d"), 
+		*Path, bIncludeFolders ? 1 : 0, bIncludeFiles ? 1 : 0), EN2CLogSeverity::Info);
 	
-	// Configure what types of items to include
-	EContentBrowserItemTypeFilter TypeFilter = EContentBrowserItemTypeFilter::IncludeNone;
+	// Use a hybrid approach: AssetRegistry for assets, EditorAssetSubsystem for folders
+	
+	// First, get folders if requested
 	if (bIncludeFolders)
 	{
-		TypeFilter |= EContentBrowserItemTypeFilter::IncludeFolders;
+		UEditorAssetSubsystem* EditorAssetSubsystem = GEditor->GetEditorSubsystem<UEditorAssetSubsystem>();
+		if (EditorAssetSubsystem)
+		{
+			// Get sub-folders directly
+			TArray<FString> SubFolders;
+			EditorAssetSubsystem->ListAssets(Path, false, true); // This doesn't return anything, we need a different approach
+			
+			// Use IFileManager to find folders
+			TArray<FString> FoundFolders;
+			FString DiskPath;
+			if (FPackageName::TryConvertLongPackageNameToFilename(Path, DiskPath))
+			{
+				// Make sure path ends with / for directory search
+				if (!DiskPath.EndsWith(TEXT("/")))
+				{
+					DiskPath += TEXT("/");
+				}
+				
+				// Find all subdirectories
+				IFileManager::Get().FindFiles(FoundFolders, *DiskPath, false, true);
+				
+				// Convert folder names to ContentBrowserItems
+				UContentBrowserDataSubsystem* ContentBrowserData = GEditor->GetEditorSubsystem<UContentBrowserDataSubsystem>();
+				if (ContentBrowserData)
+				{
+					for (const FString& FolderName : FoundFolders)
+					{
+						FString SubFolderPath = Path / FolderName;
+						
+						// Try to get folder item from content browser data
+						FContentBrowserItem FolderItem = ContentBrowserData->GetItemAtPath(FName(*SubFolderPath), EContentBrowserItemTypeFilter::IncludeFolders);
+						if (FolderItem.IsValid())
+						{
+							OutItems.Add(FolderItem);
+							FN2CLogger::Get().Log(FString::Printf(TEXT("EnumerateItemsAtPath: Found folder '%s'"), *FolderName), EN2CLogSeverity::Info);
+						}
+						else
+						{
+							// Log warning but continue - we'll handle missing items differently
+							FN2CLogger::Get().Log(FString::Printf(TEXT("EnumerateItemsAtPath: Could not get ContentBrowserItem for folder '%s'"), *SubFolderPath), EN2CLogSeverity::Warning);
+						}
+					}
+				}
+			}
+		}
 	}
+	
+	// Then, get assets if requested
 	if (bIncludeFiles)
 	{
-		TypeFilter |= EContentBrowserItemTypeFilter::IncludeFiles;
+		// Get the asset registry
+		FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+		IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+		
+		// Set up the filter
+		FARFilter Filter;
+		Filter.bRecursivePaths = false; // Only get immediate children
+		Filter.PackagePaths.Add(FName(*Path));
+		
+		// Get assets
+		TArray<FAssetData> AssetDataList;
+		AssetRegistry.GetAssets(Filter, AssetDataList);
+		
+		FN2CLogger::Get().Log(FString::Printf(TEXT("EnumerateItemsAtPath: AssetRegistry found %d assets"), AssetDataList.Num()), EN2CLogSeverity::Info);
+		
+		// Convert to ContentBrowserItems
+		UContentBrowserDataSubsystem* ContentBrowserData = GEditor->GetEditorSubsystem<UContentBrowserDataSubsystem>();
+		if (ContentBrowserData)
+		{
+			for (const FAssetData& AssetData : AssetDataList)
+			{
+				// Try to get the item from content browser data using the object path
+				FString ObjectPath = AssetData.GetObjectPathString();
+				FContentBrowserItem AssetItem = ContentBrowserData->GetItemAtPath(FName(*ObjectPath), EContentBrowserItemTypeFilter::IncludeFiles);
+				if (AssetItem.IsValid())
+				{
+					OutItems.Add(AssetItem);
+					FN2CLogger::Get().Log(FString::Printf(TEXT("EnumerateItemsAtPath: Found asset '%s'"), *AssetData.AssetName.ToString()), EN2CLogSeverity::Info);
+				}
+				else
+				{
+					FN2CLogger::Get().Log(FString::Printf(TEXT("EnumerateItemsAtPath: Could not get ContentBrowserItem for asset '%s'"), *AssetData.GetSoftObjectPath().ToString()), EN2CLogSeverity::Warning);
+				}
+			}
+		}
 	}
 	
-	Filter.ItemTypeFilter = TypeFilter;
-	
-	// Get items at the specified path
-	TArray<FContentBrowserItem> AllItems = ContentBrowserData->GetItemsAtPath(FName(*Path), Filter.ItemTypeFilter);
-	
-	// Copy to output
-	OutItems = AllItems;
+	FN2CLogger::Get().Log(FString::Printf(TEXT("EnumerateItemsAtPath: Total items found: %d"), OutItems.Num()), EN2CLogSeverity::Info);
 	
 	return true;
 }
@@ -376,8 +445,8 @@ TSharedPtr<FJsonObject> FN2CMcpContentBrowserUtils::ConvertItemToJson(const FCon
 		else
 		{
 			// Fallback if we can't get asset data
-			ItemJson->SetStringField(TEXT("type"), TEXT("Unknown"));
-			ItemJson->SetStringField(TEXT("class"), TEXT("Unknown"));
+			ItemJson->SetStringField(TEXT("type"), TEXT("UnknownFile"));
+			ItemJson->SetStringField(TEXT("class"), TEXT("UnknownFileClass"));
 		}
 	}
 	else
@@ -414,4 +483,250 @@ bool FN2CMcpContentBrowserUtils::CalculatePagination(int32 TotalItems, int32 Pag
 	OutHasMore = OutEndIndex < TotalItems;
 	
 	return true;
+}
+
+TSharedPtr<FJsonObject> FN2CMcpContentBrowserUtils::CreateFolderJson(const FString& FolderPath, const FString& FolderName)
+{
+	TSharedPtr<FJsonObject> ItemJson = MakeShareable(new FJsonObject);
+	
+	ItemJson->SetStringField(TEXT("path"), FolderPath);
+	ItemJson->SetStringField(TEXT("name"), FolderName);
+	ItemJson->SetBoolField(TEXT("is_folder"), true);
+	ItemJson->SetStringField(TEXT("type"), TEXT("Folder"));
+	ItemJson->SetStringField(TEXT("class"), TEXT("Folder"));
+	
+	return ItemJson;
+}
+
+TSharedPtr<FJsonObject> FN2CMcpContentBrowserUtils::CreateAssetJson(const FAssetData& AssetData)
+{
+	TSharedPtr<FJsonObject> ItemJson = MakeShareable(new FJsonObject);
+	
+	// Basic info
+	ItemJson->SetStringField(TEXT("path"), AssetData.PackageName.ToString());
+	ItemJson->SetStringField(TEXT("name"), AssetData.AssetName.ToString());
+	ItemJson->SetBoolField(TEXT("is_folder"), false);
+	
+	// Asset type from class name
+	FString AssetClassName = AssetData.AssetClassPath.GetAssetName().ToString();
+	ItemJson->SetStringField(TEXT("type"), AssetClassName);
+	
+	// Full class path
+	ItemJson->SetStringField(TEXT("class"), AssetData.AssetClassPath.ToString());
+	
+	// Additional metadata if available
+	if (AssetData.GetClass())
+	{
+		ItemJson->SetStringField(TEXT("native_class"), AssetData.GetClass()->GetName());
+	}
+	
+	return ItemJson;
+}
+
+bool FN2CMcpContentBrowserUtils::EnumerateItemsAtPathAsJson(const FString& Path, bool bIncludeFolders, bool bIncludeFiles, TArray<TSharedPtr<FJsonObject>>& OutJsonItems)
+{
+	OutJsonItems.Reset();
+	
+	FN2CLogger::Get().Log(FString::Printf(TEXT("EnumerateItemsAtPathAsJson: Path='%s', IncludeFolders=%d, IncludeFiles=%d"), 
+		*Path, bIncludeFolders ? 1 : 0, bIncludeFiles ? 1 : 0), EN2CLogSeverity::Info);
+	
+	// Get folders if requested
+	if (bIncludeFolders)
+	{
+		UEditorAssetSubsystem* EditorAssetSubsystem = GEditor->GetEditorSubsystem<UEditorAssetSubsystem>();
+		if (EditorAssetSubsystem)
+		{
+			// Get all sub-paths (which includes both folders and assets)
+			TArray<FString> SubPaths = EditorAssetSubsystem->ListAssets(Path, false, false);
+			
+			// Track unique folders we've already added
+			TSet<FString> AddedFolders;
+			
+			// Extract folder paths from asset paths
+			for (const FString& SubPath : SubPaths)
+			{
+				// Get the directory part of the path
+				FString Directory = FPaths::GetPath(SubPath);
+				
+				// Check if this is a direct subfolder of our path
+				if (Directory.StartsWith(Path) && Directory != Path)
+				{
+					// Extract just the immediate subfolder
+					FString RelativePath = Directory.Mid(Path.Len());
+					if (RelativePath.StartsWith(TEXT("/")))
+					{
+						RelativePath = RelativePath.Mid(1);
+					}
+					
+					// Get just the first folder level
+					int32 SlashIndex;
+					if (RelativePath.FindChar('/', SlashIndex))
+					{
+						RelativePath = RelativePath.Left(SlashIndex);
+					}
+					
+					if (!RelativePath.IsEmpty() && !AddedFolders.Contains(RelativePath))
+					{
+						AddedFolders.Add(RelativePath);
+						FString FolderPath = Path / RelativePath;
+						TSharedPtr<FJsonObject> FolderJson = CreateFolderJson(FolderPath, RelativePath);
+						OutJsonItems.Add(FolderJson);
+						FN2CLogger::Get().Log(FString::Printf(TEXT("EnumerateItemsAtPathAsJson: Found folder '%s'"), *RelativePath), EN2CLogSeverity::Info);
+					}
+				}
+			}
+			
+			// Also check for empty folders using DoesDirectoryExist
+			TArray<FString> DirectoryNames;
+			FString DiskPath;
+			if (FPackageName::TryConvertLongPackageNameToFilename(Path, DiskPath))
+			{
+				if (!DiskPath.EndsWith(TEXT("/")))
+				{
+					DiskPath += TEXT("/");
+				}
+				
+				// Find all subdirectories
+				IFileManager::Get().FindFiles(DirectoryNames, *(DiskPath + TEXT("*")), false, true);
+				
+				for (const FString& DirName : DirectoryNames)
+				{
+					if (!AddedFolders.Contains(DirName))
+					{
+						FString FolderPath = Path / DirName;
+						TSharedPtr<FJsonObject> FolderJson = CreateFolderJson(FolderPath, DirName);
+						OutJsonItems.Add(FolderJson);
+						FN2CLogger::Get().Log(FString::Printf(TEXT("EnumerateItemsAtPathAsJson: Found empty folder '%s'"), *DirName), EN2CLogSeverity::Info);
+					}
+				}
+			}
+		}
+	}
+	
+	// Get assets if requested
+	if (bIncludeFiles)
+	{
+		// Get the asset registry
+		FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+		IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+		
+		// Set up the filter
+		FARFilter Filter;
+		Filter.bRecursivePaths = false;
+		Filter.PackagePaths.Add(FName(*Path));
+		
+		// Get assets
+		TArray<FAssetData> AssetDataList;
+		AssetRegistry.GetAssets(Filter, AssetDataList);
+		
+		FN2CLogger::Get().Log(FString::Printf(TEXT("EnumerateItemsAtPathAsJson: AssetRegistry found %d assets"), AssetDataList.Num()), EN2CLogSeverity::Info);
+		
+		// Convert to JSON objects
+		for (const FAssetData& AssetData : AssetDataList)
+		{
+			TSharedPtr<FJsonObject> AssetJson = CreateAssetJson(AssetData);
+			OutJsonItems.Add(AssetJson);
+			FN2CLogger::Get().Log(FString::Printf(TEXT("EnumerateItemsAtPathAsJson: Found asset '%s' of type '%s'"), 
+				*AssetData.AssetName.ToString(), *AssetData.AssetClassPath.GetAssetName().ToString()), EN2CLogSeverity::Info);
+		}
+	}
+	
+	FN2CLogger::Get().Log(FString::Printf(TEXT("EnumerateItemsAtPathAsJson: Total items found: %d"), OutJsonItems.Num()), EN2CLogSeverity::Info);
+	
+	return true;
+}
+
+void FN2CMcpContentBrowserUtils::FilterJsonItemsByType(const TArray<TSharedPtr<FJsonObject>>& Items, const FString& FilterType, TArray<TSharedPtr<FJsonObject>>& OutFilteredItems)
+{
+	OutFilteredItems.Reset();
+	
+	// If filter is "All", just copy everything
+	if (FilterType.Equals(TEXT("All"), ESearchCase::IgnoreCase))
+	{
+		OutFilteredItems = Items;
+		return;
+	}
+	
+	// Filter by specific type
+	for (const TSharedPtr<FJsonObject>& Item : Items)
+	{
+		if (!Item.IsValid())
+		{
+			continue;
+		}
+		
+		bool bInclude = false;
+		bool bIsFolder = false;
+		Item->TryGetBoolField(TEXT("is_folder"), bIsFolder);
+		
+		if (bIsFolder)
+		{
+			// Check if we want folders
+			if (FilterType.Equals(TEXT("Folder"), ESearchCase::IgnoreCase))
+			{
+				bInclude = true;
+			}
+		}
+		else
+		{
+			// Get asset type
+			FString AssetType;
+			if (Item->TryGetStringField(TEXT("type"), AssetType))
+			{
+				// Check against filter type
+				if (FilterType.Equals(TEXT("Blueprint"), ESearchCase::IgnoreCase) && AssetType.Contains(TEXT("Blueprint")))
+				{
+					bInclude = true;
+				}
+				else if (FilterType.Equals(TEXT("Material"), ESearchCase::IgnoreCase) && 
+					(AssetType.Contains(TEXT("Material")) && !AssetType.Contains(TEXT("MaterialFunction"))))
+				{
+					bInclude = true;
+				}
+				else if (FilterType.Equals(TEXT("Texture"), ESearchCase::IgnoreCase) && AssetType.Contains(TEXT("Texture")))
+				{
+					bInclude = true;
+				}
+				else if (FilterType.Equals(TEXT("StaticMesh"), ESearchCase::IgnoreCase) && AssetType.Contains(TEXT("StaticMesh")))
+				{
+					bInclude = true;
+				}
+			}
+		}
+		
+		if (bInclude)
+		{
+			OutFilteredItems.Add(Item);
+		}
+	}
+}
+
+void FN2CMcpContentBrowserUtils::FilterJsonItemsByName(const TArray<TSharedPtr<FJsonObject>>& Items, const FString& NameFilter, TArray<TSharedPtr<FJsonObject>>& OutFilteredItems)
+{
+	OutFilteredItems.Reset();
+	
+	// If no filter, copy everything
+	if (NameFilter.IsEmpty())
+	{
+		OutFilteredItems = Items;
+		return;
+	}
+	
+	// Filter by name (case-insensitive substring match)
+	for (const TSharedPtr<FJsonObject>& Item : Items)
+	{
+		if (!Item.IsValid())
+		{
+			continue;
+		}
+		
+		FString ItemName;
+		if (Item->TryGetStringField(TEXT("name"), ItemName))
+		{
+			if (ItemName.Contains(NameFilter, ESearchCase::IgnoreCase))
+			{
+				OutFilteredItems.Add(Item);
+			}
+		}
+	}
 }

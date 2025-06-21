@@ -35,7 +35,7 @@ private:
 	 * Build the result JSON object
 	 */
 	TSharedPtr<FJsonObject> BuildResultJson(
-		const TArray<struct FContentBrowserItem>& Items,
+		const TArray<TSharedPtr<FJsonObject>>& Items,
 		int32 StartIndex,
 		int32 EndIndex,
 		int32 TotalCount,

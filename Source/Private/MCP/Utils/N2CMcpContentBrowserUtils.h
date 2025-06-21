@@ -120,6 +120,47 @@ public:
 	 * @return True if pagination parameters are valid
 	 */
 	static bool CalculatePagination(int32 TotalItems, int32 Page, int32 PageSize, int32& OutStartIndex, int32& OutEndIndex, bool& OutHasMore);
+	
+	/**
+	 * Create a JSON object for a folder (fallback when ContentBrowserItem is not available)
+	 * @param FolderPath Virtual path to the folder
+	 * @param FolderName Display name of the folder
+	 * @return JSON object representing the folder
+	 */
+	static TSharedPtr<FJsonObject> CreateFolderJson(const FString& FolderPath, const FString& FolderName);
+	
+	/**
+	 * Create a JSON object for an asset (fallback when ContentBrowserItem is not available)
+	 * @param AssetData Asset data from the asset registry
+	 * @return JSON object representing the asset
+	 */
+	static TSharedPtr<FJsonObject> CreateAssetJson(const struct FAssetData& AssetData);
+	
+	/**
+	 * Enumerates items at a content browser path and returns them as JSON objects
+	 * @param Path The path to enumerate
+	 * @param bIncludeFolders Whether to include folders in results
+	 * @param bIncludeFiles Whether to include files/assets in results
+	 * @param OutJsonItems Array to fill with JSON objects representing items
+	 * @return True if enumeration succeeded
+	 */
+	static bool EnumerateItemsAtPathAsJson(const FString& Path, bool bIncludeFolders, bool bIncludeFiles, TArray<TSharedPtr<FJsonObject>>& OutJsonItems);
+	
+	/**
+	 * Filters JSON item objects by type
+	 * @param Items Input array of JSON items to filter
+	 * @param FilterType Type filter (All, Blueprint, Material, Texture, StaticMesh, Folder)
+	 * @param OutFilteredItems Output array of filtered JSON items
+	 */
+	static void FilterJsonItemsByType(const TArray<TSharedPtr<FJsonObject>>& Items, const FString& FilterType, TArray<TSharedPtr<FJsonObject>>& OutFilteredItems);
+	
+	/**
+	 * Filters JSON item objects by name
+	 * @param Items Input array of JSON items to filter
+	 * @param NameFilter Case-insensitive substring to match
+	 * @param OutFilteredItems Output array of filtered JSON items
+	 */
+	static void FilterJsonItemsByName(const TArray<TSharedPtr<FJsonObject>>& Items, const FString& NameFilter, TArray<TSharedPtr<FJsonObject>>& OutFilteredItems);
 
 private:
 	// Prevent instantiation

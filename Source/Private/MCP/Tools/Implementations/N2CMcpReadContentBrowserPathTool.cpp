@@ -5,7 +5,6 @@
 #include "MCP/Utils/N2CMcpContentBrowserUtils.h"
 #include "Utils/N2CLogger.h"
 #include "Dom/JsonObject.h"
-#include "ContentBrowserItem.h"
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonSerializer.h"
 
@@ -128,24 +127,24 @@ FMcpToolCallResult FN2CMcpReadContentBrowserPathTool::Execute(const TSharedPtr<F
 			return FMcpToolCallResult::CreateErrorResult(FString::Printf(TEXT("Path does not exist: %s"), *Path));
 		}
 		
-		// 4. Enumerate items at path
-		TArray<FContentBrowserItem> AllItems;
+		// 4. Enumerate items at path as JSON
+		TArray<TSharedPtr<FJsonObject>> AllJsonItems;
 		bool bIncludeFolders = FilterType.Equals(TEXT("All")) || FilterType.Equals(TEXT("Folder"));
 		bool bIncludeFiles = !FilterType.Equals(TEXT("Folder"));
 		
-		if (!FN2CMcpContentBrowserUtils::EnumerateItemsAtPath(Path, bIncludeFolders, bIncludeFiles, AllItems))
+		if (!FN2CMcpContentBrowserUtils::EnumerateItemsAtPathAsJson(Path, bIncludeFolders, bIncludeFiles, AllJsonItems))
 		{
 			FN2CLogger::Get().LogError(FString::Printf(TEXT("read-content-browser-path: Failed to enumerate items at %s"), *Path));
 			return FMcpToolCallResult::CreateErrorResult(TEXT("Failed to enumerate items"));
 		}
 		
 		// 5. Apply type filter
-		TArray<FContentBrowserItem> TypeFilteredItems;
-		FN2CMcpContentBrowserUtils::FilterItemsByType(AllItems, FilterType, TypeFilteredItems);
+		TArray<TSharedPtr<FJsonObject>> TypeFilteredItems;
+		FN2CMcpContentBrowserUtils::FilterJsonItemsByType(AllJsonItems, FilterType, TypeFilteredItems);
 		
 		// 6. Apply name filter
-		TArray<FContentBrowserItem> FullyFilteredItems;
-		FN2CMcpContentBrowserUtils::FilterItemsByName(TypeFilteredItems, FilterName, FullyFilteredItems);
+		TArray<TSharedPtr<FJsonObject>> FullyFilteredItems;
+		FN2CMcpContentBrowserUtils::FilterJsonItemsByName(TypeFilteredItems, FilterName, FullyFilteredItems);
 		
 		// 7. Apply pagination
 		int32 TotalCount = FullyFilteredItems.Num();
@@ -251,7 +250,7 @@ bool FN2CMcpReadContentBrowserPathTool::ParseArguments(const TSharedPtr<FJsonObj
 }
 
 TSharedPtr<FJsonObject> FN2CMcpReadContentBrowserPathTool::BuildResultJson(
-	const TArray<FContentBrowserItem>& Items,
+	const TArray<TSharedPtr<FJsonObject>>& Items,
 	int32 StartIndex,
 	int32 EndIndex,
 	int32 TotalCount,
@@ -265,10 +264,9 @@ TSharedPtr<FJsonObject> FN2CMcpReadContentBrowserPathTool::BuildResultJson(
 	TArray<TSharedPtr<FJsonValue>> ItemsArray;
 	for (int32 i = StartIndex; i < EndIndex && i < Items.Num(); ++i)
 	{
-		TSharedPtr<FJsonObject> ItemJson = FN2CMcpContentBrowserUtils::ConvertItemToJson(Items[i]);
-		if (ItemJson.IsValid())
+		if (Items[i].IsValid())
 		{
-			ItemsArray.Add(MakeShareable(new FJsonValueObject(ItemJson)));
+			ItemsArray.Add(MakeShareable(new FJsonValueObject(Items[i])));
 		}
 	}
 	
