@@ -8,6 +8,8 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformFileManager.h"
+#include "GenericPlatform/GenericPlatformFile.h"
 #include "Misc/Paths.h"
 
 // Auto-register this tool
@@ -96,48 +98,54 @@ FMcpToolCallResult FN2CMcpReadPathTool::Execute(const TSharedPtr<FJsonObject>& A
         TArray<FString> Files;
         TArray<FString> Directories;
         
-        // Use IFileManager to iterate directory contents
-        IFileManager& FileManager = IFileManager::Get();
+        // Use IPlatformFile for directory iteration
+        IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
         
-        // Lambda to process directory items
-        auto ProcessDirectoryItem = [&Files, &Directories](const TCHAR* FilenameOrDirectory, bool bIsDirectory) -> bool
+        // Define a visitor class for directory iteration
+        class FDirectoryVisitor : public IPlatformFile::FDirectoryVisitor
         {
-            FString ItemName = FPaths::GetCleanFilename(FilenameOrDirectory);
+        public:
+            TArray<FString>& FilesRef;
+            TArray<FString>& DirectoriesRef;
             
-            // Skip . and .. entries
-            if (ItemName == TEXT(".") || ItemName == TEXT("..") || ItemName.IsEmpty())
+            FDirectoryVisitor(TArray<FString>& InFiles, TArray<FString>& InDirectories)
+                : FilesRef(InFiles)
+                , DirectoriesRef(InDirectories)
             {
+            }
+            
+            virtual bool Visit(const TCHAR* FilenameOrDirectory, bool bIsDirectory) override
+            {
+                FString ItemName = FPaths::GetCleanFilename(FilenameOrDirectory);
+                
+                // Skip . and .. entries
+                if (ItemName == TEXT(".") || ItemName == TEXT("..") || ItemName.IsEmpty())
+                {
+                    return true; // Continue iteration
+                }
+                
+                if (bIsDirectory)
+                {
+                    DirectoriesRef.Add(ItemName);
+                }
+                else
+                {
+                    FilesRef.Add(ItemName);
+                }
+                
                 return true; // Continue iteration
             }
-            
-            if (bIsDirectory)
-            {
-                Directories.Add(ItemName);
-            }
-            else
-            {
-                Files.Add(ItemName);
-            }
-            
-            return true; // Continue iteration
         };
         
-        // Build the search pattern
-        FString SearchPattern = RequestedPath;
-        if (!SearchPattern.EndsWith(TEXT("/")))
-        {
-            SearchPattern += TEXT("/");
-        }
-        SearchPattern += TEXT("*");
-        
-        // Iterate directory to find both files and directories
-        FileManager.IterateDirectory(*SearchPattern, ProcessDirectoryItem);
+        // Create visitor and iterate directory
+        FDirectoryVisitor Visitor(Files, Directories);
+        PlatformFile.IterateDirectory(*RequestedPath, Visitor);
         
         // Log for debugging
         FN2CLogger::Get().Log(
             FString::Printf(TEXT("Directory scan of '%s' found %d files and %d directories"), 
                 *RequestedPath, Files.Num(), Directories.Num()),
-            EN2CLogSeverity::Debug
+            EN2CLogSeverity::Info
         );
         
         // Sort arrays for consistent output
