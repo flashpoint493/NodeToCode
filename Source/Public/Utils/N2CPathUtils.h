@@ -4,6 +4,9 @@
 
 #include "CoreMinimal.h"
 
+// Forward declaration with proper underlying type
+enum class EN2CCodeLanguage : uint8;
+
 /**
  * Utility class for common path operations in NodeToCode
  */
@@ -31,5 +34,5 @@ public:
      * @param Language The target code language
      * @return The file extension including the dot (e.g., ".cpp")
      */
-    static FString GetFileExtensionForLanguage(enum EN2CCodeLanguage Language);
+    static FString GetFileExtensionForLanguage(EN2CCodeLanguage Language);
 };

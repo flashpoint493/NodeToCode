@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
 #include "MCP/Async/N2CToolAsyncTaskManager.h"
-#include "MCP/Tools/Implementations/N2CTranslateBlueprintAsyncTask.h"
+#include "MCP/Tools/Implementations/Translation/N2CTranslateBlueprintAsyncTask.h"
 #include "MCP/Server/N2CMcpHttpServerManager.h"
 #include "MCP/Server/N2CMcpJsonRpcTypes.h"
 #include "MCP/Server/N2CSseServer.h"

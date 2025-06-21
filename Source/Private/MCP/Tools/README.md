@@ -16,7 +16,16 @@ MCP/Tools/
 │   └── N2CMcpToolTypes.h/.cpp    - Type definitions
 │
 ├── Implementations/            - Actual tool implementations
-│   └── N2CMcpGetFocusedBlueprintTool.h/.cpp
+│   ├── Blueprint/              - Blueprint-related tools
+│   │   ├── Analysis/           - Blueprint inspection and analysis
+│   │   ├── Functions/          - Function creation and management
+│   │   ├── Variables/          - Variable creation and type searching
+│   │   ├── Graph/              - Node and connection operations
+│   │   └── Organization/       - Tagging and organizing blueprints
+│   │
+│   ├── Translation/            - Code translation tools
+│   ├── FileSystem/             - File and directory operations
+│   └── ContentBrowser/         - Content browser navigation
 │
 └── README.md                   - This documentation
 ```
@@ -201,7 +210,15 @@ Follow these steps to add a new MCP tool:
 
 ### 1. Create the Tool Header File
 
-Create a new header file in `Source/Private/MCP/Tools/Implementations/`:
+Create a new header file in the appropriate subdirectory under `Source/Private/MCP/Tools/Implementations/`. Choose the subdirectory based on your tool's category:
+- `Blueprint/Analysis/` - For Blueprint inspection tools
+- `Blueprint/Functions/` - For function management tools
+- `Blueprint/Variables/` - For variable creation tools
+- `Blueprint/Graph/` - For node and graph manipulation
+- `Blueprint/Organization/` - For tagging and organizing
+- `Translation/` - For code translation tools
+- `FileSystem/` - For file operations
+- `ContentBrowser/` - For content browser operations
 
 ```cpp
 // N2CMcpYourToolName.h
@@ -223,7 +240,7 @@ public:
 
 ### 2. Create the Tool Implementation
 
-Create the corresponding .cpp file in the same directory (`Source/Private/MCP/Tools/Implementations/`):
+Create the corresponding .cpp file in the same subdirectory as the header file:
 
 ```cpp
 // N2CMcpYourToolName.cpp
@@ -367,14 +384,14 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
 ## Existing Tools
 
 ### get-focused-blueprint
-- **Location**: `Implementations/N2CMcpGetFocusedBlueprintTool.cpp`
+- **Location**: `Implementations/Blueprint/Analysis/N2CMcpGetFocusedBlueprintTool.cpp`
 - **Description**: Collects and serializes the currently focused Blueprint graph into N2CJSON format
 - **Parameters**: None
 - **Requires Game Thread**: Yes
 - **Returns**: N2CJSON representation of the focused Blueprint
 
 ### search-blueprint-nodes
-- **Location**: `Implementations/N2CMcpSearchBlueprintNodesTool.cpp`
+- **Location**: `Implementations/Blueprint/Graph/N2CMcpSearchBlueprintNodesTool.cpp`
 - **Description**: Searches for Blueprint nodes/actions relevant to a given query. Can perform context-sensitive search based on the current Blueprint or a global search
 - **Parameters**:
   - `searchTerm` (string, required): The text query to search for
@@ -389,7 +406,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `isContextSensitive`: Whether the node requires specific context
 
 ### add-bp-node-to-active-graph
-- **Location**: `Implementations/N2CMcpAddBlueprintNodeTool.cpp`
+- **Location**: `Implementations/Blueprint/Graph/N2CMcpAddBlueprintNodeTool.cpp`
 - **Description**: Adds a Blueprint node to the currently active graph. IMPORTANT: The search-blueprint-nodes tool MUST have been used before this tool to find the node and get its actionIdentifier
 - **Parameters**:
   - `nodeName` (string, required): The name of the node to add (e.g., 'Spawn Actor from Class')
@@ -405,7 +422,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `blueprintName`: Name of the Blueprint containing the graph
 
 ### connect-pins
-- **Location**: `Implementations/N2CMcpConnectPinsTool.cpp`
+- **Location**: `Implementations/Blueprint/Graph/N2CMcpConnectPinsTool.cpp`
 - **Description**: Connect pins between Blueprint nodes using their GUIDs. Supports batch connections with transactional safety. Output data pins can connect to multiple input pins, while execution pins maintain single connections.
 - **Parameters**:
   - `connections` (array, required): Array of pin connection objects to create. Each object has:
@@ -432,7 +449,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `summary` (object): Contains `totalRequested`, `succeeded`, and `failed` counts.
 
 ### list-blueprint-functions
-- **Location**: `Implementations/N2CMcpListBlueprintFunctionsTool.cpp`
+- **Location**: `Implementations/Blueprint/Analysis/N2CMcpListBlueprintFunctionsTool.cpp`
 - **Description**: Lists all functions defined in a Blueprint with their parameters and metadata
 - **Parameters**:
   - `blueprintPath` (string, optional): Asset path of the Blueprint. If not provided, uses focused Blueprint
@@ -454,7 +471,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `functionCount`: Total number of functions
 
 ### create-blueprint-function
-- **Location**: `Implementations/N2CMcpCreateBlueprintFunctionTool.cpp`
+- **Location**: `Implementations/Blueprint/Functions/N2CMcpCreateBlueprintFunctionTool.cpp`
 - **Description**: Creates a new Blueprint function with specified parameters and opens it in the editor
 - **Parameters**:
   - `functionName` (string, required): Name of the function to create
@@ -489,7 +506,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `message`: Success message
 
 ### open-blueprint-function
-- **Location**: `Implementations/N2CMcpOpenBlueprintFunctionTool.cpp`
+- **Location**: `Implementations/Blueprint/Functions/N2CMcpOpenBlueprintFunctionTool.cpp`
 - **Description**: Opens a Blueprint function in the editor using its GUID. The function GUID can be obtained from `create-blueprint-function` or `list-blueprint-functions` tools.
 - **Parameters**:
   - `functionGuid` (string, required): The GUID of the function to open.
@@ -507,7 +524,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `editorState` (string): Indicates the state, e.g., "opened".
 
 ### delete-blueprint-function
-- **Location**: `Implementations/N2CMcpDeleteBlueprintFunctionTool.cpp`
+- **Location**: `Implementations/Blueprint/Functions/N2CMcpDeleteBlueprintFunctionTool.cpp`
 - **Description**: Deletes a specific Blueprint function using its GUID. Supports reference detection and forced deletion.
 - **Parameters**:
   - `functionGuid` (string, required): The GUID of the function to delete.
@@ -522,7 +539,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `transactionId` (string): GUID of the undo transaction.
 
 ### create-variable
-- **Location**: `Implementations/N2CMcpCreateVariableTool.cpp`
+- **Location**: `Implementations/Blueprint/Variables/N2CMcpCreateVariableTool.cpp`
 - **Description**: Creates a new member variable in the active Blueprint. For map variables: 'typeIdentifier' specifies the map's VALUE type, and 'mapKeyTypeIdentifier' specifies the map's KEY type.
 - **Parameters**:
   - `variableName` (string, required): Name for the new variable.
@@ -547,7 +564,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `message` (string): A success or error message.
 
 ### search-variable-types
-- **Location**: `Implementations/N2CMcpSearchVariableTypesTool.cpp`
+- **Location**: `Implementations/Blueprint/Variables/N2CMcpSearchVariableTypesTool.cpp`
 - **Description**: Searches for available variable types (primitives, classes, structs, enums) by name and returns matches with unique type identifiers.
 - **Parameters**:
   - `searchTerm` (string, required): The text query to search for type names.
@@ -560,7 +577,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `totalMatches` (integer): The number of types found matching the criteria.
 
 ### create-local-variable
-- **Location**: `Implementations/N2CMcpCreateLocalVariableTool.cpp`
+- **Location**: `Implementations/Blueprint/Variables/N2CMcpCreateLocalVariableTool.cpp`
 - **Description**: Creates a new local variable in the currently focused Blueprint function. For map variables: 'typeIdentifier' specifies the map's VALUE type, and 'mapKeyTypeIdentifier' specifies the map's KEY type.
 - **Parameters**:
   - `variableName` (string, required): Name for the new local variable.
@@ -582,7 +599,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `message` (string): A success or error message.
 
 ### list-overridable-functions
-- **Location**: `Implementations/N2CMcpListOverridableFunctionsTool.cpp`
+- **Location**: `Implementations/Blueprint/Analysis/N2CMcpListOverridableFunctionsTool.cpp`
 - **Description**: Lists all functions that can be overridden from parent classes and interfaces
 - **Parameters**:
   - `blueprintPath` (string, optional): Asset path of the Blueprint. If not provided, uses focused Blueprint
@@ -611,7 +628,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `functionCount`: Total number of overridable functions
 
 ### get-available-translation-targets
-- **Location**: `Implementations/N2CMcpGetAvailableTranslationTargetsTool.cpp`
+- **Location**: `Implementations/Translation/N2CMcpGetAvailableTranslationTargetsTool.cpp`
 - **Description**: Returns the list of programming languages that NodeToCode can translate Blueprints into, including metadata about each language
 - **Parameters**: None
 - **Requires Game Thread**: No (only accesses static enum data and settings)
@@ -629,7 +646,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `languageCount`: Total number of available languages
 
 ### get-available-llm-providers
-- **Location**: `Implementations/N2CMcpGetAvailableLLMProvidersTool.cpp`
+- **Location**: `Implementations/Translation/N2CMcpGetAvailableLLMProvidersTool.cpp`
 - **Description**: Returns the list of configured LLM providers available for Blueprint translation. Checks which providers have valid API keys set and includes local providers
 - **Parameters**: None
 - **Requires Game Thread**: Yes (accessing settings and user secrets)
@@ -651,7 +668,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `configuredProviderCount`: Number of providers that are configured and available
 
 ### get-translation-output-directory
-- **Location**: `Implementations/N2CMcpGetTranslationOutputDirectoryTool.cpp`
+- **Location**: `Implementations/Translation/N2CMcpGetTranslationOutputDirectoryTool.cpp`
 - **Description**: Returns the translation output directory configuration from NodeToCode settings. Shows whether a custom directory is set or if the default location is being used
 - **Parameters**: None
 - **Requires Game Thread**: Yes (accessing UObject settings)
@@ -669,8 +686,26 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
     - `structure`: Format of subdirectories created for each translation
     - `autoCreateIfMissing`: Whether the directory is created automatically if missing
 
+### translate-focused-blueprint
+- **Location**: `Implementations/Translation/N2CMcpTranslateBlueprintTool.cpp`
+- **Description**: Translates the currently focused Blueprint graph using an LLM provider. This is a long-running task that uses SSE streaming for progress updates
+- **Parameters** (all optional):
+  - `provider` (string): LLM Provider ID (e.g., 'openai', 'anthropic', 'ollama'). Uses settings default if empty
+  - `model` (string): Specific model ID. Uses provider's default from settings if empty
+  - `language` (string): Target language ID (e.g., 'cpp', 'python'). Uses settings default if empty
+- **Requires Game Thread**: No (async task manages Game Thread needs)
+- **Long-Running**: Yes - requires `_meta.progressToken` for SSE streaming
+- **Returns**: Translation results streamed via SSE events:
+  - Progress notifications during translation
+  - Final result with translated code for each graph
+  - Token usage information
+- **Notes**:
+  - This tool must be called with a progress token for async execution
+  - If called without SSE support, returns an error
+  - The actual translation is handled by N2CTranslateBlueprintAsyncTask
+
 ### read-path
-- **Location**: `Implementations/N2CMcpReadPathTool.cpp`
+- **Location**: `Implementations/FileSystem/N2CMcpReadPathTool.cpp`
 - **Description**: Lists all files and folders in a directory within the Unreal Engine project. Enforces security boundaries to prevent directory traversal outside the project
 - **Parameters**:
   - `relativePath` (string, required): Relative path within the project directory to list. **IMPORTANT**: Use empty string `""` for project root, NOT `"."` or `"/"`. Examples: `""` for root, `"Config"` for Config folder, `"Content/Blueprints"` for nested paths
@@ -698,7 +733,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - Changes to this tool require editor restart to take effect due to MCP server caching
 
 ### read-file
-- **Location**: `Implementations/N2CMcpReadFileTool.cpp`
+- **Location**: `Implementations/FileSystem/N2CMcpReadFileTool.cpp`
 - **Description**: Reads the contents of a file within the Unreal Engine project. Enforces security boundaries to prevent directory traversal outside the project. Supports text files up to 500KB in size. Binary files like .uasset and .umap are not supported
 - **Parameters**:
   - `relativePath` (string, required): Relative path to the file within the project directory. **IMPORTANT**: Use empty string `""` for project root, NOT `"."` or `"/"`. Examples: `"README.md"` for root file, `"Config/DefaultEngine.ini"` for Config folder file
@@ -733,7 +768,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - Documentation: Text, Log, CSV files
 
 ### tag-blueprint-graph
-- **Location**: `Implementations/N2CMcpTagBlueprintGraphTool.cpp`
+- **Location**: `Implementations/Blueprint/Organization/N2CMcpTagBlueprintGraphTool.cpp`
 - **Description**: Tags the currently focused Blueprint graph with a name and category for organization and tracking
 - **Parameters**:
   - `tag` (string, required): The tag name to apply
@@ -759,7 +794,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - Returns error if the current graph is not valid for tagging (no GUID)
 
 ### list-blueprint-tags
-- **Location**: `Implementations/N2CMcpListBlueprintTagsTool.cpp`
+- **Location**: `Implementations/Blueprint/Organization/N2CMcpListBlueprintTagsTool.cpp`
 - **Description**: Lists tags that have been applied to Blueprint graphs. Can filter by graph GUID, tag name, or category
 - **Parameters** (all optional):
   - `graphGuid` (string): Filter tags for a specific graph by its GUID
@@ -788,7 +823,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `category` only: Returns all tags in that category
 
 ### remove-tag-from-graph
-- **Location**: `Implementations/N2CMcpRemoveTagFromGraphTool.cpp`
+- **Location**: `Implementations/Blueprint/Organization/N2CMcpRemoveTagFromGraphTool.cpp`
 - **Description**: Removes a specific tag from a Blueprint graph by its GUID and tag name. If multiple tags with the same name exist in different categories, all will be removed. The operation is idempotent - removing a non-existent tag is not an error.
 - **Parameters**:
   - `graphGuid` (string, required): The GUID of the graph to remove tag from
@@ -810,7 +845,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - The tool logs how many instances were removed if more than one
 
 ### open-content-browser-path
-- **Location**: `Implementations/N2CMcpOpenContentBrowserPathTool.cpp`
+- **Location**: `Implementations/ContentBrowser/N2CMcpOpenContentBrowserPathTool.cpp`
 - **Description**: Opens a specified path in the focused content browser, allowing navigation of the project structure. Can optionally create folders and select specific assets.
 - **Parameters**:
   - `path` (string, required): Content browser path to navigate to (e.g., '/Game/Blueprints')
@@ -834,7 +869,7 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - Failed to create folder (when create_if_missing is true)
 
 ### read-content-browser-path
-- **Location**: `Implementations/N2CMcpReadContentBrowserPathTool.cpp`
+- **Location**: `Implementations/ContentBrowser/N2CMcpReadContentBrowserPathTool.cpp`
 - **Description**: Returns blueprint assets and folders at the specified path in the content browser. Supports pagination, filtering by type and name.
 - **Parameters**:
   - `path` (string, required): Content browser path to read (e.g., '/Game/Blueprints')

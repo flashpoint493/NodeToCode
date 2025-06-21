@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
-#include "MCP/Tools/Implementations/N2CMcpTranslateBlueprintTool.h"
+#include "N2CMcpTranslateBlueprintTool.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h" // For REGISTER_MCP_TOOL
 #include "Utils/N2CLogger.h"
 
