@@ -669,6 +669,30 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
     - `structure`: Format of subdirectories created for each translation
     - `autoCreateIfMissing`: Whether the directory is created automatically if missing
 
+### read-path
+- **Location**: `Implementations/N2CMcpReadPathTool.cpp`
+- **Description**: Lists all files and folders in a directory within the Unreal Engine project. Enforces security boundaries to prevent directory traversal outside the project
+- **Parameters**:
+  - `relativePath` (string, required): Relative path within the project directory to list. **IMPORTANT**: Use empty string `""` for project root, NOT `"."` or `"/"`. Examples: `""` for root, `"Config"` for Config folder, `"Content/Blueprints"` for nested paths
+- **Requires Game Thread**: Yes (file system operations)
+- **Returns**: Object containing:
+  - `success`: Boolean indicating if the operation succeeded
+  - `path`: The relative path that was requested
+  - `absolutePath`: The absolute path that was listed
+  - `fileCount`: Number of files found
+  - `directoryCount`: Number of directories found
+  - `files`: Array of file names (not full paths)
+  - `directories`: Array of directory names (not full paths)
+- **Security Features**:
+  - Path jail enforcement - prevents access outside project directory
+  - Collapses relative paths (.. and .) before validation
+  - No symlink following (UE default behavior)
+  - Read-only operations only
+- **Error Cases**:
+  - Returns error if path traversal is attempted
+  - Returns error if directory does not exist
+  - Returns error if relativePath parameter is missing
+
 ## Example Workflows
 
 ### Searching and Adding Blueprint Nodes
@@ -714,6 +738,93 @@ curl -X POST http://localhost:10000/mcp \
     },
     "id": 2
   }'
+```
+
+### Browsing Project Directories
+
+The `read-path` tool allows browsing directories within the Unreal Engine project safely:
+
+```bash
+# List the project root directory
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "read-path",
+      "arguments": {
+        "relativePath": ""
+      }
+    },
+    "id": 1
+  }'
+
+# List the Config directory
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "read-path",
+      "arguments": {
+        "relativePath": "Config"
+      }
+    },
+    "id": 2
+  }'
+
+# List translation output directories
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "read-path",
+      "arguments": {
+        "relativePath": "Saved/NodeToCode/Translations"
+      }
+    },
+    "id": 3
+  }'
+
+# Example response:
+# {
+#   "jsonrpc": "2.0",
+#   "id": 2,
+#   "result": {
+#     "content": [{
+#       "type": "text",
+#       "text": "{
+#         \"success\": true,
+#         \"path\": \"Config\",
+#         \"absolutePath\": \"/path/to/project/Config\",
+#         \"fileCount\": 5,
+#         \"directoryCount\": 0,
+#         \"files\": [\"DefaultEditor.ini\", \"DefaultEngine.ini\", \"DefaultGame.ini\", \"DefaultInput.ini\", \"HoloLens/HoloLensEngine.ini\"],
+#         \"directories\": []
+#       }"
+#     }]
+#   }
+# }
+
+# Attempt directory traversal (will fail)
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "read-path",
+      "arguments": {
+        "relativePath": "../../../System"
+      }
+    },
+    "id": 4
+  }'
+# Response: Error - "Access denied: Path traversal detected"
 ```
 
 ## Best Practices

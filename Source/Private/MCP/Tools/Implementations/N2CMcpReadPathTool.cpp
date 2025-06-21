@@ -1,0 +1,190 @@
+// Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
+
+#include "N2CMcpReadPathTool.h"
+#include "MCP/Tools/N2CMcpToolRegistry.h"
+#include "Utils/N2CLogger.h"
+#include "Utils/N2CPathUtils.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+#include "HAL/FileManager.h"
+#include "Misc/Paths.h"
+
+// Auto-register this tool
+REGISTER_MCP_TOOL(FN2CMcpReadPathTool)
+
+FMcpToolDefinition FN2CMcpReadPathTool::GetDefinition() const
+{
+    FMcpToolDefinition Definition(
+        TEXT("read-path"),
+        TEXT("Lists all files and folders in a directory within the Unreal Engine project. "
+             "Use empty string \"\" for project root, NOT \".\" or \"/\". "
+             "Examples: \"\" for root, \"Config\" for Config folder, \"Content/Blueprints\" for nested paths. "
+             "Enforces security boundaries to prevent directory traversal outside the project.")
+    );
+    
+    // Define input schema
+    TMap<FString, FString> Properties;
+    Properties.Add(TEXT("relativePath"), TEXT("string"));
+    
+    TArray<FString> Required;
+    Required.Add(TEXT("relativePath"));
+    
+    Definition.InputSchema = BuildInputSchema(Properties, Required);
+    
+    // Add read-only annotation
+    AddReadOnlyAnnotation(Definition);
+    
+    return Definition;
+}
+
+FMcpToolCallResult FN2CMcpReadPathTool::Execute(const TSharedPtr<FJsonObject>& Arguments)
+{
+    // Extract the relative path parameter
+    FString RelativePath;
+    if (!Arguments->TryGetStringField(TEXT("relativePath"), RelativePath))
+    {
+        return FMcpToolCallResult::CreateErrorResult(TEXT("Missing required parameter: relativePath"));
+    }
+    
+    FN2CLogger::Get().Log(
+        FString::Printf(TEXT("Executing read-path tool with relativePath: %s"), *RelativePath),
+        EN2CLogSeverity::Debug
+    );
+    
+    // Execute on Game Thread for file system operations
+    return ExecuteOnGameThread([this, RelativePath]() -> FMcpToolCallResult
+    {
+        // Part 1: Path Validation
+        
+        // Get the project directory as the base path
+        FString BasePath = FPaths::ProjectDir();
+        if (BasePath.IsEmpty())
+        {
+            return FMcpToolCallResult::CreateErrorResult(TEXT("Failed to determine project directory"));
+        }
+        
+        // Combine with the requested relative path
+        // Note: FPaths::Combine correctly handles empty string as the relative path,
+        // returning just the base path. Using "." would create an invalid path.
+        FString RequestedPath = FPaths::Combine(BasePath, RelativePath);
+        
+        // Validate the path stays within bounds
+        FString NormalizedPath;
+        if (!FN2CPathUtils::ValidatePathWithinBounds(BasePath, RequestedPath, NormalizedPath))
+        {
+            FN2CLogger::Get().LogWarning(
+                FString::Printf(TEXT("Path traversal attempt blocked. Requested: %s, Base: %s"), 
+                    *RequestedPath, *BasePath)
+            );
+            return FMcpToolCallResult::CreateErrorResult(TEXT("Access denied: Path traversal detected"));
+        }
+        
+        // Use the normalized path for all operations
+        RequestedPath = NormalizedPath;
+        
+        // Check if the directory exists
+        if (!FPaths::DirectoryExists(RequestedPath))
+        {
+            return FMcpToolCallResult::CreateErrorResult(
+                FString::Printf(TEXT("Directory does not exist: %s"), *RelativePath)
+            );
+        }
+        
+        // Part 2: Directory Iteration
+        
+        TArray<FString> Files;
+        TArray<FString> Directories;
+        
+        // Use IFileManager to iterate directory contents
+        IFileManager& FileManager = IFileManager::Get();
+        
+        // Lambda to process directory items
+        auto ProcessDirectoryItem = [&Files, &Directories](const TCHAR* FilenameOrDirectory, bool bIsDirectory) -> bool
+        {
+            FString ItemName = FPaths::GetCleanFilename(FilenameOrDirectory);
+            
+            // Skip . and .. entries
+            if (ItemName == TEXT(".") || ItemName == TEXT("..") || ItemName.IsEmpty())
+            {
+                return true; // Continue iteration
+            }
+            
+            if (bIsDirectory)
+            {
+                Directories.Add(ItemName);
+            }
+            else
+            {
+                Files.Add(ItemName);
+            }
+            
+            return true; // Continue iteration
+        };
+        
+        // Build the search pattern
+        FString SearchPattern = RequestedPath;
+        if (!SearchPattern.EndsWith(TEXT("/")))
+        {
+            SearchPattern += TEXT("/");
+        }
+        SearchPattern += TEXT("*");
+        
+        // Iterate directory to find both files and directories
+        FileManager.IterateDirectory(*SearchPattern, ProcessDirectoryItem);
+        
+        // Log for debugging
+        FN2CLogger::Get().Log(
+            FString::Printf(TEXT("Directory scan of '%s' found %d files and %d directories"), 
+                *RequestedPath, Files.Num(), Directories.Num()),
+            EN2CLogSeverity::Debug
+        );
+        
+        // Sort arrays for consistent output
+        Files.Sort();
+        Directories.Sort();
+        
+        // Part 3: Build JSON Response
+        
+        TSharedPtr<FJsonObject> ResponseObject = MakeShareable(new FJsonObject);
+        
+        // Add metadata
+        ResponseObject->SetStringField(TEXT("path"), RelativePath);
+        ResponseObject->SetStringField(TEXT("absolutePath"), RequestedPath);
+        ResponseObject->SetNumberField(TEXT("fileCount"), Files.Num());
+        ResponseObject->SetNumberField(TEXT("directoryCount"), Directories.Num());
+        
+        // Add files array
+        TArray<TSharedPtr<FJsonValue>> FilesArray;
+        for (const FString& FileName : Files)
+        {
+            FilesArray.Add(MakeShareable(new FJsonValueString(FileName)));
+        }
+        ResponseObject->SetArrayField(TEXT("files"), FilesArray);
+        
+        // Add directories array
+        TArray<TSharedPtr<FJsonValue>> DirectoriesArray;
+        for (const FString& DirectoryName : Directories)
+        {
+            DirectoriesArray.Add(MakeShareable(new FJsonValueString(DirectoryName)));
+        }
+        ResponseObject->SetArrayField(TEXT("directories"), DirectoriesArray);
+        
+        // Add success status
+        ResponseObject->SetBoolField(TEXT("success"), true);
+        
+        FN2CLogger::Get().Log(
+            FString::Printf(TEXT("Listed directory: %s (Files: %d, Directories: %d)"), 
+                *RelativePath, Files.Num(), Directories.Num()),
+            EN2CLogSeverity::Info
+        );
+        
+        // Convert JSON to string for the result
+        FString OutputString;
+        TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutputString);
+        FJsonSerializer::Serialize(ResponseObject.ToSharedRef(), Writer);
+        
+        return FMcpToolCallResult::CreateTextResult(OutputString);
+    });
+}
+
