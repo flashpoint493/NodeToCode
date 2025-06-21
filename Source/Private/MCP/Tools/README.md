@@ -809,6 +809,30 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - If multiple tags with the same name exist in different categories, all are removed
   - The tool logs how many instances were removed if more than one
 
+### open-content-browser-path
+- **Location**: `Implementations/N2CMcpOpenContentBrowserPathTool.cpp`
+- **Description**: Opens a specified path in the focused content browser, allowing navigation of the project structure. Can optionally create folders and select specific assets.
+- **Parameters**:
+  - `path` (string, required): Content browser path to navigate to (e.g., '/Game/Blueprints')
+  - `select_item` (string, optional): Specific item to select after navigation
+  - `create_if_missing` (boolean, optional, default: false): Whether to create the folder if it doesn't exist
+- **Requires Game Thread**: Yes
+- **Returns**: Object containing:
+  - `success`: Whether the navigation was successful
+  - `navigated_path`: The path that was navigated to (normalized)
+  - `selected_item`: The item that was selected (if any)
+  - `created_folder`: Whether a new folder was created
+  - `current_selected_paths`: Array of currently selected paths after navigation
+- **Path Validation**:
+  - Paths must start with '/' and be in allowed directories
+  - Allowed roots: /Game, /Engine, /EnginePresets, /Paper2D, /NodeToCode, /Plugins
+  - No directory traversal allowed (../ patterns are blocked)
+- **Error Cases**:
+  - Invalid path format
+  - Path outside allowed directories
+  - Path doesn't exist (when create_if_missing is false)
+  - Failed to create folder (when create_if_missing is true)
+
 ## Example Workflows
 
 ### Searching and Adding Blueprint Nodes
@@ -1153,6 +1177,88 @@ curl -X POST http://localhost:27000/mcp \
 #         \"remainingTags\": 2
 #       }"
 #     }]
+#   }
+# }
+```
+
+### Navigating Content Browser
+
+The `open-content-browser-path` tool allows programmatic navigation of the content browser:
+
+```bash
+# Navigate to a specific folder
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "open-content-browser-path",
+      "arguments": {
+        "path": "/Game/Blueprints"
+      }
+    },
+    "id": 1
+  }'
+
+# Navigate and create folder if missing
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "open-content-browser-path",
+      "arguments": {
+        "path": "/Game/AI/BehaviorTrees",
+        "create_if_missing": true
+      }
+    },
+    "id": 2
+  }'
+
+# Navigate and select a specific asset
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "open-content-browser-path",
+      "arguments": {
+        "path": "/Game/Blueprints",
+        "select_item": "BP_PlayerCharacter"
+      }
+    },
+    "id": 3
+  }'
+
+# Example success response:
+# {
+#   "jsonrpc": "2.0",
+#   "id": 2,
+#   "result": {
+#     "content": [{
+#       "type": "text",
+#       "text": "{
+#         \"success\": true,
+#         \"navigated_path\": \"/Game/AI/BehaviorTrees\",
+#         \"selected_item\": \"\",
+#         \"created_folder\": true,
+#         \"current_selected_paths\": [\"/Game/AI/BehaviorTrees\"]
+#       }"
+#     }]
+#   }
+# }
+
+# Example error for invalid path:
+# {
+#   "jsonrpc": "2.0",
+#   "id": 1,
+#   "result": {
+#     "error": {
+#       "message": "Invalid path: Path '../../../System' is not in an allowed content directory"
+#     }
 #   }
 # }
 ```
