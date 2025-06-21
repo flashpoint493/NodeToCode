@@ -523,6 +523,28 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `graphName` (string): Internal name of the function graph.
   - `editorState` (string): Indicates the state, e.g., "opened".
 
+### open-blueprint-asset
+- **Location**: `Implementations/Blueprint/N2CMcpOpenBlueprintAssetTool.cpp`
+- **Description**: Opens a specified blueprint asset in the Blueprint Editor, allowing agents to programmatically open blueprints for viewing or editing.
+- **Parameters**:
+  - `asset_path` (string, required): Full path to the blueprint asset (e.g., '/Game/Blueprints/BP_MyActor.BP_MyActor')
+  - `bring_to_front` (boolean, optional, default: true): Whether to bring the editor window to front
+  - `focus_graph` (string, optional): Specific graph to focus on (e.g., 'EventGraph', 'ConstructionScript')
+- **Requires Game Thread**: Yes
+- **Returns**: Object containing:
+  - `success`: Whether the blueprint was successfully opened
+  - `asset_path`: Path of the opened asset
+  - `editor_id`: Identifier for the opened editor (asset path)
+  - `focused_graph`: Name of the graph that was focused (if any)
+  - `asset_type`: Type of the blueprint (Actor, Component, Interface, etc.)
+  - `blueprint_name`: Name of the blueprint
+  - `parent_class`: Name of the parent class (if any)
+  - `graph_counts`: Object with counts of different graph types
+- **Notes**: 
+  - Validates asset paths to ensure they're valid blueprint paths
+  - Automatically detects blueprint type (Actor, Component, Interface, etc.)
+  - Can focus on specific graphs within the blueprint
+
 ### delete-blueprint-function
 - **Location**: `Implementations/Blueprint/Functions/N2CMcpDeleteBlueprintFunctionTool.cpp`
 - **Description**: Deletes a specific Blueprint function using its GUID. Supports reference detection and forced deletion.
@@ -1420,6 +1442,103 @@ curl -X POST http://localhost:27000/mcp \
 #     }]
 #   }
 # }
+```
+
+### Opening Blueprint Assets
+
+The `open-blueprint-asset` tool allows programmatically opening blueprints in the editor:
+
+```bash
+# Open a blueprint asset
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "open-blueprint-asset",
+      "arguments": {
+        "asset_path": "/Game/Blueprints/BP_PlayerCharacter.BP_PlayerCharacter"
+      }
+    },
+    "id": 1
+  }'
+
+# Open a blueprint and focus on a specific graph
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "open-blueprint-asset",
+      "arguments": {
+        "asset_path": "/Game/Blueprints/BP_GameMode.BP_GameMode",
+        "bring_to_front": true,
+        "focus_graph": "EventGraph"
+      }
+    },
+    "id": 2
+  }'
+
+# Example response:
+# {
+#   "jsonrpc": "2.0",
+#   "id": 1,
+#   "result": {
+#     "content": [{
+#       "type": "text",
+#       "text": "{
+#         \"success\": true,
+#         \"asset_path\": \"/Game/Blueprints/BP_PlayerCharacter.BP_PlayerCharacter\",
+#         \"editor_id\": \"/Game/Blueprints/BP_PlayerCharacter.BP_PlayerCharacter\",
+#         \"focused_graph\": \"EventGraph\",
+#         \"asset_type\": \"Actor\",
+#         \"blueprint_name\": \"BP_PlayerCharacter\",
+#         \"parent_class\": \"Character\",
+#         \"graph_counts\": {
+#           \"event_graphs\": 1,
+#           \"function_graphs\": 5,
+#           \"macro_graphs\": 0,
+#           \"delegate_graphs\": 0
+#         }
+#       }"
+#     }]
+#   }
+# }
+
+# Combined workflow: Browse content, then open a blueprint
+# Step 1: List blueprints in a folder
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "read-content-browser-path",
+      "arguments": {
+        "path": "/Game/Blueprints",
+        "filter_type": "Blueprint"
+      }
+    },
+    "id": 1
+  }'
+
+# Step 2: Open one of the found blueprints
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "open-blueprint-asset",
+      "arguments": {
+        "asset_path": "/Game/Blueprints/BP_PlayerCharacter.BP_PlayerCharacter",
+        "focus_graph": "ConstructionScript"
+      }
+    },
+    "id": 2
+  }'
 ```
 
 ## Best Practices
