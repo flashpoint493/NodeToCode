@@ -732,6 +732,61 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - Scripts: Shell, Batch, PowerShell
   - Documentation: Text, Log, CSV files
 
+### tag-blueprint-graph
+- **Location**: `Implementations/N2CMcpTagBlueprintGraphTool.cpp`
+- **Description**: Tags the currently focused Blueprint graph with a name and category for organization and tracking
+- **Parameters**:
+  - `tag` (string, required): The tag name to apply
+  - `category` (string, optional, default: "Default"): The category for organizing tags
+  - `description` (string, optional): Additional notes about the tag
+- **Requires Game Thread**: Yes
+- **Returns**: Object containing:
+  - `success`: Boolean indicating if the tagging was successful
+  - `taggedGraph`: Object containing:
+    - `tag`: The tag name that was applied
+    - `category`: The category used
+    - `graphGuid`: GUID of the tagged graph
+    - `graphName`: Name of the tagged graph
+    - `blueprintPath`: Asset path of the owning Blueprint
+    - `timestamp`: ISO 8601 timestamp when the tag was applied
+  - `message`: Success or error message
+- **Features**:
+  - Idempotent - tagging the same graph with the same tag/category is safe
+  - Persistent - tags are saved to disk and survive editor restarts
+  - Timestamped - each tag includes when it was applied
+- **Error Cases**:
+  - Returns error if no Blueprint graph is currently focused
+  - Returns error if the current graph is not valid for tagging (no GUID)
+
+### list-blueprint-tags
+- **Location**: `Implementations/N2CMcpListBlueprintTagsTool.cpp`
+- **Description**: Lists tags that have been applied to Blueprint graphs. Can filter by graph GUID, tag name, or category
+- **Parameters** (all optional):
+  - `graphGuid` (string): Filter tags for a specific graph by its GUID
+  - `tag` (string): Filter graphs that have a specific tag name
+  - `category` (string): Filter tags by category (used with `tag` for more specific filtering)
+- **Requires Game Thread**: Yes
+- **Returns**: Object containing:
+  - `tags`: Array of tag objects, each containing:
+    - `tag`: The tag name
+    - `category`: The tag category
+    - `description`: Tag description
+    - `graphGuid`: GUID of the tagged graph
+    - `graphName`: Name of the tagged graph
+    - `blueprintPath`: Asset path of the owning Blueprint
+    - `timestamp`: ISO 8601 timestamp when the tag was applied
+  - `count`: Number of tags returned
+  - `summary`: Object containing:
+    - `uniqueTagNames`: Array of all unique tag names in the system
+    - `uniqueCategories`: Array of all unique categories in the system
+  - `appliedFilters`: Object showing which filters were applied
+- **Filter Behavior**:
+  - No parameters: Returns all tags in the system
+  - `graphGuid` only: Returns all tags for that specific graph
+  - `tag` only: Returns all graphs with that tag name
+  - `tag` + `category`: Returns all graphs with that specific tag/category combination
+  - `category` only: Returns all tags in that category
+
 ## Example Workflows
 
 ### Searching and Adding Blueprint Nodes
@@ -952,6 +1007,95 @@ curl -X POST http://localhost:27000/mcp \
     "id": 4
   }'
 # Response: Error - "Access denied: Path traversal detected"
+```
+
+### Tagging and Organizing Blueprint Graphs
+
+The `tag-blueprint-graph` and `list-blueprint-tags` tools work together to organize and track Blueprint development:
+
+```bash
+# Tag the currently focused Blueprint graph
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "tag-blueprint-graph",
+      "arguments": {
+        "tag": "PlayerMovement",
+        "category": "Gameplay",
+        "description": "Implements player movement including walk, run, and jump"
+      }
+    },
+    "id": 1
+  }'
+
+# List all tags in the system
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "list-blueprint-tags",
+      "arguments": {}
+    },
+    "id": 2
+  }'
+
+# Find all graphs tagged with "PlayerMovement"
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "list-blueprint-tags",
+      "arguments": {
+        "tag": "PlayerMovement"
+      }
+    },
+    "id": 3
+  }'
+
+# Get all tags for a specific graph
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "list-blueprint-tags",
+      "arguments": {
+        "graphGuid": "123e4567-e89b-12d3-a456-426614174000"
+      }
+    },
+    "id": 4
+  }'
+
+# Example response for tag-blueprint-graph:
+# {
+#   "jsonrpc": "2.0",
+#   "id": 1,
+#   "result": {
+#     "content": [{
+#       "type": "text",
+#       "text": "{
+#         \"success\": true,
+#         \"taggedGraph\": {
+#           \"tag\": \"PlayerMovement\",
+#           \"category\": \"Gameplay\",
+#           \"graphGuid\": \"123e4567-e89b-12d3-a456-426614174000\",
+#           \"graphName\": \"EventGraph\",
+#           \"blueprintPath\": \"/Game/Blueprints/BP_ThirdPersonCharacter\",
+#           \"timestamp\": \"2025-01-20T10:30:00Z\"
+#         },
+#         \"message\": \"Successfully tagged EventGraph with 'PlayerMovement'\"
+#       }"
+#     }]
+#   }
+# }
 ```
 
 ## Best Practices
