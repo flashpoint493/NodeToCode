@@ -833,6 +833,40 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - Path doesn't exist (when create_if_missing is false)
   - Failed to create folder (when create_if_missing is true)
 
+### read-content-browser-path
+- **Location**: `Implementations/N2CMcpReadContentBrowserPathTool.cpp`
+- **Description**: Returns blueprint assets and folders at the specified path in the content browser. Supports pagination, filtering by type and name.
+- **Parameters**:
+  - `path` (string, required): Content browser path to read (e.g., '/Game/Blueprints')
+  - `page` (integer, optional, default: 1): Page number for pagination (1-based)
+  - `page_size` (integer, optional, default: 50, min: 1, max: 200): Number of items per page
+  - `filter_type` (string, optional, default: "All"): Filter by asset type
+    - Enum values: "All", "Blueprint", "Material", "Texture", "StaticMesh", "Folder"
+  - `filter_name` (string, optional, default: ""): Filter by name contains (case-insensitive)
+  - `sync_browser` (boolean, optional, default: true): Whether to sync the primary content browser to this path
+- **Requires Game Thread**: Yes
+- **Returns**: Object containing:
+  - `items`: Array of content items, each containing:
+    - `path`: Full asset path
+    - `name`: Display name
+    - `type`: Asset type (Blueprint, Material, etc.)
+    - `class`: UE class path
+    - `is_folder`: Whether this is a folder
+  - `total_count`: Total number of items matching filters
+  - `page`: Current page number
+  - `page_size`: Items per page
+  - `has_more`: Whether more pages exist
+- **Features**:
+  - Pagination for large directories (e.g., Megascans folders)
+  - Type-based filtering (Blueprint, Material, Texture, etc.)
+  - Case-insensitive name filtering
+  - Optional content browser synchronization
+- **Error Cases**:
+  - Invalid path format
+  - Path doesn't exist
+  - Path outside allowed directories
+  - Invalid pagination parameters
+
 ## Example Workflows
 
 ### Searching and Adding Blueprint Nodes
@@ -1259,6 +1293,96 @@ curl -X POST http://localhost:27000/mcp \
 #     "error": {
 #       "message": "Invalid path: Path '../../../System' is not in an allowed content directory"
 #     }
+#   }
+# }
+```
+
+### Browsing Content Browser Assets
+
+The `read-content-browser-path` tool allows browsing and filtering assets in the content browser:
+
+```bash
+# List all items in a folder
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "read-content-browser-path",
+      "arguments": {
+        "path": "/Game/Blueprints"
+      }
+    },
+    "id": 1
+  }'
+
+# Filter by asset type
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "read-content-browser-path",
+      "arguments": {
+        "path": "/Game/Materials",
+        "filter_type": "Material",
+        "page_size": 20
+      }
+    },
+    "id": 2
+  }'
+
+# Search by name and paginate
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "read-content-browser-path",
+      "arguments": {
+        "path": "/Game/Blueprints",
+        "filter_name": "Player",
+        "page": 2,
+        "page_size": 10,
+        "sync_browser": false
+      }
+    },
+    "id": 3
+  }'
+
+# Example response:
+# {
+#   "jsonrpc": "2.0",
+#   "id": 1,
+#   "result": {
+#     "content": [{
+#       "type": "text",
+#       "text": "{
+#         \"items\": [
+#           {
+#             \"path\": \"/Game/Blueprints/BP_PlayerCharacter\",
+#             \"name\": \"BP_PlayerCharacter\",
+#             \"type\": \"Blueprint\",
+#             \"class\": \"/Script/Engine.Blueprint\",
+#             \"is_folder\": false
+#           },
+#           {
+#             \"path\": \"/Game/Blueprints/Components\",
+#             \"name\": \"Components\",
+#             \"type\": \"Folder\",
+#             \"class\": \"Folder\",
+#             \"is_folder\": true
+#           }
+#         ],
+#         \"total_count\": 15,
+#         \"page\": 1,
+#         \"page_size\": 50,
+#         \"has_more\": false
+#       }"
+#     }]
 #   }
 # }
 ```

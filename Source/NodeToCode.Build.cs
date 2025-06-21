@@ -51,7 +51,8 @@ public class NodeToCode : ModuleRules
 				"KismetWidgets",          // For action menu widgets
 				"EditorSubsystem",        // For editor subsystem access
 				"EditorWidgets",          // For editor widgets
-				"AssetRegistry"           // For asset path resolution
+				"AssetRegistry",          // For asset path resolution
+				"ContentBrowserData"      // For content browser data subsystem
 			}
 		);
 

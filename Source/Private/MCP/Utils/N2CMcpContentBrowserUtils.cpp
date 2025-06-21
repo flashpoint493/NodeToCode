@@ -10,6 +10,10 @@
 #include "Utils/N2CLogger.h"
 #include "HAL/FileManager.h"
 #include "Misc/PackageName.h"
+#include "ContentBrowserDataSubsystem.h"
+#include "ContentBrowserDataFilter.h"
+#include "ContentBrowserItem.h"
+#include "Dom/JsonObject.h"
 
 bool FN2CMcpContentBrowserUtils::ValidateContentPath(const FString& Path, FString& OutErrorMsg)
 {
@@ -222,4 +226,192 @@ bool FN2CMcpContentBrowserUtils::IsPathAllowed(const FString& Path)
 	}
 	
 	return false;
+}
+
+bool FN2CMcpContentBrowserUtils::EnumerateItemsAtPath(const FString& Path, bool bIncludeFolders, bool bIncludeFiles, TArray<FContentBrowserItem>& OutItems)
+{
+	// Get the content browser data subsystem
+	UContentBrowserDataSubsystem* ContentBrowserData = GEditor->GetEditorSubsystem<UContentBrowserDataSubsystem>();
+	if (!ContentBrowserData)
+	{
+		FN2CLogger::Get().LogError(TEXT("Content browser data subsystem not available"));
+		return false;
+	}
+	
+	// Set up filter
+	FContentBrowserDataFilter Filter;
+	
+	// Configure what types of items to include
+	EContentBrowserItemTypeFilter TypeFilter = EContentBrowserItemTypeFilter::IncludeNone;
+	if (bIncludeFolders)
+	{
+		TypeFilter |= EContentBrowserItemTypeFilter::IncludeFolders;
+	}
+	if (bIncludeFiles)
+	{
+		TypeFilter |= EContentBrowserItemTypeFilter::IncludeFiles;
+	}
+	
+	Filter.ItemTypeFilter = TypeFilter;
+	
+	// Get items at the specified path
+	TArray<FContentBrowserItem> AllItems = ContentBrowserData->GetItemsAtPath(FName(*Path), Filter.ItemTypeFilter);
+	
+	// Copy to output
+	OutItems = AllItems;
+	
+	return true;
+}
+
+void FN2CMcpContentBrowserUtils::FilterItemsByType(const TArray<FContentBrowserItem>& Items, const FString& FilterType, TArray<FContentBrowserItem>& OutFilteredItems)
+{
+	OutFilteredItems.Reset();
+	
+	// If filter is "All", just copy everything
+	if (FilterType.Equals(TEXT("All"), ESearchCase::IgnoreCase))
+	{
+		OutFilteredItems = Items;
+		return;
+	}
+	
+	// Filter by specific type
+	for (const FContentBrowserItem& Item : Items)
+	{
+		bool bInclude = false;
+		
+		if (Item.IsFolder())
+		{
+			// Check if we want folders
+			if (FilterType.Equals(TEXT("Folder"), ESearchCase::IgnoreCase))
+			{
+				bInclude = true;
+			}
+		}
+		else
+		{
+			// Get asset data to check type
+			FAssetData AssetData;
+			if (Item.Legacy_TryGetAssetData(AssetData))
+			{
+				FString AssetClass = AssetData.AssetClassPath.GetAssetName().ToString();
+				
+				// Check against filter type
+				if (FilterType.Equals(TEXT("Blueprint"), ESearchCase::IgnoreCase) && AssetClass.Contains(TEXT("Blueprint")))
+				{
+					bInclude = true;
+				}
+				else if (FilterType.Equals(TEXT("Material"), ESearchCase::IgnoreCase) && 
+					(AssetClass.Contains(TEXT("Material")) && !AssetClass.Contains(TEXT("MaterialFunction"))))
+				{
+					bInclude = true;
+				}
+				else if (FilterType.Equals(TEXT("Texture"), ESearchCase::IgnoreCase) && AssetClass.Contains(TEXT("Texture")))
+				{
+					bInclude = true;
+				}
+				else if (FilterType.Equals(TEXT("StaticMesh"), ESearchCase::IgnoreCase) && AssetClass.Contains(TEXT("StaticMesh")))
+				{
+					bInclude = true;
+				}
+			}
+		}
+		
+		if (bInclude)
+		{
+			OutFilteredItems.Add(Item);
+		}
+	}
+}
+
+void FN2CMcpContentBrowserUtils::FilterItemsByName(const TArray<FContentBrowserItem>& Items, const FString& NameFilter, TArray<FContentBrowserItem>& OutFilteredItems)
+{
+	OutFilteredItems.Reset();
+	
+	// If no filter, copy everything
+	if (NameFilter.IsEmpty())
+	{
+		OutFilteredItems = Items;
+		return;
+	}
+	
+	// Filter by name (case-insensitive substring match)
+	for (const FContentBrowserItem& Item : Items)
+	{
+		FString ItemName = Item.GetDisplayName().ToString();
+		if (ItemName.Contains(NameFilter, ESearchCase::IgnoreCase))
+		{
+			OutFilteredItems.Add(Item);
+		}
+	}
+}
+
+TSharedPtr<FJsonObject> FN2CMcpContentBrowserUtils::ConvertItemToJson(const FContentBrowserItem& Item)
+{
+	TSharedPtr<FJsonObject> ItemJson = MakeShareable(new FJsonObject);
+	
+	// Basic info
+	ItemJson->SetStringField(TEXT("path"), Item.GetVirtualPath().ToString());
+	ItemJson->SetStringField(TEXT("name"), Item.GetDisplayName().ToString());
+	ItemJson->SetBoolField(TEXT("is_folder"), Item.IsFolder());
+	
+	if (!Item.IsFolder())
+	{
+		// Get asset-specific information
+		FAssetData AssetData;
+		if (Item.Legacy_TryGetAssetData(AssetData))
+		{
+			// Asset type from class name
+			FString AssetClassName = AssetData.AssetClassPath.GetAssetName().ToString();
+			ItemJson->SetStringField(TEXT("type"), AssetClassName);
+			
+			// Full class path
+			ItemJson->SetStringField(TEXT("class"), AssetData.AssetClassPath.ToString());
+			
+			// Additional metadata if needed
+			if (AssetData.GetClass())
+			{
+				ItemJson->SetStringField(TEXT("native_class"), AssetData.GetClass()->GetName());
+			}
+		}
+		else
+		{
+			// Fallback if we can't get asset data
+			ItemJson->SetStringField(TEXT("type"), TEXT("Unknown"));
+			ItemJson->SetStringField(TEXT("class"), TEXT("Unknown"));
+		}
+	}
+	else
+	{
+		// It's a folder
+		ItemJson->SetStringField(TEXT("type"), TEXT("Folder"));
+		ItemJson->SetStringField(TEXT("class"), TEXT("Folder"));
+	}
+	
+	return ItemJson;
+}
+
+bool FN2CMcpContentBrowserUtils::CalculatePagination(int32 TotalItems, int32 Page, int32 PageSize, int32& OutStartIndex, int32& OutEndIndex, bool& OutHasMore)
+{
+	// Validate inputs
+	if (Page < 1 || PageSize < 1)
+	{
+		FN2CLogger::Get().LogWarning(TEXT("Invalid pagination parameters: Page and PageSize must be >= 1"));
+		return false;
+	}
+	
+	// Calculate indices
+	OutStartIndex = (Page - 1) * PageSize;
+	OutEndIndex = FMath::Min(OutStartIndex + PageSize, TotalItems);
+	
+	// Check if start is beyond total items
+	if (OutStartIndex >= TotalItems && TotalItems > 0)
+	{
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Page %d is beyond available items"), Page));
+		return false;
+	}
+	
+	// Determine if there are more pages
+	OutHasMore = OutEndIndex < TotalItems;
+	
+	return true;
 }

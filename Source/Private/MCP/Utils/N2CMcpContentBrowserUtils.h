@@ -5,6 +5,8 @@
 #include "CoreMinimal.h"
 
 struct FAssetData;
+struct FContentBrowserItem;
+class FJsonObject;
 
 /**
  * @class FN2CMcpContentBrowserUtils
@@ -73,6 +75,51 @@ public:
 	 * @return True if the path is in an allowed directory
 	 */
 	static bool IsPathAllowed(const FString& Path);
+	
+	/**
+	 * Enumerates items at a content browser path
+	 * @param Path The path to enumerate
+	 * @param bIncludeFolders Whether to include folders in results
+	 * @param bIncludeFiles Whether to include files/assets in results
+	 * @param OutItems Array to fill with content browser items
+	 * @return True if enumeration succeeded
+	 */
+	static bool EnumerateItemsAtPath(const FString& Path, bool bIncludeFolders, bool bIncludeFiles, TArray<struct FContentBrowserItem>& OutItems);
+	
+	/**
+	 * Filters content browser items by type
+	 * @param Items Input array of items to filter
+	 * @param FilterType Type filter (All, Blueprint, Material, Texture, StaticMesh, Folder)
+	 * @param OutFilteredItems Output array of filtered items
+	 */
+	static void FilterItemsByType(const TArray<struct FContentBrowserItem>& Items, const FString& FilterType, TArray<struct FContentBrowserItem>& OutFilteredItems);
+	
+	/**
+	 * Filters content browser items by name
+	 * @param Items Input array of items to filter
+	 * @param NameFilter Case-insensitive substring to match
+	 * @param OutFilteredItems Output array of filtered items
+	 */
+	static void FilterItemsByName(const TArray<struct FContentBrowserItem>& Items, const FString& NameFilter, TArray<struct FContentBrowserItem>& OutFilteredItems);
+	
+	/**
+	 * Converts a content browser item to JSON representation
+	 * @param Item The item to convert
+	 * @return JSON object representing the item
+	 */
+	static TSharedPtr<FJsonObject> ConvertItemToJson(const struct FContentBrowserItem& Item);
+	
+	/**
+	 * Applies pagination to an array
+	 * @param TotalItems Total number of items
+	 * @param Page Current page (1-based)
+	 * @param PageSize Items per page
+	 * @param OutStartIndex Start index for pagination
+	 * @param OutEndIndex End index for pagination
+	 * @param OutHasMore Whether more pages exist
+	 * @return True if pagination parameters are valid
+	 */
+	static bool CalculatePagination(int32 TotalItems, int32 Page, int32 PageSize, int32& OutStartIndex, int32& OutEndIndex, bool& OutHasMore);
 
 private:
 	// Prevent instantiation
