@@ -12,6 +12,13 @@ class NODETOCODE_API FN2CMcpBlueprintUtils
 {
 public:
     /**
+     * Refreshes the Blueprint Action Database.
+     * Call this after operations that might alter the available Blueprint actions
+     * to prevent editor context menu freezes.
+     */
+    static void RefreshBlueprintActionDatabase();
+
+    /**
      * Resolves a UBlueprint from an optional asset path.
      * If OptionalBlueprintPath is empty, it attempts to get the currently focused Blueprint from the active editor.
      * @param OptionalBlueprintPath The asset path of the Blueprint (e.g., "/Game/Blueprints/MyActor.MyActor"). Can be empty.

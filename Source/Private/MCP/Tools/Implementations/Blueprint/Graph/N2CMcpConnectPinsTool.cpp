@@ -266,7 +266,10 @@ FMcpToolCallResult FN2CMcpConnectPinsTool::Execute(const TSharedPtr<FJsonObject>
 		FString JsonString;
 		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
 		FJsonSerializer::Serialize(ResultJson.ToSharedRef(), Writer);
-		
+
+        // Refresh BlueprintActionDatabase
+        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+        
 		return FMcpToolCallResult::CreateTextResult(JsonString);
 	});
 }

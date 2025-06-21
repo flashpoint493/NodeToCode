@@ -156,12 +156,15 @@ FMcpToolCallResult FN2CMcpCreateLocalVariableTool::Execute(const TSharedPtr<FJso
 		FName ActualVariableName = CreateLocalVariable(FunctionEntry, VariableName, ResolvedPinType, DefaultValue, Tooltip);
 		
 		// Build and return success result
-		TSharedPtr<FJsonObject> Result = BuildSuccessResult(FunctionEntry, FocusedGraph, VariableName, ActualVariableName, ResolvedPinType, ContainerType);
+		TSharedPtr<FJsonObject> ResultJsonObj = BuildSuccessResult(FunctionEntry, FocusedGraph, VariableName, ActualVariableName, ResolvedPinType, ContainerType); // Renamed
 		
 		FString JsonString;
 		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
-		FJsonSerializer::Serialize(Result.ToSharedRef(), Writer);
-		
+		FJsonSerializer::Serialize(ResultJsonObj.ToSharedRef(), Writer); // Use ResultJsonObj
+
+        // Refresh BlueprintActionDatabase
+        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+        
 		return FMcpToolCallResult::CreateTextResult(JsonString);
 	});
 }

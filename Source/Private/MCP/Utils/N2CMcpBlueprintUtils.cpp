@@ -11,6 +11,7 @@
 #include "BlueprintEditorModule.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Utils/N2CLogger.h"
+#include "BlueprintActionDatabase.h" // For FBlueprintActionDatabase
 
 UBlueprint* FN2CMcpBlueprintUtils::ResolveBlueprint(const FString& OptionalBlueprintPath, FString& OutErrorMsg)
 {
@@ -159,4 +160,18 @@ bool FN2CMcpBlueprintUtils::OpenBlueprintEditor(UBlueprint* Blueprint, TSharedPt
     }
     
     return true;
+}
+
+void FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase()
+{
+    if (FBlueprintActionDatabase* ActionDB = FBlueprintActionDatabase::TryGet())
+    {
+        FN2CLogger::Get().Log(TEXT("Refreshing BlueprintActionDatabase via utility function."), EN2CLogSeverity::Debug);
+        ActionDB->RefreshAll();
+        FN2CLogger::Get().Log(TEXT("BlueprintActionDatabase refreshed successfully via utility."), EN2CLogSeverity::Debug);
+    }
+    else
+    {
+        FN2CLogger::Get().LogWarning(TEXT("FBlueprintActionDatabase not available for refresh via utility. Context menu issues might persist."));
+    }
 }

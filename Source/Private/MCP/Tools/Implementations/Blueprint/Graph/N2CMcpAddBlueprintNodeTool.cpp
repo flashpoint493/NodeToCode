@@ -135,9 +135,12 @@ FMcpToolCallResult FN2CMcpAddBlueprintNodeTool::Execute(const TSharedPtr<FJsonOb
     TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultJson);
     FJsonSerializer::Serialize(ResultObject.ToSharedRef(), Writer);
     
-    Result = FMcpToolCallResult::CreateTextResult(ResultJson);
+    // Result = FMcpToolCallResult::CreateTextResult(ResultJson); // This was assigning to the outer scope Result
+
+    // Refresh BlueprintActionDatabase
+    FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
     
-    return Result;
+    return FMcpToolCallResult::CreateTextResult(ResultJson); // Return the result from the lambda
 }
 
 bool FN2CMcpAddBlueprintNodeTool::ParseArguments(

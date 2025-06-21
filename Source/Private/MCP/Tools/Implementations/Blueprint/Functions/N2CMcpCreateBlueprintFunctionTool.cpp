@@ -252,13 +252,16 @@ FMcpToolCallResult FN2CMcpCreateBlueprintFunctionTool::Execute(const TSharedPtr<
 		FSlateNotificationManager::Get().AddNotification(Info);
 		
 		// Build and return success result
-		TSharedPtr<FJsonObject> Result = BuildSuccessResult(TargetBlueprint, FunctionName, FunctionGuid, FunctionGraph);
+		TSharedPtr<FJsonObject> ResultJsonObj = BuildSuccessResult(TargetBlueprint, FunctionName, FunctionGuid, FunctionGraph); // Renamed to avoid conflict
 		
 		// Convert JSON object to string
 		FString ResultString;
 		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultString);
-		FJsonSerializer::Serialize(Result.ToSharedRef(), Writer);
-		
+		FJsonSerializer::Serialize(ResultJsonObj.ToSharedRef(), Writer); // Use ResultJsonObj
+
+        // Refresh BlueprintActionDatabase
+        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+        
 		return FMcpToolCallResult::CreateTextResult(ResultString);
 	});
 }

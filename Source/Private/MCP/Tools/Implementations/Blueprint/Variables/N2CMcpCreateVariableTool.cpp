@@ -205,14 +205,17 @@ FMcpToolCallResult FN2CMcpCreateVariableTool::Execute(const TSharedPtr<FJsonObje
 		FSlateNotificationManager::Get().AddNotification(Info);
 		
 		// Return success result
-		TSharedPtr<FJsonObject> Result = BuildSuccessResult(ActiveBlueprint, Settings.VariableName, 
+		TSharedPtr<FJsonObject> ResultJsonObj = BuildSuccessResult(ActiveBlueprint, Settings.VariableName, // Renamed to avoid conflict
 			ActualVariableName, ResolvedPinType, ContainerType);
 		
 		// Convert JSON object to string
 		FString ResultString;
 		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultString);
-		FJsonSerializer::Serialize(Result.ToSharedRef(), Writer);
-		
+		FJsonSerializer::Serialize(ResultJsonObj.ToSharedRef(), Writer); // Use ResultJsonObj
+
+        // Refresh BlueprintActionDatabase
+        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+        
 		return FMcpToolCallResult::CreateTextResult(ResultString);
 	});
 }

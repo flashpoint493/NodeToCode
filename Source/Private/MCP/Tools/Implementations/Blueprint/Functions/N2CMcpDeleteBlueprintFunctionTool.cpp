@@ -179,7 +179,10 @@ FMcpToolCallResult FN2CMcpDeleteBlueprintFunctionTool::Execute(const TSharedPtr<
 		FString JsonString;
 		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
 		FJsonSerializer::Serialize(Result.ToSharedRef(), Writer);
-		
+
+        // Refresh BlueprintActionDatabase
+        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+        
 		return FMcpToolCallResult::CreateTextResult(JsonString);
 	});
 }
