@@ -692,6 +692,45 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - Returns error if path traversal is attempted
   - Returns error if directory does not exist
   - Returns error if relativePath parameter is missing
+- **Implementation Notes**:
+  - Uses IPlatformFile::IterateDirectory with a custom visitor pattern for reliable directory traversal
+  - Alternative approaches like IFileManager::FindFiles may not work correctly for directory listing in all UE5 contexts
+  - Changes to this tool require editor restart to take effect due to MCP server caching
+
+### read-file
+- **Location**: `Implementations/N2CMcpReadFileTool.cpp`
+- **Description**: Reads the contents of a file within the Unreal Engine project. Enforces security boundaries to prevent directory traversal outside the project. Supports text files up to 500KB in size. Binary files like .uasset and .umap are not supported
+- **Parameters**:
+  - `relativePath` (string, required): Relative path to the file within the project directory. **IMPORTANT**: Use empty string `""` for project root, NOT `"."` or `"/"`. Examples: `"README.md"` for root file, `"Config/DefaultEngine.ini"` for Config folder file
+- **Requires Game Thread**: Yes (file system operations)
+- **Returns**: Object containing:
+  - `success`: Boolean indicating if the operation succeeded
+  - `path`: The relative path that was requested
+  - `absolutePath`: The absolute path to the file
+  - `content`: The file content as string
+  - `size`: File size in bytes
+  - `contentType`: MIME type based on file extension (e.g., "text/plain", "application/json")
+  - `extension`: File extension without dot
+  - `lastModified`: File modification timestamp
+- **Security Features**:
+  - Same path jail enforcement as read-path tool
+  - File size limit (500KB) to prevent memory exhaustion
+  - Binary file blocking (.uasset and .umap files explicitly rejected)
+  - Text files only
+  - Read-only operations
+- **Error Cases**:
+  - Returns error if path traversal is attempted
+  - Returns error if file does not exist
+  - Returns error if file is too large (>500KB)
+  - Returns error if file is .uasset or .umap
+  - Returns error if file read fails
+- **Supported Content Types**:
+  - Programming languages: C/C++, Python, JavaScript, TypeScript, C#, Swift, Java, Rust, Go, etc.
+  - Data formats: JSON, XML, YAML, Markdown, HTML, CSS
+  - Configuration: INI, TOML, properties files
+  - Unreal Engine: .uproject, .uplugin files
+  - Scripts: Shell, Batch, PowerShell
+  - Documentation: Text, Log, CSV files
 
 ## Example Workflows
 
@@ -820,6 +859,94 @@ curl -X POST http://localhost:27000/mcp \
       "name": "read-path",
       "arguments": {
         "relativePath": "../../../System"
+      }
+    },
+    "id": 4
+  }'
+# Response: Error - "Access denied: Path traversal detected"
+```
+
+### Reading Files
+
+The `read-file` tool allows reading file contents within the Unreal Engine project safely:
+
+```bash
+# Read a project configuration file
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "read-file",
+      "arguments": {
+        "relativePath": "Config/DefaultEngine.ini"
+      }
+    },
+    "id": 1
+  }'
+
+# Read a plugin file
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "read-file",
+      "arguments": {
+        "relativePath": "Plugins/NodeToCode/NodeToCode.uplugin"
+      }
+    },
+    "id": 2
+  }'
+
+# Read a translation output file
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "read-file",
+      "arguments": {
+        "relativePath": "Saved/NodeToCode/Translations/MyBlueprint_2025-01-01-12.00.00/EventGraph.cpp"
+      }
+    },
+    "id": 3
+  }'
+
+# Example response:
+# {
+#   "jsonrpc": "2.0",
+#   "id": 1,
+#   "result": {
+#     "content": [{
+#       "type": "text",
+#       "text": "{
+#         \"success\": true,
+#         \"path\": \"Config/DefaultEngine.ini\",
+#         \"absolutePath\": \"/path/to/project/Config/DefaultEngine.ini\",
+#         \"content\": \"[/Script/EngineSettings.GameMapsSettings]\\n...\",
+#         \"size\": 1234,
+#         \"contentType\": \"text/plain\",
+#         \"extension\": \"ini\",
+#         \"lastModified\": \"2025-01-01 12:00:00\"
+#       }"
+#     }]
+#   }
+# }
+
+# Attempt to read file outside project (will fail)
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "read-file",
+      "arguments": {
+        "relativePath": "../../../etc/passwd"
       }
     },
     "id": 4
