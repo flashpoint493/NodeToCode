@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
-#include "MCP/Async/N2CTranslateBlueprintAsyncTask.h"
+#include "N2CTranslateBlueprintAsyncTask.h"
 #include "Core/N2CEditorIntegration.h"
 #include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "Utils/N2CLogger.h"
