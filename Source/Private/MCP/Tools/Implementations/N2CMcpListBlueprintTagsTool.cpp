@@ -2,11 +2,10 @@
 
 #include "N2CMcpListBlueprintTagsTool.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
+#include "MCP/Utils/N2CMcpTagUtils.h"
 #include "Core/N2CTagManager.h"
 #include "Utils/N2CLogger.h"
 #include "Dom/JsonObject.h"
-#include "Serialization/JsonSerializer.h"
-#include "Serialization/JsonWriter.h"
 
 // Auto-register this tool
 REGISTER_MCP_TOOL(FN2CMcpListBlueprintTagsTool)
@@ -47,13 +46,14 @@ FMcpToolCallResult FN2CMcpListBlueprintTagsTool::Execute(const TSharedPtr<FJsonO
 		
 		if (Arguments->TryGetStringField(TEXT("graphGuid"), GraphGuidString) && !GraphGuidString.IsEmpty())
 		{
-			if (FGuid::Parse(GraphGuidString, GraphGuid))
+			FString GuidError;
+			if (FN2CMcpTagUtils::ValidateAndParseGuid(GraphGuidString, GraphGuid, GuidError))
 			{
 				bFilterByGraph = true;
 			}
 			else
 			{
-				return FMcpToolCallResult::CreateErrorResult(TEXT("Invalid graphGuid format"));
+				return FMcpToolCallResult::CreateErrorResult(FString::Printf(TEXT("Invalid graphGuid format: %s"), *GuidError));
 			}
 		}
 		
@@ -94,15 +94,7 @@ FMcpToolCallResult FN2CMcpListBlueprintTagsTool::Execute(const TSharedPtr<FJsonO
 		TArray<TSharedPtr<FJsonValue>> TagsArray;
 		for (const FN2CTaggedBlueprintGraph& Tag : Tags)
 		{
-			TSharedPtr<FJsonObject> TagObject = MakeShareable(new FJsonObject);
-			TagObject->SetStringField(TEXT("tag"), Tag.Tag);
-			TagObject->SetStringField(TEXT("category"), Tag.Category);
-			TagObject->SetStringField(TEXT("description"), Tag.Description);
-			TagObject->SetStringField(TEXT("graphGuid"), Tag.GraphGuid.ToString(EGuidFormats::DigitsWithHyphens));
-			TagObject->SetStringField(TEXT("graphName"), Tag.GraphName);
-			TagObject->SetStringField(TEXT("blueprintPath"), Tag.OwningBlueprint.ToString());
-			TagObject->SetStringField(TEXT("timestamp"), Tag.Timestamp.ToIso8601());
-			
+			TSharedPtr<FJsonObject> TagObject = FN2CMcpTagUtils::TagToJsonObject(Tag);
 			TagsArray.Add(MakeShareable(new FJsonValueObject(TagObject)));
 		}
 		
@@ -150,8 +142,10 @@ FMcpToolCallResult FN2CMcpListBlueprintTagsTool::Execute(const TSharedPtr<FJsonO
 		
 		// Convert to JSON string
 		FString JsonString;
-		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
-		FJsonSerializer::Serialize(ResultObject.ToSharedRef(), Writer);
+		if (!FN2CMcpTagUtils::SerializeToJsonString(ResultObject, JsonString))
+		{
+			return FMcpToolCallResult::CreateErrorResult(TEXT("Failed to serialize response"));
+		}
 		
 		FN2CLogger::Get().Log(FString::Printf(TEXT("list-blueprint-tags tool: Found %d tags"), Tags.Num()), 
 			EN2CLogSeverity::Info);

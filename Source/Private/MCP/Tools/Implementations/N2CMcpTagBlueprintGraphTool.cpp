@@ -11,8 +11,7 @@
 #include "BlueprintEditorModule.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Dom/JsonObject.h"
-#include "Serialization/JsonSerializer.h"
-#include "Serialization/JsonWriter.h"
+#include "MCP/Utils/N2CMcpTagUtils.h"
 
 // Auto-register this tool
 REGISTER_MCP_TOOL(FN2CMcpTagBlueprintGraphTool)
@@ -95,28 +94,21 @@ FMcpToolCallResult FN2CMcpTagBlueprintGraphTool::Execute(const TSharedPtr<FJsonO
 		}
 		
 		// Create success response
-		TSharedPtr<FJsonObject> ResultObject = MakeShareable(new FJsonObject);
-		ResultObject->SetBoolField(TEXT("success"), true);
-		
-		// Create tagged graph object
-		TSharedPtr<FJsonObject> TaggedGraphObject = MakeShareable(new FJsonObject);
-		TaggedGraphObject->SetStringField(TEXT("tag"), Tag);
-		TaggedGraphObject->SetStringField(TEXT("category"), Category);
-		TaggedGraphObject->SetStringField(TEXT("graphGuid"), FocusedGraph->GraphGuid.ToString(EGuidFormats::DigitsWithHyphens));
-		TaggedGraphObject->SetStringField(TEXT("graphName"), FocusedGraph->GetFName().ToString());
-		TaggedGraphObject->SetStringField(TEXT("blueprintPath"), BlueprintPath.ToString());
-		TaggedGraphObject->SetStringField(TEXT("timestamp"), TaggedGraph.Timestamp.ToIso8601());
-		
-		ResultObject->SetObjectField(TEXT("taggedGraph"), TaggedGraphObject);
-		
 		FString Message = FString::Printf(TEXT("Successfully tagged %s with '%s'"), 
 			*FocusedGraph->GetFName().ToString(), *Tag);
-		ResultObject->SetStringField(TEXT("message"), Message);
+		
+		TSharedPtr<FJsonObject> ResultObject = FN2CMcpTagUtils::CreateBaseResponse(true, Message);
+		
+		// Use the utility to convert the tag to JSON
+		TSharedPtr<FJsonObject> TaggedGraphObject = FN2CMcpTagUtils::TagToJsonObject(TaggedGraph);
+		ResultObject->SetObjectField(TEXT("taggedGraph"), TaggedGraphObject);
 		
 		// Convert to JSON string
 		FString JsonString;
-		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
-		FJsonSerializer::Serialize(ResultObject.ToSharedRef(), Writer);
+		if (!FN2CMcpTagUtils::SerializeToJsonString(ResultObject, JsonString))
+		{
+			return FMcpToolCallResult::CreateErrorResult(TEXT("Failed to serialize response"));
+		}
 		
 		FN2CLogger::Get().Log(FString::Printf(TEXT("tag-blueprint-graph tool: %s"), *Message), 
 			EN2CLogSeverity::Info);

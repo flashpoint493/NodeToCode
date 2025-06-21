@@ -112,6 +112,51 @@ bool UN2CTagManager::RemoveTag(const FGuid& GraphGuid, const FString& Tag, const
 	return bRemoved;
 }
 
+int32 UN2CTagManager::RemoveTagByName(const FGuid& GraphGuid, const FString& Tag, FN2CTaggedBlueprintGraph& OutRemovedTag)
+{
+	int32 RemovedCount = 0;
+	bool bFoundFirst = false;
+	
+	for (int32 i = Tags.Num() - 1; i >= 0; --i)
+	{
+		if (Tags[i].MatchesGraph(GraphGuid) && Tags[i].Tag.Equals(Tag, ESearchCase::IgnoreCase))
+		{
+			// Store the first removed tag for output
+			if (!bFoundFirst)
+			{
+				OutRemovedTag = Tags[i];
+				bFoundFirst = true;
+			}
+			
+			FString Category = Tags[i].Category;
+			Tags.RemoveAt(i);
+			RemovedCount++;
+			
+			FN2CLogger::Get().Log(FString::Printf(TEXT("Removed tag '%s' in category '%s' from graph %s"), 
+				*Tag, *Category, *GraphGuid.ToString()), 
+				EN2CLogSeverity::Info);
+			
+			// Fire delegate for each removed tag
+			OnBlueprintTagRemoved.Broadcast(GraphGuid, Tag);
+		}
+	}
+	
+	if (RemovedCount > 0)
+	{
+		bIsDirty = true;
+		SaveTags();
+		
+		if (RemovedCount > 1)
+		{
+			FN2CLogger::Get().Log(FString::Printf(TEXT("Removed %d instances of tag '%s' from graph %s"), 
+				RemovedCount, *Tag, *GraphGuid.ToString()), 
+				EN2CLogSeverity::Info);
+		}
+	}
+	
+	return RemovedCount;
+}
+
 int32 UN2CTagManager::RemoveAllTagsFromGraph(const FGuid& GraphGuid)
 {
 	int32 RemovedCount = 0;

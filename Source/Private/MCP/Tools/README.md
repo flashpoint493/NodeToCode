@@ -787,6 +787,28 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
   - `tag` + `category`: Returns all graphs with that specific tag/category combination
   - `category` only: Returns all tags in that category
 
+### remove-tag-from-graph
+- **Location**: `Implementations/N2CMcpRemoveTagFromGraphTool.cpp`
+- **Description**: Removes a specific tag from a Blueprint graph by its GUID and tag name. If multiple tags with the same name exist in different categories, all will be removed. The operation is idempotent - removing a non-existent tag is not an error.
+- **Parameters**:
+  - `graphGuid` (string, required): The GUID of the graph to remove tag from
+  - `tag` (string, required): The tag name to remove
+- **Requires Game Thread**: Yes
+- **Returns**: Object containing:
+  - `success`: Always true (idempotent operation)
+  - `message`: Description of what happened
+  - `removedTag` (if tag was found): Object containing:
+    - `tag`: The tag name that was removed
+    - `category`: The category of the removed tag (first one if multiple)
+    - `graphGuid`: The GUID of the graph
+  - `remainingTags`: Number of tags remaining on the graph after removal
+- **Idempotency**:
+  - Removing a non-existent tag returns success with a message indicating no action was taken
+  - This allows safe retry of operations without errors
+- **Behavior**:
+  - If multiple tags with the same name exist in different categories, all are removed
+  - The tool logs how many instances were removed if more than one
+
 ## Example Workflows
 
 ### Searching and Adding Blueprint Nodes
@@ -1011,7 +1033,7 @@ curl -X POST http://localhost:27000/mcp \
 
 ### Tagging and Organizing Blueprint Graphs
 
-The `tag-blueprint-graph` and `list-blueprint-tags` tools work together to organize and track Blueprint development:
+The `tag-blueprint-graph`, `list-blueprint-tags`, and `remove-tag-from-graph` tools work together to organize and track Blueprint development:
 
 ```bash
 # Tag the currently focused Blueprint graph
@@ -1074,6 +1096,22 @@ curl -X POST http://localhost:27000/mcp \
     "id": 4
   }'
 
+# Remove a tag from a graph
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "remove-tag-from-graph",
+      "arguments": {
+        "graphGuid": "123e4567-e89b-12d3-a456-426614174000",
+        "tag": "PlayerMovement"
+      }
+    },
+    "id": 5
+  }'
+
 # Example response for tag-blueprint-graph:
 # {
 #   "jsonrpc": "2.0",
@@ -1092,6 +1130,27 @@ curl -X POST http://localhost:27000/mcp \
 #           \"timestamp\": \"2025-01-20T10:30:00Z\"
 #         },
 #         \"message\": \"Successfully tagged EventGraph with 'PlayerMovement'\"
+#       }"
+#     }]
+#   }
+# }
+
+# Example response for remove-tag-from-graph:
+# {
+#   "jsonrpc": "2.0",
+#   "id": 5,
+#   "result": {
+#     "content": [{
+#       "type": "text",
+#       "text": "{
+#         \"success\": true,
+#         \"message\": \"Tag 'PlayerMovement' removed from graph\",
+#         \"removedTag\": {
+#           \"tag\": \"PlayerMovement\",
+#           \"category\": \"Gameplay\",
+#           \"graphGuid\": \"123e4567-e89b-12d3-a456-426614174000\"
+#         },
+#         \"remainingTags\": 2
 #       }"
 #     }]
 #   }

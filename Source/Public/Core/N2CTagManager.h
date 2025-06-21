@@ -49,6 +49,15 @@ public:
 	bool RemoveTag(const FGuid& GraphGuid, const FString& Tag, const FString& Category);
 
 	/**
+	 * Remove tag(s) from a graph by tag name only (removes all matching tags regardless of category)
+	 * @param GraphGuid The GUID of the graph
+	 * @param Tag The tag name to remove
+	 * @param OutRemovedTag If successful, contains the removed tag info (first one if multiple)
+	 * @return Number of tags removed (0 if none found)
+	 */
+	int32 RemoveTagByName(const FGuid& GraphGuid, const FString& Tag, FN2CTaggedBlueprintGraph& OutRemovedTag);
+
+	/**
 	 * Remove all tags from a graph
 	 * @param GraphGuid The GUID of the graph
 	 * @return Number of tags removed
