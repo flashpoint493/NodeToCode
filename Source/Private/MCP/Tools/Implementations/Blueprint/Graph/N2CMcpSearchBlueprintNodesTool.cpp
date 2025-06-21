@@ -2,6 +2,7 @@
 
 #include "N2CMcpSearchBlueprintNodesTool.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
+#include "BlueprintActionDatabase.h"
 #include "Core/N2CEditorIntegration.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "MCP/Utils/N2CMcpArgumentParser.h"
@@ -99,123 +100,139 @@ FMcpToolDefinition FN2CMcpSearchBlueprintNodesTool::GetDefinition() const
 
 FMcpToolCallResult FN2CMcpSearchBlueprintNodesTool::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
-    FMcpToolCallResult Result;
+    // The lambda captures 'this' and 'Arguments'.
+    // We need to ensure all variables used inside the lambda that are defined outside are captured.
+    // In this case, Arguments is captured. SearchTerm, bContextSensitive, MaxResults, BlueprintContext are parsed inside.
     
-    // Parse arguments
-    FString SearchTerm;
-    bool bContextSensitive;
-    int32 MaxResults;
-    TSharedPtr<FJsonObject> BlueprintContext;
-    FString ParseError;
-    
-    if (!ParseArguments(Arguments, SearchTerm, bContextSensitive, MaxResults, BlueprintContext, ParseError))
+    return ExecuteOnGameThread([this, Arguments]() -> FMcpToolCallResult // Modified to capture Arguments directly
     {
-        return FMcpToolCallResult::CreateErrorResult(ParseError);
-    }
+        // Parse arguments
+        FString SearchTerm;
+        bool bContextSensitive;
+        int32 MaxResults;
+        TSharedPtr<FJsonObject> BlueprintContext; // Renamed from just Context
+        FString ParseError;
     
-    FN2CLogger::Get().Log(FString::Printf(TEXT("Searching for Blueprint nodes: '%s' (ContextSensitive: %s, MaxResults: %d)"),
-        *SearchTerm, bContextSensitive ? TEXT("true") : TEXT("false"), MaxResults), EN2CLogSeverity::Info);
-    
-    // Get context if needed
-    UBlueprint* ContextBlueprint = nullptr;
-    UEdGraph* ContextGraph = nullptr;
-    
-    if (bContextSensitive && BlueprintContext.IsValid())
-    {
-        FString ContextError;
-        if (!GetContextFromPaths(BlueprintContext, ContextBlueprint, ContextGraph, ContextError))
+        if (!ParseArguments(Arguments, SearchTerm, bContextSensitive, MaxResults, BlueprintContext, ParseError))
         {
-            // Try to fall back to active editor
+            return FMcpToolCallResult::CreateErrorResult(ParseError);
+        }
+    
+        FN2CLogger::Get().Log(FString::Printf(TEXT("Searching for Blueprint nodes: '%s' (ContextSensitive: %s, MaxResults: %d)"),
+            *SearchTerm, bContextSensitive ? TEXT("true") : TEXT("false"), MaxResults), EN2CLogSeverity::Info);
+    
+        // Get context if needed
+        UBlueprint* ContextBlueprint = nullptr;
+        UEdGraph* ContextGraph = nullptr;
+    
+        if (bContextSensitive && BlueprintContext.IsValid())
+        {
+            FString ContextError;
+            if (!GetContextFromPaths(BlueprintContext, ContextBlueprint, ContextGraph, ContextError))
+            {
+                // Try to fall back to active editor
+                FString FocusError;
+                if (!FN2CMcpBlueprintUtils::GetFocusedEditorGraph(ContextBlueprint, ContextGraph, FocusError))
+                {
+                    return FMcpToolCallResult::CreateErrorResult(
+                        FString::Printf(TEXT("Context-sensitive search requested but no valid context available: %s. Focus Error: %s"), *ContextError, *FocusError));
+                }
+            }
+        }
+        else if (bContextSensitive)
+        {
+            // Try to get context from active editor
             FString FocusError;
             if (!FN2CMcpBlueprintUtils::GetFocusedEditorGraph(ContextBlueprint, ContextGraph, FocusError))
             {
-                return FMcpToolCallResult::CreateErrorResult(
-                    FString::Printf(TEXT("Context-sensitive search requested but no valid context available: %s. Focus Error: %s"), *ContextError, *FocusError));
+                return FMcpToolCallResult::CreateErrorResult(TEXT("Context-sensitive search requested but no Blueprint editor is active or graph focused. Error: ") + FocusError);
             }
         }
-    }
-    else if (bContextSensitive)
-    {
-        // Try to get context from active editor
-        FString FocusError;
-        if (!FN2CMcpBlueprintUtils::GetFocusedEditorGraph(ContextBlueprint, ContextGraph, FocusError))
+    
+        // Set up the action filter
+        FBlueprintActionFilter Filter;
+        if (bContextSensitive && ContextBlueprint && ContextGraph)
         {
-            return FMcpToolCallResult::CreateErrorResult(TEXT("Context-sensitive search requested but no Blueprint editor is active or graph focused. Error: ") + FocusError);
+            Filter.Context.Blueprints.Add(ContextBlueprint);
+            Filter.Context.Graphs.Add(ContextGraph);
         }
-    }
+        // For global search, leave Context empty
     
-    // Set up the action filter
-    FBlueprintActionFilter Filter;
-    if (bContextSensitive && ContextBlueprint && ContextGraph)
-    {
-        Filter.Context.Blueprints.Add(ContextBlueprint);
-        Filter.Context.Graphs.Add(ContextGraph);
-    }
-    // For global search, leave Context empty
+        // Build the action list
+        FBlueprintActionMenuBuilder MenuBuilder;
+        MenuBuilder.AddMenuSection(Filter, FText::GetEmpty(), 0);
     
-    // Build the action list
-    FBlueprintActionMenuBuilder MenuBuilder;
-    MenuBuilder.AddMenuSection(Filter, FText::GetEmpty(), 0);
+        // Rebuild to populate from database
+        MenuBuilder.RebuildActionList();
     
-    // Rebuild to populate from database
-    MenuBuilder.RebuildActionList();
+        // Tokenize search terms
+        TArray<FString> FilterTerms;
+        SearchTerm.ParseIntoArray(FilterTerms, TEXT(" "), true);
     
-    // Tokenize search terms
-    TArray<FString> FilterTerms;
-    SearchTerm.ParseIntoArray(FilterTerms, TEXT(" "), true);
+        // Also create case-insensitive versions
+        TArray<FString> LowerFilterTerms;
+        for (const FString& Term : FilterTerms)
+        {
+            LowerFilterTerms.Add(Term.ToLower());
+        }
     
-    // Also create case-insensitive versions
-    TArray<FString> LowerFilterTerms;
-    for (const FString& Term : FilterTerms)
-    {
-        LowerFilterTerms.Add(Term.ToLower());
-    }
+        // Search through actions
+        TArray<TSharedPtr<FJsonValue>> ResultNodes;
+        int32 ResultCount = 0;
     
-    // Search through actions
-    TArray<TSharedPtr<FJsonValue>> ResultNodes;
-    int32 ResultCount = 0;
-    
-    for (int32 i = 0; i < MenuBuilder.GetNumActions() && ResultCount < MaxResults; ++i)
-    {
-        FGraphActionListBuilderBase::ActionGroup& Action = MenuBuilder.GetAction(i);
-        const FString& ActionSearchText = Action.GetSearchTextForFirstAction();
-        FString LowerSearchText = ActionSearchText.ToLower();
+        for (int32 i = 0; i < MenuBuilder.GetNumActions() && ResultCount < MaxResults; ++i)
+        {
+            FGraphActionListBuilderBase::ActionGroup& Action = MenuBuilder.GetAction(i);
+            const FString& ActionSearchText = Action.GetSearchTextForFirstAction();
+            FString LowerSearchText = ActionSearchText.ToLower();
         
-        // Check if all search terms match (case-insensitive)
-        bool bMatchesAllTerms = true;
-        for (const FString& Term : LowerFilterTerms)
-        {
-            if (!LowerSearchText.Contains(Term))
+            // Check if all search terms match (case-insensitive)
+            bool bMatchesAllTerms = true;
+            for (const FString& Term : LowerFilterTerms)
             {
-                bMatchesAllTerms = false;
-                break;
+                if (!LowerSearchText.Contains(Term))
+                {
+                    bMatchesAllTerms = false;
+                    break;
+                }
             }
+        
+            if (bMatchesAllTerms)
+            {
+                TSharedPtr<FJsonObject> NodeJson = ConvertActionToJson(Action, bContextSensitive, ContextBlueprint, ContextGraph);
+                if (NodeJson.IsValid())
+                {
+                    ResultNodes.Add(MakeShareable(new FJsonValueObject(NodeJson)));
+                    ResultCount++;
+                }
+            }
+        }
+    
+        // Build result JSON
+        TSharedPtr<FJsonObject> ResultObject = MakeShareable(new FJsonObject);
+        ResultObject->SetArrayField(TEXT("nodes"), ResultNodes);
+    
+        FString ResultJsonString; // Renamed to avoid conflict with outer scope 'Result'
+        TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultJsonString);
+        FJsonSerializer::Serialize(ResultObject.ToSharedRef(), Writer);
+    
+        FN2CLogger::Get().Log(FString::Printf(TEXT("Blueprint node search completed. Found %d results"), ResultCount), EN2CLogSeverity::Info);
+
+        // Attempt to fix editor freeze by refreshing the Blueprint action database.
+        // This ensures that any state changes made by FBlueprintActionMenuBuilder are reset.
+        if (FBlueprintActionDatabase* ActionDB = FBlueprintActionDatabase::TryGet())
+        {
+            FN2CLogger::Get().Log(TEXT("Refreshing BlueprintActionDatabase to prevent context menu freezes."), EN2CLogSeverity::Debug);
+            ActionDB->RefreshAll();
+            FN2CLogger::Get().Log(TEXT("BlueprintActionDatabase refreshed successfully."), EN2CLogSeverity::Debug);
+        }
+        else
+        {
+            FN2CLogger::Get().LogWarning(TEXT("FBlueprintActionDatabase not available for refresh. Context menu issues might persist."));
         }
         
-        if (bMatchesAllTerms)
-        {
-            TSharedPtr<FJsonObject> NodeJson = ConvertActionToJson(Action, bContextSensitive, ContextBlueprint, ContextGraph);
-            if (NodeJson.IsValid())
-            {
-                ResultNodes.Add(MakeShareable(new FJsonValueObject(NodeJson)));
-                ResultCount++;
-            }
-        }
-    }
-    
-    // Build result JSON
-    TSharedPtr<FJsonObject> ResultObject = MakeShareable(new FJsonObject);
-    ResultObject->SetArrayField(TEXT("nodes"), ResultNodes);
-    
-    FString ResultJson;
-    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultJson);
-    FJsonSerializer::Serialize(ResultObject.ToSharedRef(), Writer);
-    
-    Result = FMcpToolCallResult::CreateTextResult(ResultJson);
-    
-    FN2CLogger::Get().Log(FString::Printf(TEXT("Blueprint node search completed. Found %d results"), ResultCount), EN2CLogSeverity::Info);
-    
-    return Result;
+        return FMcpToolCallResult::CreateTextResult(ResultJsonString); // Return the result from the lambda
+    });
 }
 
 bool FN2CMcpSearchBlueprintNodesTool::ParseArguments(
