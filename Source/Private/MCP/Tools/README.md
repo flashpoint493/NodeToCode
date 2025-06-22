@@ -649,6 +649,38 @@ return ExecuteOnGameThread([this]() -> FMcpToolCallResult
     - `flags`: Function flags (isConst, isStatic, isReliable, etc.)
   - `functionCount`: Total number of overridable functions
 
+### get-open-blueprint-editors
+- **Location**: `Implementations/Blueprint/Analysis/N2CMcpGetOpenBlueprintEditorsTool.cpp`
+- **Description**: Returns a list of all currently open Blueprint editors with their asset paths and available graphs
+- **Parameters**: None
+- **Requires Game Thread**: Yes
+- **Returns**: Object containing:
+  - `editors`: Array of editor objects, each containing:
+    - `blueprintName`: Name of the Blueprint
+    - `assetPath`: Full asset path of the Blueprint
+    - `blueprintType`: Type of Blueprint (Normal, Interface, MacroLibrary, etc.)
+    - `parentClass`: Name of the parent class (if any)
+    - `focusedGraph`: Name of the currently focused graph (if any)
+    - `focusedGraphType`: Type of the focused graph (Event, Function, Macro, Delegate)
+    - `graphs`: Array of available graphs, each containing:
+      - `name`: Graph name
+      - `type`: Graph type (Event, Function, Macro, Delegate)
+      - `isEditable`: Whether the graph can be edited
+    - `isInEditingMode`: Whether the editor is in editing mode (always true for open editors)
+    - `isCompileEnabled`: Whether compilation is enabled (always true by default)
+    - `hasCompilerResults`: Whether the Blueprint has been compiled
+    - `isDirty`: Whether the Blueprint has unsaved changes
+    - `graph_counts`: Object containing counts of different graph types:
+      - `event_graphs`: Number of event graphs
+      - `function_graphs`: Number of function graphs
+      - `macro_graphs`: Number of macro graphs
+      - `delegate_graphs`: Number of delegate signature graphs
+  - `count`: Total number of open Blueprint editors
+- **Notes**:
+  - Uses UAssetEditorSubsystem to find all open Blueprint assets
+  - Provides compatibility with focus-blueprint-editor tool
+  - Some editor state information uses default values due to API limitations
+
 ### get-available-translation-targets
 - **Location**: `Implementations/Translation/N2CMcpGetAvailableTranslationTargetsTool.cpp`
 - **Description**: Returns the list of programming languages that NodeToCode can translate Blueprints into, including metadata about each language
