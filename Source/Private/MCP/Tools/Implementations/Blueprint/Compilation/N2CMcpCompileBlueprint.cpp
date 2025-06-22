@@ -5,10 +5,6 @@
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "Utils/N2CLogger.h"
-#include "Kismet2/KismetEditorUtilities.h"
-#include "Kismet2/CompilerResultsLog.h"
-#include "Framework/Notifications/NotificationManager.h"
-#include "Widgets/Notifications/SNotificationList.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 
@@ -54,47 +50,78 @@ FMcpToolCallResult FN2CMcpCompileBlueprint::Execute(const TSharedPtr<FJsonObject
         
         // Record pre-compilation state
         EBlueprintStatus PreCompileStatus = Blueprint->Status;
-        double StartTime = FPlatformTime::Seconds();
         
-        // Create compiler results log
-        FCompilerResultsLog CompilerResults;
-        CompilerResults.bSilentMode = true; // We'll handle output ourselves
-        CompilerResults.bAnnotateMentionedNodes = true;
-        CompilerResults.SetSourcePath(Blueprint->GetPathName());
+        // Use the utility method to compile with detailed messages
+        int32 ErrorCount = 0;
+        int32 WarningCount = 0;
+        float CompilationTime = 0.0f;
+        TArray<TSharedPtr<FN2CCompilerMessage>> CompilerMessages;
+        bool bCompileSuccess = FN2CMcpBlueprintUtils::CompileBlueprint(
+            Blueprint, bSkipGarbageCollection, ErrorCount, WarningCount, CompilationTime, &CompilerMessages);
         
-        // Begin compilation event
-        CompilerResults.BeginEvent(TEXT("MCP Compile"));
+        // Build result JSON
+        TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
         
-        // Set compilation flags
-        EBlueprintCompileOptions CompileFlags = bSkipGarbageCollection 
-            ? EBlueprintCompileOptions::SkipGarbageCollection 
-            : EBlueprintCompileOptions::None;
+        // Basic info
+        Result->SetBoolField(TEXT("success"), bCompileSuccess);
+        Result->SetStringField(TEXT("blueprintName"), Blueprint->GetName());
+        Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
         
-        try
+        // Compilation status
+        TSharedPtr<FJsonObject> StatusObj = MakeShareable(new FJsonObject);
+        StatusObj->SetStringField(TEXT("previousStatus"), GetStatusString(PreCompileStatus));
+        StatusObj->SetStringField(TEXT("currentStatus"), GetStatusString(Blueprint->Status));
+        StatusObj->SetNumberField(TEXT("statusCode"), static_cast<int32>(Blueprint->Status));
+        Result->SetObjectField(TEXT("compilationStatus"), StatusObj);
+        
+        // Compilation time
+        Result->SetNumberField(TEXT("compilationTime"), CompilationTime);
+        
+        // Compilation results
+        TSharedPtr<FJsonObject> ResultsObj = MakeShareable(new FJsonObject);
+        ResultsObj->SetNumberField(TEXT("errorCount"), ErrorCount);
+        ResultsObj->SetNumberField(TEXT("warningCount"), WarningCount);
+        
+        // Count notes (info messages)
+        int32 NoteCount = 0;
+        for (const TSharedPtr<FN2CCompilerMessage>& Message : CompilerMessages)
         {
-            // Compile the Blueprint
-            FKismetEditorUtilities::CompileBlueprint(Blueprint, CompileFlags, &CompilerResults);
+            if (Message->Severity == TEXT("Note"))
+            {
+                NoteCount++;
+            }
         }
-        catch (...)
+        ResultsObj->SetNumberField(TEXT("noteCount"), NoteCount);
+        
+        // Add detailed messages
+        TArray<TSharedPtr<FJsonValue>> MessagesArray;
+        for (const TSharedPtr<FN2CCompilerMessage>& Message : CompilerMessages)
         {
-            FN2CLogger::Get().LogError(TEXT("FN2CMcpCompileBlueprint"), 
-                TEXT("Exception during Blueprint compilation"));
-            return FMcpToolCallResult::CreateErrorResult(
-                TEXT("COMPILATION_FAILED: Critical error during compilation"));
+            TSharedPtr<FJsonObject> MessageObj = MakeShareable(new FJsonObject);
+            MessageObj->SetStringField(TEXT("severity"), Message->Severity);
+            MessageObj->SetStringField(TEXT("message"), Message->Message);
+            MessagesArray.Add(MakeShareable(new FJsonValueObject(MessageObj)));
         }
+        ResultsObj->SetArrayField(TEXT("messages"), MessagesArray);
+        Result->SetObjectField(TEXT("results"), ResultsObj);
         
-        // End compilation event
-        CompilerResults.EndEvent();
-        
-        // Calculate compilation time
-        float CompilationTime = static_cast<float>(FPlatformTime::Seconds() - StartTime);
-        
-        // Refresh Blueprint action database
-        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
-        
-        // Build and return result
-        TSharedPtr<FJsonObject> Result = BuildCompilationResult(
-            Blueprint, CompilerResults, PreCompileStatus, CompilationTime);
+        // Summary message
+        FString SummaryMessage;
+        if (ErrorCount > 0)
+        {
+            SummaryMessage = FString::Printf(TEXT("Blueprint compilation failed with %d error(s) and %d warning(s)"),
+                ErrorCount, WarningCount);
+        }
+        else if (WarningCount > 0)
+        {
+            SummaryMessage = FString::Printf(TEXT("Blueprint compiled successfully with %d warning(s)"),
+                WarningCount);
+        }
+        else
+        {
+            SummaryMessage = TEXT("Blueprint compiled successfully");
+        }
+        Result->SetStringField(TEXT("message"), SummaryMessage);
         
         // Convert JSON object to string for text result
         FString OutputString;
@@ -103,110 +130,6 @@ FMcpToolCallResult FN2CMcpCompileBlueprint::Execute(const TSharedPtr<FJsonObject
         
         return FMcpToolCallResult::CreateTextResult(OutputString);
     });
-}
-
-TSharedPtr<FJsonObject> FN2CMcpCompileBlueprint::BuildCompilationResult(
-    UBlueprint* Blueprint,
-    const FCompilerResultsLog& CompilerResults,
-    EBlueprintStatus PreCompileStatus,
-    float CompilationTime)
-{
-    TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
-    
-    // Basic info
-    Result->SetBoolField(TEXT("success"), CompilerResults.NumErrors == 0);
-    Result->SetStringField(TEXT("blueprintName"), Blueprint->GetName());
-    Result->SetStringField(TEXT("blueprintPath"), Blueprint->GetPathName());
-    
-    // Compilation status
-    TSharedPtr<FJsonObject> StatusObj = MakeShareable(new FJsonObject);
-    StatusObj->SetStringField(TEXT("previousStatus"), GetStatusString(PreCompileStatus));
-    StatusObj->SetStringField(TEXT("currentStatus"), GetStatusString(Blueprint->Status));
-    StatusObj->SetNumberField(TEXT("statusCode"), static_cast<int32>(Blueprint->Status));
-    Result->SetObjectField(TEXT("compilationStatus"), StatusObj);
-    
-    // Compilation time
-    Result->SetNumberField(TEXT("compilationTime"), CompilationTime);
-    
-    // Compilation results
-    TSharedPtr<FJsonObject> ResultsObj = MakeShareable(new FJsonObject);
-    ResultsObj->SetNumberField(TEXT("errorCount"), CompilerResults.NumErrors);
-    ResultsObj->SetNumberField(TEXT("warningCount"), CompilerResults.NumWarnings);
-    
-    // Count notes (info messages)
-    int32 NoteCount = 0;
-    for (const TSharedRef<FTokenizedMessage>& Message : CompilerResults.Messages)
-    {
-        if (Message->GetSeverity() == EMessageSeverity::Info)
-        {
-            NoteCount++;
-        }
-    }
-    ResultsObj->SetNumberField(TEXT("noteCount"), NoteCount);
-    
-    // Extract messages
-    ResultsObj->SetArrayField(TEXT("messages"), ExtractCompilerMessages(CompilerResults));
-    Result->SetObjectField(TEXT("results"), ResultsObj);
-    
-    // Summary message
-    FString SummaryMessage;
-    if (CompilerResults.NumErrors > 0)
-    {
-        SummaryMessage = FString::Printf(TEXT("Blueprint compilation failed with %d error(s) and %d warning(s)"),
-            CompilerResults.NumErrors, CompilerResults.NumWarnings);
-    }
-    else if (CompilerResults.NumWarnings > 0)
-    {
-        SummaryMessage = FString::Printf(TEXT("Blueprint compiled successfully with %d warning(s)"),
-            CompilerResults.NumWarnings);
-    }
-    else
-    {
-        SummaryMessage = TEXT("Blueprint compiled successfully");
-    }
-    Result->SetStringField(TEXT("message"), SummaryMessage);
-    
-    return Result;
-}
-
-TArray<TSharedPtr<FJsonValue>> FN2CMcpCompileBlueprint::ExtractCompilerMessages(
-    const FCompilerResultsLog& CompilerResults)
-{
-    TArray<TSharedPtr<FJsonValue>> Messages;
-    
-    for (const TSharedRef<FTokenizedMessage>& Message : CompilerResults.Messages)
-    {
-        TSharedPtr<FJsonObject> MessageObj = MakeShareable(new FJsonObject);
-        
-        // Severity
-        FString Severity;
-        switch (Message->GetSeverity())
-        {
-            case EMessageSeverity::Error:
-                Severity = TEXT("Error");
-                break;
-            case EMessageSeverity::Warning:
-                Severity = TEXT("Warning");
-                break;
-            case EMessageSeverity::Info:
-                Severity = TEXT("Note");
-                break;
-            default:
-                Severity = TEXT("Unknown");
-                break;
-        }
-        MessageObj->SetStringField(TEXT("severity"), Severity);
-        
-        // Message text
-        MessageObj->SetStringField(TEXT("message"), Message->ToText().ToString());
-        
-        // TODO: In a future enhancement, we could parse the tokenized message
-        // to extract node references and other structured data
-        
-        Messages.Add(MakeShareable(new FJsonValueObject(MessageObj)));
-    }
-    
-    return Messages;
 }
 
 FString FN2CMcpCompileBlueprint::GetStatusString(EBlueprintStatus Status)

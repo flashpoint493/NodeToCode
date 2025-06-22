@@ -69,6 +69,17 @@ This directory contains MCP tools for creating variables and searching variable 
   - Graph and Blueprint context
 - **Use Case**: Creating Set nodes in Blueprint logic to assign values to member variables during execution
 
+### set-member-variable-default-value
+- **Description**: Sets the default value of a member variable in the Blueprint (like editing in Details panel)
+- **Parameters**:
+  - `variableName` (required): Name of the member variable to modify
+  - `defaultValue` (required): New default value (empty string for default/zero value)
+- **Returns**: Modification details including:
+  - Old and new default values
+  - Variable type information
+  - Blueprint context
+- **Use Case**: Modifying the default value property of member variables without creating nodes
+
 ## Type Identifier System
 
 ### Primitive Types
@@ -205,6 +216,39 @@ curl -X POST http://localhost:27000/mcp \
       "name": "create-set-member-variable-node",
       "arguments": {
         "variableName": "TargetActor"
+      }
+    },
+    "id": 2
+  }'
+```
+
+### Setting Variable Default Values
+```bash
+# Set the default value of a member variable (like in Details panel)
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "set-member-variable-default-value",
+      "arguments": {
+        "variableName": "Health",
+        "defaultValue": "100"
+      }
+    },
+    "id": 1
+  }'
+
+# Reset a variable to its type's default value
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "set-member-variable-default-value",
+      "arguments": {
+        "variableName": "Score",
+        "defaultValue": ""
       }
     },
     "id": 2

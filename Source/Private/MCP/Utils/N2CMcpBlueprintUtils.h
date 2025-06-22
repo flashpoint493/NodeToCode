@@ -8,6 +8,24 @@ class UBlueprint;
 class UEdGraph;
 class IBlueprintEditor;
 
+/**
+ * Structure to hold compiler message information
+ */
+struct FN2CCompilerMessage
+{
+    /** Message severity: Error, Warning, Info */
+    FString Severity;
+    
+    /** The actual message text */
+    FString Message;
+    
+    FN2CCompilerMessage(const FString& InSeverity, const FString& InMessage)
+        : Severity(InSeverity)
+        , Message(InMessage)
+    {
+    }
+};
+
 class NODETOCODE_API FN2CMcpBlueprintUtils
 {
 public:
@@ -45,4 +63,18 @@ public:
      * @return True if the editor was successfully opened or focused, false otherwise.
      */
     static bool OpenBlueprintEditor(UBlueprint* Blueprint, TSharedPtr<IBlueprintEditor>& OutEditor, FString& OutErrorMsg);
+
+    /**
+     * Compiles a Blueprint and returns compilation results.
+     * @param Blueprint The Blueprint to compile.
+     * @param bSkipGarbageCollection If true, skips garbage collection during compilation for better performance.
+     * @param OutErrorCount Number of errors encountered during compilation.
+     * @param OutWarningCount Number of warnings encountered during compilation.
+     * @param OutCompilationTime Time taken to compile in seconds.
+     * @param OutMessages Optional array to receive detailed compilation messages.
+     * @return True if compilation succeeded (no errors), false if there were errors.
+     */
+    static bool CompileBlueprint(UBlueprint* Blueprint, bool bSkipGarbageCollection, 
+        int32& OutErrorCount, int32& OutWarningCount, float& OutCompilationTime,
+        TArray<TSharedPtr<struct FN2CCompilerMessage>>* OutMessages = nullptr);
 };

@@ -12,6 +12,8 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Utils/N2CLogger.h"
 #include "BlueprintActionDatabase.h" // For FBlueprintActionDatabase
+#include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet2/CompilerResultsLog.h"
 
 UBlueprint* FN2CMcpBlueprintUtils::ResolveBlueprint(const FString& OptionalBlueprintPath, FString& OutErrorMsg)
 {
@@ -174,4 +176,122 @@ void FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase()
     {
         FN2CLogger::Get().LogWarning(TEXT("FBlueprintActionDatabase not available for refresh via utility. Context menu issues might persist."));
     }
+}
+
+bool FN2CMcpBlueprintUtils::CompileBlueprint(UBlueprint* Blueprint, bool bSkipGarbageCollection, 
+    int32& OutErrorCount, int32& OutWarningCount, float& OutCompilationTime,
+    TArray<TSharedPtr<FN2CCompilerMessage>>* OutMessages)
+{
+    OutErrorCount = 0;
+    OutWarningCount = 0;
+    OutCompilationTime = 0.0f;
+    
+    if (!Blueprint)
+    {
+        FN2CLogger::Get().LogError(TEXT("FN2CMcpBlueprintUtils::CompileBlueprint"), 
+            TEXT("Cannot compile null Blueprint"));
+        return false;
+    }
+    
+    // Record start time
+    double StartTime = FPlatformTime::Seconds();
+    
+    // Create compiler results log
+    FCompilerResultsLog CompilerResults;
+    CompilerResults.bSilentMode = true; // We'll handle output ourselves
+    CompilerResults.bAnnotateMentionedNodes = true;
+    CompilerResults.SetSourcePath(Blueprint->GetPathName());
+    
+    // Begin compilation event
+    CompilerResults.BeginEvent(TEXT("MCP Compile"));
+    
+    // Set compilation flags
+    EBlueprintCompileOptions CompileFlags = bSkipGarbageCollection 
+        ? EBlueprintCompileOptions::SkipGarbageCollection 
+        : EBlueprintCompileOptions::None;
+    
+    bool bSuccess = false;
+    
+    try
+    {
+        // Compile the Blueprint
+        FKismetEditorUtilities::CompileBlueprint(Blueprint, CompileFlags, &CompilerResults);
+        bSuccess = true;
+    }
+    catch (...)
+    {
+        FN2CLogger::Get().LogError(TEXT("FN2CMcpBlueprintUtils::CompileBlueprint"), 
+            TEXT("Exception during Blueprint compilation"));
+        bSuccess = false;
+    }
+    
+    // End compilation event
+    CompilerResults.EndEvent();
+    
+    // Calculate compilation time
+    OutCompilationTime = static_cast<float>(FPlatformTime::Seconds() - StartTime);
+    
+    // Extract error and warning counts
+    OutErrorCount = CompilerResults.NumErrors;
+    OutWarningCount = CompilerResults.NumWarnings;
+    
+    // Extract detailed messages if requested
+    if (OutMessages)
+    {
+        OutMessages->Empty();
+        
+        for (const TSharedRef<FTokenizedMessage>& Message : CompilerResults.Messages)
+        {
+            FString Severity;
+            switch (Message->GetSeverity())
+            {
+                case EMessageSeverity::Error:
+                    Severity = TEXT("Error");
+                    break;
+                case EMessageSeverity::Warning:
+                    Severity = TEXT("Warning");
+                    break;
+                case EMessageSeverity::Info:
+                    Severity = TEXT("Note");
+                    break;
+                default:
+                    Severity = TEXT("Unknown");
+                    break;
+            }
+            
+            OutMessages->Add(MakeShareable(new FN2CCompilerMessage(Severity, Message->ToText().ToString())));
+        }
+    }
+    
+    // Log compilation result
+    if (OutErrorCount > 0)
+    {
+        FN2CLogger::Get().Log(
+            FString::Printf(TEXT("Blueprint '%s' compilation failed with %d error(s) and %d warning(s)"), 
+                *Blueprint->GetName(), OutErrorCount, OutWarningCount),
+            EN2CLogSeverity::Warning
+        );
+    }
+    else if (OutWarningCount > 0)
+    {
+        FN2CLogger::Get().Log(
+            FString::Printf(TEXT("Blueprint '%s' compiled successfully with %d warning(s)"), 
+                *Blueprint->GetName(), OutWarningCount),
+            EN2CLogSeverity::Info
+        );
+    }
+    else
+    {
+        FN2CLogger::Get().Log(
+            FString::Printf(TEXT("Blueprint '%s' compiled successfully"), 
+                *Blueprint->GetName()),
+            EN2CLogSeverity::Info
+        );
+    }
+    
+    // Refresh Blueprint action database after compilation
+    RefreshBlueprintActionDatabase();
+    
+    // Return true if compilation succeeded (no errors), false if there were errors
+    return bSuccess && (OutErrorCount == 0);
 }
