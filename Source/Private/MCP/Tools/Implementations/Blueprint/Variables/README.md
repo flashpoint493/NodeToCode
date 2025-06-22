@@ -80,6 +80,46 @@ This directory contains MCP tools for creating variables and searching variable 
   - Blueprint context
 - **Use Case**: Modifying the default value property of member variables without creating nodes
 
+### get-blueprint-function-local-variables
+- **Description**: Retrieves all local variables from the currently focused Blueprint function graph
+- **Parameters**:
+  - `includeDetails` (optional): Include detailed type and metadata info (default: true)
+- **Returns**: Complete list of local variables with:
+  - Variable names and display names
+  - Type information (including container types)
+  - Default values
+  - Property flags
+  - GUID identifiers
+  - Function context
+- **Use Case**: Inspecting function local variables, finding variables to use in nodes
+
+### create-set-local-function-variable-node
+- **Description**: Creates a Set node for a local function variable in the focused function graph
+- **Parameters**:
+  - `variableName` (required): Name of the local variable to create a Set node for
+  - `x` (optional): X coordinate for node position (default: 0)
+  - `y` (optional): Y coordinate for node position (default: 0)
+  - `inputPinValue` (optional): Default value to set on the input pin of the Set node
+- **Returns**: Created node details including:
+  - Unique node ID for use with connect-pins tool
+  - Node type (K2Node_VariableSet)
+  - Pin information with IDs and types
+  - Variable type details
+  - Function graph context
+- **Use Case**: Creating Set nodes in function logic to assign values to local variables during execution
+
+### set-local-function-variable-default-value
+- **Description**: Sets the default value of a local function variable (like editing in Details panel)
+- **Parameters**:
+  - `variableName` (required): Name of the local variable to modify
+  - `defaultValue` (required): New default value (empty string for default/zero value)
+- **Returns**: Modification details including:
+  - Old and new default values
+  - Variable type information
+  - Function context
+  - Compilation results
+- **Use Case**: Modifying the default value property of local function variables
+
 ## Type Identifier System
 
 ### Primitive Types
@@ -255,10 +295,61 @@ curl -X POST http://localhost:27000/mcp \
   }'
 ```
 
+### Working with Local Function Variables
+```bash
+# Get all local variables in the focused function
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "get-blueprint-function-local-variables",
+      "arguments": {}
+    },
+    "id": 1
+  }'
+
+# Create a Set node for a local variable
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "create-set-local-function-variable-node",
+      "arguments": {
+        "variableName": "TempCounter",
+        "x": 300,
+        "y": 150,
+        "inputPinValue": "0"
+      }
+    },
+    "id": 2
+  }'
+
+# Set default value of a local variable
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "set-local-function-variable-default-value",
+      "arguments": {
+        "variableName": "TempResult",
+        "defaultValue": "false"
+      }
+    },
+    "id": 3
+  }'
+```
+
 ## Implementation Notes
 
 - Type resolution uses Unreal's reflection system
 - Variable names are automatically made unique if conflicts exist
-- Local variables are created as `UK2Node_VariableGet/Set` nodes
+- Member variables are stored in `Blueprint->NewVariables` array
+- Local function variables are stored in `UK2Node_FunctionEntry->LocalVariables` array
+- Variable Set nodes use `VariableReference.SetSelfMember()` for member variables
+- Variable Set nodes use `VariableReference.SetLocalMember()` for local variables
 - Container types are handled through `FEdGraphPinType` configuration
 - All operations support undo/redo through transactions
+- Default value changes trigger Blueprint compilation for validation
