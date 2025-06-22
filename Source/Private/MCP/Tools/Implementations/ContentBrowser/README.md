@@ -45,6 +45,15 @@ This directory contains MCP tools for interacting with Unreal Engine's Content B
 - **Returns**: Ranked search results with relevance scores
 - **Use Case**: Finding assets across entire project
 
+### copy-asset
+- **Description**: Copy an asset to a new location in the content browser
+- **Parameters**:
+  - `sourcePath` (required): Source asset path (supports both package and object path formats)
+  - `destinationPath` (required): Destination asset path where the copy will be created
+  - `overwriteExisting` (optional, default: false): Whether to overwrite if destination exists
+- **Returns**: Copy operation result with new asset details
+- **Use Case**: Duplicating assets, creating variations, organizing content
+
 ## Content Browser Paths
 
 ### Valid Path Roots
@@ -276,10 +285,60 @@ curl -X POST http://localhost:27000/mcp \
   }'
 ```
 
+### Copying Assets
+```bash
+# Copy a Blueprint to a new location
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "copy-asset",
+      "arguments": {
+        "sourcePath": "/Game/Blueprints/BP_Enemy",
+        "destinationPath": "/Game/Blueprints/Variants/BP_Enemy_Fast"
+      }
+    },
+    "id": 1
+  }'
+
+# Copy with overwrite enabled
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "copy-asset",
+      "arguments": {
+        "sourcePath": "/Game/Materials/M_Base.M_Base",
+        "destinationPath": "/Game/Materials/Backup/M_Base_Backup",
+        "overwriteExisting": true
+      }
+    },
+    "id": 2
+  }'
+```
+
+## Asset Path Formats
+
+### Package Path Format
+- Format: `/Game/Folder/AssetName`
+- Used by: Content browser navigation, most editor operations
+- Example: `/Game/Blueprints/BP_Player`
+
+### Object Path Format
+- Format: `/Game/Folder/AssetName.AssetName`
+- Used by: Asset registry, object references
+- Example: `/Game/Blueprints/BP_Player.BP_Player`
+
+**Note**: The copy-asset and move-asset tools accept both formats and will handle conversion automatically.
+
 ## Implementation Notes
 
 - Content browser operations use `IContentBrowserSingleton`
 - Asset filtering uses `FARFilter` for efficient queries
 - Pagination prevents timeouts with large directories
-- Asset paths must include the asset name twice (UE convention)
+- Asset paths must include the asset name twice (UE convention) for object paths
 - All operations require Game Thread execution
+- Copy operations use `UEditorAssetSubsystem::DuplicateAsset`
+- Destination folders are created automatically if they don't exist

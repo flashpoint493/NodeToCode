@@ -60,7 +60,7 @@ FMcpToolDefinition FN2CMcpSearchContentBrowserTool::GetDefinition() const
 	// includePluginContent property
 	TSharedPtr<FJsonObject> IncludePluginProp = MakeShareable(new FJsonObject);
 	IncludePluginProp->SetStringField(TEXT("type"), TEXT("boolean"));
-	IncludePluginProp->SetBoolField(TEXT("default"), true);
+	IncludePluginProp->SetBoolField(TEXT("default"), false);
 	IncludePluginProp->SetStringField(TEXT("description"), TEXT("Include assets from Plugin content"));
 	Properties->SetObjectField(TEXT("includePluginContent"), IncludePluginProp);
 
