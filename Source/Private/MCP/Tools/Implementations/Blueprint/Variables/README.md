@@ -43,6 +43,18 @@ This directory contains MCP tools for creating variables and searching variable 
 - **Returns**: Matching types with identifiers and metadata
 - **Use Case**: Discovering available types for variable creation
 
+### get-blueprint-member-variables
+- **Description**: Retrieves all member variables from the currently focused Blueprint
+- **Parameters**: None
+- **Returns**: Complete list of member variables with:
+  - Variable names and categories
+  - Type information (including container types)
+  - Default values
+  - Property flags (editable, read-only, replicated, etc.)
+  - Metadata (tooltips, display names, etc.)
+  - GUID identifiers
+- **Use Case**: Inspecting Blueprint variables, generating documentation, finding variables to use in nodes
+
 ## Type Identifier System
 
 ### Primitive Types
@@ -132,6 +144,21 @@ curl -X POST http://localhost:27000/mcp \
         "mapKeyTypeIdentifier": "FString",
         "category": "Save System"
       }
+    },
+    "id": 1
+  }'
+```
+
+### Inspecting Blueprint Variables
+```bash
+# Get all member variables from the focused Blueprint
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "get-blueprint-member-variables",
+      "arguments": {}
     },
     "id": 1
   }'
