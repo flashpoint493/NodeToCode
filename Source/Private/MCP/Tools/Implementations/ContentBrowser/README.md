@@ -34,6 +34,17 @@ This directory contains MCP tools for interacting with Unreal Engine's Content B
 - **Returns**: Blueprint information and editor state
 - **Use Case**: Opening Blueprints for editing
 
+### search-content-browser
+- **Description**: Search for assets across the entire content browser by name or type
+- **Parameters**:
+  - `query` (optional): Search query for asset names (partial match, case-insensitive)
+  - `assetType` (optional): Filter by type (All, Blueprint, Material, Texture, StaticMesh, SkeletalMesh, Sound, Animation, ParticleSystem, DataAsset, DataTable)
+  - `includeEngineContent` (optional, default: false): Include Engine content in search
+  - `includePluginContent` (optional, default: true): Include Plugin content in search
+  - `maxResults` (optional, default: 50): Maximum results to return (1-200)
+- **Returns**: Ranked search results with relevance scores
+- **Use Case**: Finding assets across entire project
+
 ## Content Browser Paths
 
 ### Valid Path Roots
@@ -215,6 +226,54 @@ open-blueprint-asset "/Game/Blueprints/BP_PlayerCharacter.BP_PlayerCharacter"
 
 # 5. Focus on specific functionality
 open-blueprint-asset "/Game/Blueprints/BP_PlayerCharacter.BP_PlayerCharacter" focus_graph="HandleInput"
+```
+
+### Global Asset Search
+```bash
+# Search for all player-related assets
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "search-content-browser",
+      "arguments": {
+        "query": "Player"
+      }
+    },
+    "id": 1
+  }'
+
+# Find all Blueprints in the project
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "search-content-browser",
+      "arguments": {
+        "assetType": "Blueprint",
+        "maxResults": 100
+      }
+    },
+    "id": 2
+  }'
+
+# Search for materials including engine content
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "search-content-browser",
+      "arguments": {
+        "query": "Metal",
+        "assetType": "Material",
+        "includeEngineContent": true
+      }
+    },
+    "id": 3
+  }'
 ```
 
 ## Implementation Notes
