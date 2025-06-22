@@ -54,6 +54,14 @@ This directory contains MCP tools for interacting with Unreal Engine's Content B
 - **Returns**: Copy operation result with new asset details
 - **Use Case**: Duplicating assets, creating variations, organizing content
 
+### create-folder
+- **Description**: Create a new folder in the content browser
+- **Parameters**:
+  - `folderPath` (required): Path where the folder should be created (e.g., '/Game/NewFolder')
+  - `createParents` (optional, default: false): Create missing parent folders if they don't exist
+- **Returns**: Creation result with folder path and navigation status
+- **Use Case**: Organizing content, creating project structure, preparing locations for assets
+
 ## Content Browser Paths
 
 ### Valid Path Roots
@@ -316,6 +324,53 @@ curl -X POST http://localhost:27000/mcp \
       }
     },
     "id": 2
+  }'
+```
+
+### Creating Folders
+```bash
+# Create a single folder
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "create-folder",
+      "arguments": {
+        "folderPath": "/Game/AI/BehaviorTrees"
+      }
+    },
+    "id": 1
+  }'
+
+# Create folder with parent directories
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "create-folder",
+      "arguments": {
+        "folderPath": "/Game/Characters/Player/Animations/Montages",
+        "createParents": true
+      }
+    },
+    "id": 2
+  }'
+
+# Create a folder structure for organizing Blueprints
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "create-folder",
+      "arguments": {
+        "folderPath": "/Game/Blueprints/UI/HUD",
+        "createParents": true
+      }
+    },
+    "id": 3
   }'
 ```
 
