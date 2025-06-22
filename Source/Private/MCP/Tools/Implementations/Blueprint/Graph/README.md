@@ -1,0 +1,143 @@
+# Blueprint Graph Manipulation Tools
+
+This directory contains MCP tools for manipulating nodes and connections within Blueprint graphs. These tools enable programmatic construction of Blueprint logic.
+
+## Available Tools
+
+### search-blueprint-nodes
+- **Description**: Searches for Blueprint nodes/actions relevant to a query
+- **Parameters**:
+  - `searchTerm` (required): Text query to search for
+  - `contextSensitive` (optional): Perform context-sensitive search
+  - `maxResults` (optional): Maximum results to return (1-100)
+  - `blueprintContext` (optional): Context for sensitive search
+- **Returns**: Array of nodes with spawn metadata
+- **Use Case**: Discovering available nodes before adding them
+
+### add-bp-node-to-active-graph
+- **Description**: Adds a Blueprint node to the currently active graph
+- **Parameters**:
+  - `nodeName` (required): Name of the node to add
+  - `actionIdentifier` (required): Identifier from search results
+  - `location` (optional): X,Y coordinates for placement
+- **Returns**: Node ID, graph name, and success status
+- **Use Case**: Building Blueprint logic programmatically
+
+### connect-pins
+- **Description**: Connect pins between Blueprint nodes using GUIDs
+- **Parameters**:
+  - `connections` (required): Array of connection specifications
+  - `options` (optional): Transaction name and link breaking behavior
+- **Returns**: Succeeded/failed connections with details
+- **Use Case**: Wiring up Blueprint node networks
+
+## Node Search and Add Workflow
+
+The search and add tools work together in a two-step process:
+
+### Step 1: Search for Nodes
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "search-blueprint-nodes",
+      "arguments": {
+        "searchTerm": "print string",
+        "contextSensitive": true
+      }
+    },
+    "id": 1
+  }'
+```
+
+### Step 2: Add Found Node
+```bash
+# Use the actionIdentifier from search results
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "add-bp-node-to-active-graph",
+      "arguments": {
+        "nodeName": "Print String",
+        "actionIdentifier": "printstring>development>|utilities>printstring>development>|utilities",
+        "location": {"x": 400, "y": 200}
+      }
+    },
+    "id": 2
+  }'
+```
+
+## Pin Connection System
+
+### Connection Structure
+Each connection requires:
+- `from`: Source pin specification
+  - `nodeGuid`: GUID of source node
+  - `pinGuid`: GUID of source pin
+  - `pinName` (optional): Fallback name
+  - `pinDirection` (optional): Validation
+- `to`: Target pin specification (same structure)
+
+### Connection Rules
+- **Execution Pins**: One-to-one connections only
+- **Data Output Pins**: Can connect to multiple inputs
+- **Data Input Pins**: Can only have one connection
+
+### Batch Connection Example
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "connect-pins",
+      "arguments": {
+        "connections": [
+          {
+            "from": {
+              "nodeGuid": "AAE5F1A04B2E8F9E003C6B8F12345678",
+              "pinGuid": "BBE5F1A04B2E8F9E003C6B8F12345678"
+            },
+            "to": {
+              "nodeGuid": "CCE5F1A04B2E8F9E003C6B8F12345678",
+              "pinGuid": "DDE5F1A04B2E8F9E003C6B8F12345678"
+            }
+          }
+        ],
+        "options": {
+          "transactionName": "Wire up print logic",
+          "breakExistingLinks": true
+        }
+      }
+    },
+    "id": 1
+  }'
+```
+
+## Common Patterns
+
+### Building a Simple Print Debug Flow
+1. Search for "Event BeginPlay"
+2. Add Event BeginPlay node
+3. Search for "Print String"
+4. Add Print String node
+5. Connect execution pins
+6. Set string value on Print String node
+
+### Working with Variables
+1. Search for variable getter/setter nodes
+2. Add variable nodes to graph
+3. Connect data pins to function parameters
+4. Chain execution through multiple operations
+
+## Implementation Notes
+
+- Node search uses Unreal's action database system
+- Action identifiers use `>` as delimiter for menu paths
+- Node placement respects graph zoom and pan state
+- Pin connections validate type compatibility
+- All operations use transactions for undo support
