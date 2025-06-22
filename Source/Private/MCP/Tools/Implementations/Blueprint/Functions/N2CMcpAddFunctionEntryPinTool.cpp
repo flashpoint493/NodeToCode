@@ -1,17 +1,15 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
-#include "N2CMcpAddFunctionInputPinTool.h"
+#include "N2CMcpAddFunctionEntryPinTool.h"
 #include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "MCP/Utils/N2CMcpTypeResolver.h"
-#include "MCP/Utils/N2CMcpBlueprintUtils.h"
+#include "MCP/Utils/N2CMcpFunctionPinUtils.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpToolTypes.h"
-#include "MCP/Tools/N2CMcpFunctionGuidUtils.h"
 #include "Core/N2CEditorIntegration.h"
 #include "Utils/N2CLogger.h"
 #include "Engine/Blueprint.h"
 #include "K2Node_FunctionEntry.h"
-#include "K2Node_CallFunction.h"
 #include "EdGraphSchema_K2.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Framework/Notifications/NotificationManager.h"
@@ -20,9 +18,9 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 
-REGISTER_MCP_TOOL(FN2CMcpAddFunctionInputPinTool)
+REGISTER_MCP_TOOL(FN2CMcpAddFunctionEntryPinTool)
 
-FMcpToolDefinition FN2CMcpAddFunctionInputPinTool::GetDefinition() const
+FMcpToolDefinition FN2CMcpAddFunctionEntryPinTool::GetDefinition() const
 {
 	FMcpToolDefinition Definition(
 		TEXT("add-function-input-pin"),
@@ -81,7 +79,7 @@ FMcpToolDefinition FN2CMcpAddFunctionInputPinTool::GetDefinition() const
 	return Definition;
 }
 
-FMcpToolCallResult FN2CMcpAddFunctionInputPinTool::Execute(const TSharedPtr<FJsonObject>& Arguments)
+FMcpToolCallResult FN2CMcpAddFunctionEntryPinTool::Execute(const TSharedPtr<FJsonObject>& Arguments)
 {
 	return ExecuteOnGameThread([this, Arguments]() -> FMcpToolCallResult
 	{
@@ -119,7 +117,7 @@ FMcpToolCallResult FN2CMcpAddFunctionInputPinTool::Execute(const TSharedPtr<FJso
 		}
 
 		// Find the function entry node
-		UK2Node_FunctionEntry* FunctionEntry = FindFunctionEntryNode(FocusedGraph);
+		UK2Node_FunctionEntry* FunctionEntry = FN2CMcpFunctionPinUtils::FindFunctionEntryNode(FocusedGraph);
 		if (!FunctionEntry)
 		{
 			return FMcpToolCallResult::CreateErrorResult(TEXT("Not in a function graph. Please focus on a Blueprint function."));
@@ -170,12 +168,10 @@ FMcpToolCallResult FN2CMcpAddFunctionInputPinTool::Execute(const TSharedPtr<FJso
 		}
 
 		// Update all function call sites
-		UpdateFunctionCallSites(FunctionEntry);
-
-		// Mark Blueprint as modified
 		UBlueprint* Blueprint = FBlueprintEditorUtils::FindBlueprintForNode(FunctionEntry);
 		if (Blueprint)
 		{
+			FN2CMcpFunctionPinUtils::UpdateFunctionCallSites(FocusedGraph, Blueprint);
 			FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 		}
 
@@ -189,7 +185,8 @@ FMcpToolCallResult FN2CMcpAddFunctionInputPinTool::Execute(const TSharedPtr<FJso
 		FSlateNotificationManager::Get().AddNotification(Info);
 
 		// Build and return success result
-		TSharedPtr<FJsonObject> ResultJson = BuildSuccessResult(FunctionEntry, FocusedGraph, PinName, NewPin, PinType);
+		TSharedPtr<FJsonObject> ResultJson = FN2CMcpFunctionPinUtils::BuildPinCreationSuccessResult(
+			FocusedGraph, PinName, NewPin, PinType, false /* bIsReturnPin */);
 		
 		// Convert JSON object to string
 		FString ResultString;
@@ -200,26 +197,8 @@ FMcpToolCallResult FN2CMcpAddFunctionInputPinTool::Execute(const TSharedPtr<FJso
 	});
 }
 
-UK2Node_FunctionEntry* FN2CMcpAddFunctionInputPinTool::FindFunctionEntryNode(UEdGraph* Graph) const
-{
-	if (!Graph)
-	{
-		return nullptr;
-	}
 
-	// Find the function entry node in the graph
-	for (UEdGraphNode* Node : Graph->Nodes)
-	{
-		if (UK2Node_FunctionEntry* EntryNode = Cast<UK2Node_FunctionEntry>(Node))
-		{
-			return EntryNode;
-		}
-	}
-
-	return nullptr;
-}
-
-UEdGraphPin* FN2CMcpAddFunctionInputPinTool::CreateInputPin(UK2Node_FunctionEntry* FunctionEntry, 
+UEdGraphPin* FN2CMcpAddFunctionEntryPinTool::CreateInputPin(UK2Node_FunctionEntry* FunctionEntry, 
 	const FString& DesiredName, const FEdGraphPinType& PinType, 
 	const FString& DefaultValue, const FString& Tooltip) const
 {
@@ -265,105 +244,10 @@ UEdGraphPin* FN2CMcpAddFunctionInputPinTool::CreateInputPin(UK2Node_FunctionEntr
 		// Set tooltip metadata
 		if (!Tooltip.IsEmpty())
 		{
-			SetPinTooltip(FunctionEntry, NewPin, Tooltip);
+			FN2CMcpFunctionPinUtils::SetPinTooltip(FunctionEntry, NewPin, Tooltip);
 		}
 	}
 
 	return NewPin;
 }
 
-void FN2CMcpAddFunctionInputPinTool::SetPinTooltip(UK2Node_FunctionEntry* FunctionEntry, 
-	UEdGraphPin* Pin, const FString& Tooltip) const
-{
-	if (!FunctionEntry || !Pin)
-	{
-		return;
-	}
-
-	// Pin tooltips are stored on the pin itself, not in FUserPinInfo
-	Pin->PinToolTip = Tooltip;
-}
-
-void FN2CMcpAddFunctionInputPinTool::UpdateFunctionCallSites(UK2Node_FunctionEntry* FunctionEntry) const
-{
-	if (!FunctionEntry)
-	{
-		return;
-	}
-
-	// When we add/remove pins from a function, all call sites need updating
-	UBlueprint* Blueprint = FBlueprintEditorUtils::FindBlueprintForNode(FunctionEntry);
-	if (!Blueprint)
-	{
-		return;
-	}
-
-	// Get the function's graph
-	UEdGraph* FunctionGraph = FunctionEntry->GetGraph();
-	if (!FunctionGraph)
-	{
-		return;
-	}
-
-	// Find all references to this function
-	TArray<UK2Node_CallFunction*> CallSites;
-	FBlueprintEditorUtils::GetAllNodesOfClass<UK2Node_CallFunction>(Blueprint, CallSites);
-
-	for (UK2Node_CallFunction* CallSite : CallSites)
-	{
-		// Check if this call site references our function
-		if (CallSite->FunctionReference.GetMemberName() == FunctionGraph->GetFName())
-		{
-			// Reconstruct the node to update its pins
-			CallSite->ReconstructNode();
-		}
-	}
-}
-
-TSharedPtr<FJsonObject> FN2CMcpAddFunctionInputPinTool::BuildSuccessResult(UK2Node_FunctionEntry* FunctionEntry, 
-	UEdGraph* FunctionGraph, const FString& RequestedName, 
-	UEdGraphPin* CreatedPin, const FEdGraphPinType& PinType) const
-{
-	TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
-	
-	Result->SetBoolField(TEXT("success"), true);
-	Result->SetStringField(TEXT("pinName"), RequestedName);
-	
-	// The actual name might be different if it was made unique
-	if (CreatedPin)
-	{
-		Result->SetStringField(TEXT("actualName"), CreatedPin->PinName.ToString());
-		Result->SetStringField(TEXT("pinId"), CreatedPin->PinId.ToString());
-	}
-	
-	// Add type info
-	TSharedPtr<FJsonObject> TypeInfo = MakeShareable(new FJsonObject);
-	TypeInfo->SetStringField(TEXT("category"), PinType.PinCategory.ToString());
-	
-	if (PinType.PinSubCategoryObject.IsValid())
-	{
-		TypeInfo->SetStringField(TEXT("className"), PinType.PinSubCategoryObject->GetName());
-		TypeInfo->SetStringField(TEXT("path"), PinType.PinSubCategoryObject->GetPathName());
-	}
-	
-	Result->SetObjectField(TEXT("typeInfo"), TypeInfo);
-	
-	// Add function and blueprint info
-	if (FunctionGraph)
-	{
-		Result->SetStringField(TEXT("functionName"), FunctionGraph->GetName());
-		
-		UBlueprint* Blueprint = FBlueprintEditorUtils::FindBlueprintForGraph(FunctionGraph);
-		if (Blueprint)
-		{
-			Result->SetStringField(TEXT("blueprintName"), Blueprint->GetName());
-		}
-	}
-	
-	Result->SetStringField(TEXT("message"), FString::Printf(
-		TEXT("Input pin '%s' added successfully to function '%s'"), 
-		*RequestedName, 
-		FunctionGraph ? *FunctionGraph->GetName() : TEXT("Unknown")));
-	
-	return Result;
-}
