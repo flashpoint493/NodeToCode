@@ -51,21 +51,12 @@ FMcpToolCallResult FN2CMcpGetBlueprintFunctionLocalVariables::Execute(const TSha
             return FMcpToolCallResult::CreateErrorResult(ErrorMessage);
         }
         
-        // Check if this is a function graph
-        if (!FocusedGraph->GetFName().ToString().StartsWith(TEXT("FunctionGraph_")) && 
-            !FocusedGraph->GetFName().ToString().StartsWith(TEXT("EventGraph_")))
-        {
-            return FMcpToolCallResult::CreateErrorResult(
-                TEXT("The focused graph is not a function graph. Please focus on a function in the Blueprint editor.")
-            );
-        }
-        
-        // Find the function entry node
+        // Find the function entry node to verify this is a function graph
         UK2Node_FunctionEntry* FunctionEntryNode = FindFunctionEntryNode(FocusedGraph);
         if (!FunctionEntryNode)
         {
             return FMcpToolCallResult::CreateErrorResult(
-                TEXT("Could not find function entry node in the focused graph.")
+                TEXT("The focused graph is not a function graph. Please focus on a function in the Blueprint editor.")
             );
         }
         
