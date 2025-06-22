@@ -20,6 +20,29 @@ This directory contains MCP tools for safely reading files and directories withi
 - **Security**: Size limits and binary file restrictions
 - **Use Case**: Reading configuration, source files, and documentation
 
+### move-asset
+- **Description**: Move or rename an asset to a new location in the content browser
+- **Parameters**:
+  - `sourcePath` (required): Path to the asset to move. Accepts both formats:
+    - Package path: `/Game/Folder/Asset` (as returned by read-content-browser-path)
+    - Object path: `/Game/Folder/Asset.Asset` (full UE object path)
+  - `destinationPath` (required): Destination directory path (e.g., '/Game/Blueprints/Characters')
+  - `newName` (optional): New name for the asset (keeps original name if not provided)
+  - `showNotification` (optional, default: true): Show a notification after the move operation
+- **Returns**: Move details including:
+  - `oldPath`: Clean package path of source
+  - `newPath`: Clean package path of destination
+  - `objectPath`: Full object path of moved asset
+  - `operation`: "move" or "rename"
+  - `assetInfo`: Asset metadata
+- **Features**: 
+  - Automatic path format detection and conversion
+  - Reference updating across the project
+  - Source control integration
+  - Clear error messages with expected formats
+  - Support for both move and rename operations
+- **Use Case**: Reorganizing project assets, renaming Blueprints and other content
+
 ## Security Features
 
 ### Path Jail Enforcement
@@ -102,6 +125,57 @@ curl -X POST http://localhost:27000/mcp \
   }'
 ```
 
+### Moving and Renaming Assets
+```bash
+# Move an asset to a different folder
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "move-asset",
+      "arguments": {
+        "sourcePath": "/Game/Characters/BP_Player",
+        "destinationPath": "/Game/Blueprints/Characters"
+      }
+    },
+    "id": 1
+  }'
+
+# Rename an asset (same directory)
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "move-asset",
+      "arguments": {
+        "sourcePath": "/Game/Blueprints/BP_OldName",
+        "destinationPath": "/Game/Blueprints",
+        "newName": "BP_NewName"
+      }
+    },
+    "id": 2
+  }'
+
+# Move and rename in one operation
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "move-asset",
+      "arguments": {
+        "sourcePath": "/Game/Test/BP_TestActor",
+        "destinationPath": "/Game/Blueprints/Actors",
+        "newName": "BP_MyActor",
+        "showNotification": false
+      }
+    },
+    "id": 3
+  }'
+```
+
 ## Path Format Guidelines
 
 ### Correct Path Usage
@@ -161,6 +235,27 @@ read-path "Saved/NodeToCode/Translations/BP_Player_2024-01-15-10.30.00"
 
 # 3. Read translated code
 read-file "Saved/NodeToCode/Translations/BP_Player_2024-01-15-10.30.00/EventGraph.cpp"
+```
+
+### Asset Organization Workflow
+```bash
+# 1. Browse current asset structure
+open-content-browser-path "/Game"
+
+# 2. Create organized folder structure
+open-content-browser-path "/Game/Blueprints/Characters"
+open-content-browser-path "/Game/Blueprints/Widgets"
+open-content-browser-path "/Game/Blueprints/GameModes"
+
+# 3. Move assets to organized locations
+move-asset "/Game/BP_Player" "/Game/Blueprints/Characters"
+move-asset "/Game/BP_Enemy" "/Game/Blueprints/Characters"
+move-asset "/Game/WBP_MainMenu" "/Game/Blueprints/Widgets"
+move-asset "/Game/GM_Main" "/Game/Blueprints/GameModes"
+
+# 4. Rename assets for consistency
+move-asset "/Game/Blueprints/Characters/PlayerCharacter" "/Game/Blueprints/Characters" "BP_PlayerCharacter"
+move-asset "/Game/Blueprints/GameModes/MainMode" "/Game/Blueprints/GameModes" "GM_MainMode"
 ```
 
 ## Implementation Notes
