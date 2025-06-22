@@ -33,6 +33,17 @@ This directory contains MCP tools for creating, opening, and managing Blueprint 
 - **Returns**: Deleted function info and removed references
 - **Use Case**: Cleaning up unused functions or refactoring
 
+### add-function-input-pin
+- **Description**: Adds a new input parameter to the currently focused Blueprint function
+- **Parameters**:
+  - `pinName` (required): Name for the new input parameter
+  - `typeIdentifier` (required): Type identifier from search-variable-types (e.g., 'bool', '/Script/Engine.Actor')
+  - `defaultValue` (optional): Default value for the parameter
+  - `isPassByReference` (optional): Whether the parameter is passed by reference
+  - `tooltip` (optional): Tooltip description for the parameter
+- **Returns**: Created pin information including actual name, pin ID, and type details
+- **Use Case**: Dynamically adding parameters to existing functions
+
 ## Parameter Type System
 
 ### Basic Types
@@ -100,8 +111,32 @@ curl -X POST http://localhost:27000/mcp \
 1. **Create Function**: Use `create-blueprint-function` to define the function
 2. **Get Function GUID**: Save the returned `functionGuid` for future operations
 3. **Open for Editing**: Use `open-blueprint-function` with the GUID
-4. **Add Implementation**: Use graph manipulation tools to add nodes
-5. **Delete if Needed**: Use `delete-blueprint-function` for cleanup
+4. **Add/Modify Parameters**: Use `add-function-input-pin` to add new input parameters
+5. **Add Implementation**: Use graph manipulation tools to add nodes
+6. **Delete if Needed**: Use `delete-blueprint-function` for cleanup
+
+## Example: Adding Function Input Pin
+
+```bash
+# First, make sure you have a function open in the editor
+# Then add a new input parameter:
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "add-function-input-pin",
+      "arguments": {
+        "pinName": "TargetActor",
+        "typeIdentifier": "/Script/Engine.Actor",
+        "isPassByReference": true,
+        "tooltip": "The actor to process",
+        "defaultValue": ""
+      }
+    },
+    "id": 1
+  }'
+```
 
 ## Implementation Notes
 
