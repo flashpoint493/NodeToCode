@@ -55,6 +55,20 @@ This directory contains MCP tools for creating variables and searching variable 
   - GUID identifiers
 - **Use Case**: Inspecting Blueprint variables, generating documentation, finding variables to use in nodes
 
+### create-set-member-variable-node
+- **Description**: Creates a Set node for a member variable in the focused Blueprint graph
+- **Parameters**:
+  - `variableName` (required): Name of the member variable to create a Set node for
+  - `defaultValue` (optional): Default value to set on the input pin of the Set node
+  - `location` (optional): Node position with `x` and `y` coordinates (defaults to 0,0)
+- **Returns**: Created node details including:
+  - Unique node ID for use with connect-pins tool
+  - Node type (K2Node_VariableSet)
+  - Pin information with IDs and types
+  - Variable type details
+  - Graph and Blueprint context
+- **Use Case**: Creating Set nodes in Blueprint logic to assign values to member variables during execution
+
 ## Type Identifier System
 
 ### Primitive Types
@@ -161,6 +175,39 @@ curl -X POST http://localhost:27000/mcp \
       "arguments": {}
     },
     "id": 1
+  }'
+```
+
+### Creating Set Nodes for Variables
+```bash
+# Create a Set node for a member variable with optional default value
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "create-set-member-variable-node",
+      "arguments": {
+        "variableName": "Health",
+        "defaultValue": "100.0",
+        "location": { "x": 400, "y": 200 }
+      }
+    },
+    "id": 1
+  }'
+
+# Create a Set node without default value (for later connection)
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "create-set-member-variable-node",
+      "arguments": {
+        "variableName": "TargetActor"
+      }
+    },
+    "id": 2
   }'
 ```
 
