@@ -161,6 +161,14 @@ public:
 	 * @param OutFilteredItems Output array of filtered JSON items
 	 */
 	static void FilterJsonItemsByName(const TArray<TSharedPtr<FJsonObject>>& Items, const FString& NameFilter, TArray<TSharedPtr<FJsonObject>>& OutFilteredItems);
+	
+	/**
+	 * Ensures a directory exists by creating it if necessary
+	 * @param Path The content browser path to ensure exists
+	 * @param OutErrorMsg Error message if creation fails
+	 * @return True if the directory exists or was created successfully
+	 */
+	static bool EnsureDirectoryExists(const FString& Path, FString& OutErrorMsg);
 
 private:
 	// Prevent instantiation

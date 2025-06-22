@@ -730,3 +730,21 @@ void FN2CMcpContentBrowserUtils::FilterJsonItemsByName(const TArray<TSharedPtr<F
 		}
 	}
 }
+
+bool FN2CMcpContentBrowserUtils::EnsureDirectoryExists(const FString& Path, FString& OutErrorMsg)
+{
+	// Validate the path first
+	if (!ValidateContentPath(Path, OutErrorMsg))
+	{
+		return false;
+	}
+	
+	// Check if the path already exists
+	if (DoesPathExist(Path))
+	{
+		return true;
+	}
+	
+	// Try to create the folder
+	return CreateContentFolder(Path, OutErrorMsg);
+}

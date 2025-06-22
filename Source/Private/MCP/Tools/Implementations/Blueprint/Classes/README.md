@@ -1,6 +1,6 @@
 # Blueprint Class Tools
 
-This directory contains MCP tools for discovering and managing Blueprint classes. These tools provide functionality for searching available parent classes and will support Blueprint class creation operations.
+This directory contains MCP tools for discovering and managing Blueprint classes. These tools provide functionality for searching available parent classes and creating new Blueprint classes.
 
 ## Available Tools
 
@@ -16,6 +16,20 @@ This directory contains MCP tools for discovering and managing Blueprint classes
   - `maxResults` (optional): Maximum number of results to return (1-200)
 - **Returns**: List of matching classes with metadata including path, hierarchy, and blueprint compatibility
 - **Use Case**: Finding appropriate parent classes before creating new Blueprints
+
+### create-blueprint-class
+- **Description**: Creates a new Blueprint class with the specified parent class and settings
+- **Parameters**:
+  - `blueprintName` (required): Name for the new Blueprint (BP_ prefix added automatically)
+  - `parentClassPath` (required): Path to the parent class (e.g., '/Script/Engine.Actor')
+  - `assetPath` (required): Content path where the Blueprint will be created
+  - `openInEditor` (optional): Open the Blueprint in the editor after creation (default: true)
+  - `openInFullEditor` (optional): Open in full Blueprint editor vs. simplified (default: true)
+  - `description` (optional): Description/tooltip for the Blueprint
+  - `generateConstructionScript` (optional): Generate default construction script for Actors (default: true)
+  - `blueprintType` (optional): Blueprint type (auto/normal/const/interface, default: auto)
+- **Returns**: Created Blueprint details including path, class info, and suggested next steps
+- **Use Case**: Creating new Blueprint classes programmatically
 
 ## Class Information Structure
 
@@ -46,6 +60,101 @@ The tool returns comprehensive metadata for each class:
 ```
 
 ## Common Usage Patterns
+
+### Complete Workflow: Search and Create
+
+```bash
+# Step 1: Search for a parent class
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "search-blueprint-classes",
+      "arguments": {
+        "searchTerm": "Character",
+        "classType": "actor",
+        "maxResults": 5
+      }
+    },
+    "id": 1
+  }'
+
+# Step 2: Create a Blueprint using the found class
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "create-blueprint-class",
+      "arguments": {
+        "blueprintName": "MyPlayerCharacter",
+        "parentClassPath": "/Script/Engine.Character",
+        "assetPath": "/Game/Blueprints/Characters",
+        "description": "Player character with custom movement abilities"
+      }
+    },
+    "id": 2
+  }'
+```
+
+### Creating Different Blueprint Types
+
+#### Actor Blueprint
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "create-blueprint-class",
+      "arguments": {
+        "blueprintName": "InteractableObject",
+        "parentClassPath": "/Script/Engine.Actor",
+        "assetPath": "/Game/Blueprints/Gameplay"
+      }
+    },
+    "id": 1
+  }'
+```
+
+#### Component Blueprint
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "create-blueprint-class",
+      "arguments": {
+        "blueprintName": "HealthComponent",
+        "parentClassPath": "/Script/Engine.ActorComponent",
+        "assetPath": "/Game/Blueprints/Components",
+        "generateConstructionScript": false
+      }
+    },
+    "id": 1
+  }'
+```
+
+#### Widget Blueprint
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "create-blueprint-class",
+      "arguments": {
+        "blueprintName": "MainMenuWidget",
+        "parentClassPath": "/Script/UMG.UserWidget",
+        "assetPath": "/Game/UI/Menus",
+        "openInFullEditor": true
+      }
+    },
+    "id": 1
+  }'
+```
 
 ### Finding Actor-Based Classes
 ```bash
@@ -151,9 +260,22 @@ The tool prioritizes commonly-used parent classes in search results:
 - Common classes are marked with `commonClass: true` for UI prioritization
 - Filters respect Unreal's class flags (Blueprintable, Deprecated, Abstract)
 
+## Integration with Other Tools
+
+The class tools work seamlessly with other Blueprint MCP tools:
+
+1. **Search → Create → Edit Workflow**:
+   - Use `search-blueprint-classes` to find a suitable parent
+   - Use `create-blueprint-class` to create the Blueprint
+   - Use `create-blueprint-function` to add functions
+   - Use `create-variable` to add member variables
+   - Use `add-bp-node-to-active-graph` to build logic
+
+2. **The create-blueprint-class tool returns helpful next steps** that guide users to related tools for further Blueprint development.
+
 ## Future Tools
 
 This directory will be expanded with:
-- **create-blueprint-class**: Create a new Blueprint with specified parent class
 - **reparent-blueprint**: Change the parent class of an existing Blueprint
 - **validate-class-hierarchy**: Check Blueprint class hierarchy for issues
+- **duplicate-blueprint-class**: Create a copy of an existing Blueprint with a new name
