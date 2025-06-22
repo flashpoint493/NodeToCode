@@ -1,6 +1,6 @@
 # Blueprint Compilation Tools
 
-This directory contains MCP tools for compiling Blueprint assets in Unreal Engine. These tools provide programmatic access to Blueprint compilation functionality, enabling automated validation and build processes.
+This directory contains MCP tools for compiling and saving Blueprint assets in Unreal Engine. These tools provide programmatic access to Blueprint compilation and persistence functionality, enabling automated validation, build processes, and asset management.
 
 ## Available Tools
 
@@ -11,6 +11,14 @@ This directory contains MCP tools for compiling Blueprint assets in Unreal Engin
   - `skipGarbageCollection` (optional): Skip garbage collection during compilation for performance (default: true)
 - **Returns**: Comprehensive compilation results including errors, warnings, status changes, and timing
 - **Use Case**: Automated Blueprint validation, CI/CD pipelines, batch compilation
+
+### save-blueprint
+- **Description**: Saves a Blueprint asset to disk, writing the package file
+- **Parameters**:
+  - `blueprintPath` (optional): Asset path of the Blueprint to save. If not provided, uses the currently focused Blueprint
+  - `saveOnlyIfDirty` (optional): Only save if the Blueprint has unsaved changes (default: true)
+- **Returns**: Save operation results including success status, package information, and timestamp
+- **Use Case**: Persisting Blueprint changes, automated save workflows, asset management
 
 ## Common Usage Patterns
 
@@ -67,9 +75,65 @@ curl -X POST http://localhost:27000/mcp \
   }'
 ```
 
+### Saving the Focused Blueprint
+```bash
+# Save the currently focused Blueprint
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "save-blueprint",
+      "arguments": {}
+    },
+    "id": 1
+  }'
+```
+
+### Saving a Specific Blueprint
+```bash
+# Save a Blueprint by path, only if it has unsaved changes
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "save-blueprint",
+      "arguments": {
+        "blueprintPath": "/Game/Blueprints/BP_PlayerCharacter",
+        "saveOnlyIfDirty": true
+      }
+    },
+    "id": 1
+  }'
+```
+
+### Force Save Blueprint
+```bash
+# Force save a Blueprint even if it has no changes
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "save-blueprint",
+      "arguments": {
+        "blueprintPath": "/Game/Blueprints/BP_GameMode",
+        "saveOnlyIfDirty": false
+      }
+    },
+    "id": 1
+  }'
+```
+
 ## Response Format
 
-The tool returns detailed compilation results:
+### Compile Blueprint Response
+
+The compile-blueprint tool returns detailed compilation results:
 
 ```json
 {
@@ -101,6 +165,41 @@ The tool returns detailed compilation results:
 }
 ```
 
+### Save Blueprint Response
+
+The save-blueprint tool returns save operation results:
+
+```json
+{
+  "success": true,
+  "message": "Blueprint saved successfully",
+  "blueprintName": "BP_PlayerCharacter",
+  "blueprintPath": "/Game/Blueprints/BP_PlayerCharacter",
+  "packageInfo": {
+    "packageName": "BP_PlayerCharacter",
+    "isDirty": false,
+    "fileName": "/Users/username/Project/Content/Blueprints/BP_PlayerCharacter.uasset"
+  },
+  "timestamp": "2025-01-22 10:30:45.123"
+}
+```
+
+For already saved Blueprints (when `saveOnlyIfDirty` is true):
+```json
+{
+  "success": true,
+  "message": "Blueprint is already saved (not dirty)",
+  "blueprintName": "BP_PlayerCharacter",
+  "blueprintPath": "/Game/Blueprints/BP_PlayerCharacter",
+  "packageInfo": {
+    "packageName": "BP_PlayerCharacter",
+    "isDirty": false,
+    "fileName": "/Users/username/Project/Content/Blueprints/BP_PlayerCharacter.uasset"
+  },
+  "timestamp": "2025-01-22 10:30:45.123"
+}
+```
+
 ### Status Values
 - `Unknown`: Blueprint status is unknown
 - `Dirty`: Blueprint has unsaved changes that need compilation
@@ -111,36 +210,60 @@ The tool returns detailed compilation results:
 
 ## Error Handling
 
-The tool provides specific error codes for different failure scenarios:
+### Compile Blueprint Errors
+
+The compile-blueprint tool provides specific error codes:
 
 - `ASSET_NOT_FOUND`: The specified Blueprint path is invalid
 - `NO_ACTIVE_BLUEPRINT`: No Blueprint path provided and no Blueprint is focused
 - `COMPILATION_FAILED`: A critical error occurred during compilation
 - `INTERNAL_ERROR`: An unexpected exception occurred
 
+### Save Blueprint Errors
+
+The save-blueprint tool provides specific error codes:
+
+- `ASSET_NOT_FOUND`: The specified Blueprint path is invalid
+- `NO_ACTIVE_BLUEPRINT`: No Blueprint path provided and no Blueprint is focused
+- `SAVE_FAILED`: The save operation failed (e.g., file system error, permissions)
+- `INTERNAL_ERROR`: Blueprint has no package or other unexpected error
+
 ## Implementation Notes
 
+### Compile Blueprint
 - Uses `FKismetEditorUtilities::CompileBlueprint()` - the same API as the editor
 - Captures all messages from `FCompilerResultsLog` for detailed diagnostics
 - Automatically refreshes the Blueprint action database after compilation
 - Executes on the Game Thread as required for Blueprint operations
 - Supports performance optimization through garbage collection control
 
+### Save Blueprint
+- Uses `FEditorFileUtils::SavePackages()` - the standard editor save API
+- Checks package dirty state to avoid unnecessary saves (configurable)
+- Returns detailed package information including file system path
+- Executes on the Game Thread as required for asset operations
+- Shows editor notifications for user feedback
+
 ## Integration with CI/CD
 
-This tool is ideal for continuous integration workflows:
+These tools are ideal for continuous integration workflows:
 
-1. **Pre-commit Validation**: Compile Blueprints before committing changes
+1. **Pre-commit Validation**: Compile and save Blueprints before committing changes
 2. **Automated Testing**: Verify Blueprint compilation as part of test suites
-3. **Batch Processing**: Compile multiple Blueprints programmatically
+3. **Batch Processing**: Compile and save multiple Blueprints programmatically
 4. **Error Reporting**: Parse JSON results for automated error tracking
+5. **Asset Management**: Ensure all Blueprint changes are persisted to disk
+6. **Build Automation**: Save assets after automated modifications
 
 ## Future Enhancements
 
-Planned improvements for the compilation tools:
+Planned improvements for the compilation and save tools:
 
-- Batch compilation support for multiple Blueprints
+- Batch compilation and save support for multiple Blueprints
 - Dependency compilation (compile all dependent Blueprints)
 - Integration with Blueprint validation tools
-- Progress reporting for long-running compilations
+- Progress reporting for long-running operations
 - Compilation performance metrics and optimization suggestions
+- Save with custom backup options
+- Integration with source control for auto-commit after save
+- Dirty asset detection across the entire project
