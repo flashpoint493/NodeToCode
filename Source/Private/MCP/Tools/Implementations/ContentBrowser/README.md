@@ -62,6 +62,15 @@ This directory contains MCP tools for interacting with Unreal Engine's Content B
 - **Returns**: Creation result with folder path and navigation status
 - **Use Case**: Organizing content, creating project structure, preparing locations for assets
 
+### move-folder
+- **Description**: Move a folder and all its contents to a new location in the content browser
+- **Parameters**:
+  - `sourcePath` (required): Source folder path to move (e.g., '/Game/OldFolder')
+  - `destinationPath` (required): Destination parent path where the folder will be moved (e.g., '/Game/NewLocation')
+  - `showNotification` (optional, default: true): Show a notification after the move operation
+- **Returns**: Move operation result with source/destination paths and number of assets moved
+- **Use Case**: Reorganizing content structure, moving folders between projects/plugins, consolidating assets
+
 ## Content Browser Paths
 
 ### Valid Path Roots
@@ -368,6 +377,55 @@ curl -X POST http://localhost:27000/mcp \
       "arguments": {
         "folderPath": "/Game/Blueprints/UI/HUD",
         "createParents": true
+      }
+    },
+    "id": 3
+  }'
+```
+
+### Moving Folders
+```bash
+# Move a folder to a new location
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "move-folder",
+      "arguments": {
+        "sourcePath": "/Game/OldAssets",
+        "destinationPath": "/Game/Archive"
+      }
+    },
+    "id": 1
+  }'
+
+# Move without showing notification
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "move-folder",
+      "arguments": {
+        "sourcePath": "/Game/Temp/TestAssets",
+        "destinationPath": "/Game/Production",
+        "showNotification": false
+      }
+    },
+    "id": 2
+  }'
+
+# Reorganize Blueprint folders
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "move-folder",
+      "arguments": {
+        "sourcePath": "/Game/Blueprints/Misc",
+        "destinationPath": "/Game/Blueprints/Characters"
       }
     },
     "id": 3
