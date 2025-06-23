@@ -69,6 +69,19 @@ This directory contains MCP tools for creating variables and searching variable 
   - Graph and Blueprint context
 - **Use Case**: Creating Set nodes in Blueprint logic to assign values to member variables during execution
 
+### create-get-member-variable-node
+- **Description**: Creates a Get node for a member variable in the focused Blueprint graph
+- **Parameters**:
+  - `variableName` (required): Name of the member variable to create a Get node for
+  - `location` (optional): Node position with `x` and `y` coordinates (defaults to 0,0)
+- **Returns**: Created node details including:
+  - Unique node ID for use with connect-pins tool
+  - Node type (K2Node_VariableGet)
+  - Pin information with IDs and types (output pin only)
+  - Variable type details
+  - Graph and Blueprint context
+- **Use Case**: Creating Get nodes in Blueprint logic to read values from member variables
+
 ### set-member-variable-default-value
 - **Description**: Sets the default value of a member variable in the Blueprint (like editing in Details panel)
 - **Parameters**:
@@ -229,8 +242,23 @@ curl -X POST http://localhost:27000/mcp \
   }'
 ```
 
-### Creating Set Nodes for Variables
+### Creating Get and Set Nodes for Variables
 ```bash
+# Create a Get node for a member variable
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "create-get-member-variable-node",
+      "arguments": {
+        "variableName": "Health",
+        "location": { "x": 200, "y": 200 }
+      }
+    },
+    "id": 1
+  }'
+
 # Create a Set node for a member variable with optional default value
 curl -X POST http://localhost:27000/mcp \
   -d '{
@@ -244,7 +272,7 @@ curl -X POST http://localhost:27000/mcp \
         "location": { "x": 400, "y": 200 }
       }
     },
-    "id": 1
+    "id": 2
   }'
 
 # Create a Set node without default value (for later connection)
@@ -258,7 +286,7 @@ curl -X POST http://localhost:27000/mcp \
         "variableName": "TargetActor"
       }
     },
-    "id": 2
+    "id": 3
   }'
 ```
 
