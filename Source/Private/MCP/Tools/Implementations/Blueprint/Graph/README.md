@@ -41,6 +41,15 @@ This directory contains MCP tools for manipulating nodes and connections within 
 - **Returns**: Pin information and old/new values
 - **Use Case**: Setting default values on node inputs
 
+### delete-blueprint-node
+- **Description**: Deletes one or more Blueprint nodes from the focused graph
+- **Parameters**:
+  - `nodeGuids` (required): Array of node GUIDs to delete
+  - `preserveConnections` (optional): Attempt to bridge connections
+  - `force` (optional): Skip validation and force deletion
+- **Returns**: Deleted nodes info and preserved connections
+- **Use Case**: Removing nodes while optionally maintaining flow
+
 ## Node Search and Add Workflow
 
 The search and add tools work together in a two-step process:
@@ -207,6 +216,86 @@ curl -X POST http://localhost:27000/mcp \
 - Execution pins cannot have default values
 - Container pins (arrays, sets, maps) cannot have inline defaults
 - Reference pins (by-ref parameters) typically cannot have defaults
+
+## Node Deletion
+
+### Delete Single Node Example
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "delete-blueprint-node",
+      "arguments": {
+        "nodeGuids": ["AAE5F1A04B2E8F9E003C6B8F12345678"]
+      }
+    },
+    "id": 1
+  }'
+```
+
+### Delete Multiple Nodes Example
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "delete-blueprint-node",
+      "arguments": {
+        "nodeGuids": [
+          "AAE5F1A04B2E8F9E003C6B8F12345678",
+          "BBE5F1A04B2E8F9E003C6B8F12345679",
+          "CCE5F1A04B2E8F9E003C6B8F12345680"
+        ]
+      }
+    },
+    "id": 1
+  }'
+```
+
+### Delete with Connection Preservation
+When deleting nodes in the middle of a flow, preserve connections:
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "delete-blueprint-node",
+      "arguments": {
+        "nodeGuids": ["AAE5F1A04B2E8F9E003C6B8F12345678"],
+        "preserveConnections": true
+      }
+    },
+    "id": 1
+  }'
+```
+
+### Force Delete Protected Nodes
+Override protection for system nodes (use with caution):
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "delete-blueprint-node",
+      "arguments": {
+        "nodeGuids": ["AAE5F1A04B2E8F9E003C6B8F12345678"],
+        "force": true
+      }
+    },
+    "id": 1
+  }'
+```
+
+### Node Deletion Rules
+- **Protected Nodes**: Function entry/result nodes cannot be deleted without force
+- **Connection Preservation**: Only works for compatible pin types
+- **Batch Operations**: All deletions occur in a single transaction
+- **Undo Support**: Full undo/redo support via Unreal's transaction system
 
 ## Common Patterns
 
