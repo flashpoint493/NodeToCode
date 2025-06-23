@@ -423,42 +423,36 @@ bool FN2CMcpSetInputPinValueTool::ValidateAndFormatValue(const UEdGraphPin* Pin,
             {
                 FString StructName = Pin->PinType.PinSubCategoryObject->GetName();
                 
-                // Check for common struct types that require special formats
-                if (StructName == TEXT("Vector") || StructName == TEXT("Vector3f"))
+                // Check for common struct types that require a particular format
+                if (StructName == TEXT("Vector") || StructName == TEXT("Vector3f") || StructName == TEXT("Rotator"))
                 {
-                    if (!Value.Contains(TEXT("=")))
+                    // Remove any spaces from the value
+                    FString CleanValue = Value;
+                    CleanValue.ReplaceInline(TEXT(" "), TEXT(""));
+                    OutFormattedValue = CleanValue;
+                    
+                    // Only error if parentheses or equal symbols are present
+                    if (CleanValue.Contains(TEXT("(")) || CleanValue.Contains(TEXT(")")) || CleanValue.Contains(TEXT("=")))
                     {
-                        OutErrorMessage = TEXT("Invalid vector format. Use '(X=0.0,Y=0.0,Z=0.0)' format");
+                        OutErrorMessage = TEXT("Invalid format. Use '0.0,0.0,0.0' format (comma-separated values only)");
                         return false;
                     }
                 }
-                else if (StructName == TEXT("Rotator"))
+                else if (StructName == TEXT("Vector2D"))
                 {
-                    if (!Value.Contains(TEXT("=")))
+                    // Remove any spaces from the value
+                    FString CleanValue = Value;
+                    CleanValue.ReplaceInline(TEXT(" "), TEXT(""));
+                    OutFormattedValue = CleanValue;
+                    
+                    // Only error if parentheses or equal symbols are present
+                    if (CleanValue.Contains(TEXT("(")) || CleanValue.Contains(TEXT(")")) || CleanValue.Contains(TEXT("=")))
                     {
-                        OutErrorMessage = TEXT("Invalid rotator format. Use '(Pitch=0.0,Yaw=0.0,Roll=0.0)' format");
+                        OutErrorMessage = TEXT("Invalid format. Use '0.0,0.0' format (comma-separated values only)");
                         return false;
                     }
                 }
-                else if (StructName == TEXT("Transform"))
-                {
-
-                    if (!Value.Contains(TEXT("=")))
-                    {
-                        OutErrorMessage = TEXT("Invalid transform format. Use '(Rotation=(X=0.000000,Y=0.000000,Z=0.000000,W=1.000000),Translation=(X=0.000000,Y=0.000000,Z=0.000000),Scale3D=(X=1.000000,Y=1.000000,Z=1.000000))' format");
-                        return false;
-                    }
-                }
-                else if (StructName == TEXT("LinearColor") || StructName == TEXT("Color"))
-                {
-                    // Color format: R=1,G=1,B=1,A=1
-                    if (!Value.Contains(TEXT("=")))
-                    {
-                        OutErrorMessage = TEXT("Invalid color format. Use '(R=0.0,G=0.0,B=0.0,A=0.0)' format");
-                        return false;
-                    }
-                }
-            }
+            }   
         }
     }
     else if (Category == UEdGraphSchema_K2::PC_Enum || Category == UEdGraphSchema_K2::PC_Byte)
