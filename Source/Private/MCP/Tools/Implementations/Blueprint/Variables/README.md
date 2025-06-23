@@ -121,6 +121,20 @@ This directory contains MCP tools for creating variables and searching variable 
   - Function graph context
 - **Use Case**: Creating Set nodes in function logic to assign values to local variables during execution
 
+### create-get-local-function-variable-node
+- **Description**: Creates a Get node for a local function variable in the focused function graph
+- **Parameters**:
+  - `variableName` (required): Name of the local variable to create a Get node for
+  - `x` (optional): X coordinate for node position (default: 0)
+  - `y` (optional): Y coordinate for node position (default: 0)
+- **Returns**: Created node details including:
+  - Unique node ID for use with connect-pins tool
+  - Node type (K2Node_VariableGet)
+  - Pin information with IDs and types (output pin only)
+  - Variable type details
+  - Function graph context
+- **Use Case**: Creating Get nodes in function logic to read values from local variables
+
 ### set-local-function-variable-default-value
 - **Description**: Sets the default value of a local function variable (like editing in Details panel)
 - **Parameters**:
@@ -337,6 +351,22 @@ curl -X POST http://localhost:27000/mcp \
     "id": 1
   }'
 
+# Create a Get node for a local variable
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "create-get-local-function-variable-node",
+      "arguments": {
+        "variableName": "TempCounter",
+        "x": 200,
+        "y": 150
+      }
+    },
+    "id": 2
+  }'
+
 # Create a Set node for a local variable
 curl -X POST http://localhost:27000/mcp \
   -d '{
@@ -351,7 +381,7 @@ curl -X POST http://localhost:27000/mcp \
         "inputPinValue": "0"
       }
     },
-    "id": 2
+    "id": 3
   }'
 
 # Set default value of a local variable
@@ -366,7 +396,7 @@ curl -X POST http://localhost:27000/mcp \
         "defaultValue": "false"
       }
     },
-    "id": 3
+    "id": 4
   }'
 ```
 
