@@ -31,6 +31,16 @@ This directory contains MCP tools for manipulating nodes and connections within 
 - **Returns**: Succeeded/failed connections with details
 - **Use Case**: Wiring up Blueprint node networks
 
+### set-input-pin-value
+- **Description**: Sets the default value of an input pin on a Blueprint node
+- **Parameters**:
+  - `nodeGuid` (required): GUID of the node containing the pin
+  - `pinGuid` (required): GUID of the pin to set
+  - `pinName` (optional): Pin name for fallback lookup
+  - `value` (required): The value to set (as string)
+- **Returns**: Pin information and old/new values
+- **Use Case**: Setting default values on node inputs
+
 ## Node Search and Add Workflow
 
 The search and add tools work together in a two-step process:
@@ -117,6 +127,86 @@ curl -X POST http://localhost:27000/mcp \
     "id": 1
   }'
 ```
+
+## Setting Pin Values
+
+### Set String Value Example
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "set-input-pin-value",
+      "arguments": {
+        "nodeGuid": "AAE5F1A04B2E8F9E003C6B8F12345678",
+        "pinGuid": "BBE5F1A04B2E8F9E003C6B8F12345678",
+        "value": "Hello, World!"
+      }
+    },
+    "id": 1
+  }'
+```
+
+### Set Numeric Value Example
+```bash
+# Integer value
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "set-input-pin-value",
+      "arguments": {
+        "nodeGuid": "AAE5F1A04B2E8F9E003C6B8F12345678",
+        "pinGuid": "CCE5F1A04B2E8F9E003C6B8F12345678",
+        "value": "42"
+      }
+    },
+    "id": 2
+  }'
+
+# Float value
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "set-input-pin-value",
+      "arguments": {
+        "nodeGuid": "AAE5F1A04B2E8F9E003C6B8F12345678",
+        "pinGuid": "DDE5F1A04B2E8F9E003C6B8F12345678",
+        "value": "3.14159"
+      }
+    },
+    "id": 3
+  }'
+```
+
+### Set Boolean Value Example
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "set-input-pin-value",
+      "arguments": {
+        "nodeGuid": "AAE5F1A04B2E8F9E003C6B8F12345678",
+        "pinGuid": "EEE5F1A04B2E8F9E003C6B8F12345678",
+        "value": "true"
+      }
+    },
+    "id": 4
+  }'
+```
+
+### Pin Value Rules
+- Only input pins can have default values set
+- Connected pins ignore default values (disconnect first)
+- Execution pins cannot have default values
+- Container pins (arrays, sets, maps) cannot have inline defaults
+- Reference pins (by-ref parameters) typically cannot have defaults
 
 ## Common Patterns
 
