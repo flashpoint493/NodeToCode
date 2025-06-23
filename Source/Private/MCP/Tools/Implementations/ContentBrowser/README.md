@@ -71,6 +71,26 @@ This directory contains MCP tools for interacting with Unreal Engine's Content B
 - **Returns**: Move operation result with source/destination paths and number of assets moved
 - **Use Case**: Reorganizing content structure, moving folders between projects/plugins, consolidating assets
 
+### rename-asset
+- **Description**: Rename an asset or move it to a new location
+- **Parameters**:
+  - `sourcePath` (required): Source asset path (supports both package and object path formats)
+  - `newName` (optional): New name for the asset (keeps in same folder)
+  - `destinationPath` (optional): Full destination path to move and rename
+  - `showNotification` (optional, default: true): Show a notification after the rename operation
+- **Returns**: Rename operation result with old/new paths and navigation status
+- **Use Case**: Renaming assets, moving assets to different folders, fixing naming conventions
+- **Note**: Provide either `newName` OR `destinationPath`, not both
+
+### rename-folder
+- **Description**: Rename a folder in the content browser
+- **Parameters**:
+  - `sourcePath` (required): Source folder path to rename (e.g., '/Game/OldFolderName')
+  - `newName` (required): New name for the folder
+  - `showNotification` (optional, default: true): Show a notification after the rename operation
+- **Returns**: Rename operation result with old/new paths and number of assets renamed
+- **Use Case**: Fixing folder naming, reorganizing project structure, standardizing naming conventions
+
 ## Content Browser Paths
 
 ### Valid Path Roots
@@ -432,6 +452,104 @@ curl -X POST http://localhost:27000/mcp \
   }'
 ```
 
+### Renaming Assets
+```bash
+# Simple rename (keep in same folder)
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "rename-asset",
+      "arguments": {
+        "sourcePath": "/Game/Blueprints/BP_OldName",
+        "newName": "BP_NewName"
+      }
+    },
+    "id": 1
+  }'
+
+# Move and rename asset
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "rename-asset",
+      "arguments": {
+        "sourcePath": "/Game/Materials/M_Test.M_Test",
+        "destinationPath": "/Game/Materials/Production/M_Ground"
+      }
+    },
+    "id": 2
+  }'
+
+# Rename without notification
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "rename-asset",
+      "arguments": {
+        "sourcePath": "/Game/Textures/T_Temp",
+        "newName": "T_Concrete_D",
+        "showNotification": false
+      }
+    },
+    "id": 3
+  }'
+```
+
+### Renaming Folders
+```bash
+# Rename a folder
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "rename-folder",
+      "arguments": {
+        "sourcePath": "/Game/OldFolderName",
+        "newName": "NewFolderName"
+      }
+    },
+    "id": 1
+  }'
+
+# Rename Blueprint subfolder
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "rename-folder",
+      "arguments": {
+        "sourcePath": "/Game/Blueprints/Test",
+        "newName": "Characters"
+      }
+    },
+    "id": 2
+  }'
+
+# Rename without notification
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "rename-folder",
+      "arguments": {
+        "sourcePath": "/Game/Materials/TempMaterials",
+        "newName": "EnvironmentMaterials",
+        "showNotification": false
+      }
+    },
+    "id": 3
+  }'
+```
+
 ## Asset Path Formats
 
 ### Package Path Format
@@ -454,4 +572,7 @@ curl -X POST http://localhost:27000/mcp \
 - Asset paths must include the asset name twice (UE convention) for object paths
 - All operations require Game Thread execution
 - Copy operations use `UEditorAssetSubsystem::DuplicateAsset`
+- Rename operations use `UEditorAssetSubsystem::RenameAsset`
+- Folder rename is implemented by moving all assets to a new folder path
 - Destination folders are created automatically if they don't exist
+- All asset references are automatically updated when renaming/moving
