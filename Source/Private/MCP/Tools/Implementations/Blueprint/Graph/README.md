@@ -50,6 +50,18 @@ This directory contains MCP tools for manipulating nodes and connections within 
 - **Returns**: Deleted nodes info and preserved connections
 - **Use Case**: Removing nodes while optionally maintaining flow
 
+### create-comment-node
+- **Description**: Creates a comment node around specified Blueprint nodes using their GUIDs
+- **Parameters**:
+  - `nodeGuids` (required): Array of node GUIDs to include in the comment
+  - `commentText` (optional): Text for the comment (default: "Comment")
+  - `color` (optional): RGB color object with r, g, b values 0-1 (default: white)
+  - `fontSize` (optional): Font size 1-1000 (default: 18)
+  - `moveMode` (optional): "group" or "none" (default: "group")
+  - `padding` (optional): Extra padding around nodes (default: 50)
+- **Returns**: Comment node info, included nodes, and any missing GUIDs
+- **Use Case**: Organizing and documenting Blueprint logic with visual grouping
+
 ## Node Search and Add Workflow
 
 The search and add tools work together in a two-step process:
@@ -296,6 +308,68 @@ curl -X POST http://localhost:27000/mcp \
 - **Connection Preservation**: Only works for compatible pin types
 - **Batch Operations**: All deletions occur in a single transaction
 - **Undo Support**: Full undo/redo support via Unreal's transaction system
+
+## Comment Node Creation
+
+### Create Comment with Default Settings
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "create-comment-node",
+      "arguments": {
+        "nodeGuids": [
+          "AAE5F1A04B2E8F9E003C6B8F12345678",
+          "BBE5F1A04B2E8F9E003C6B8F12345679"
+        ]
+      }
+    },
+    "id": 1
+  }'
+```
+
+### Create Colored Comment with Custom Text
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "create-comment-node",
+      "arguments": {
+        "nodeGuids": [
+          "AAE5F1A04B2E8F9E003C6B8F12345678",
+          "BBE5F1A04B2E8F9E003C6B8F12345679",
+          "CCE5F1A04B2E8F9E003C6B8F12345680"
+        ],
+        "commentText": "Player Input Handling",
+        "color": {
+          "r": 0.2,
+          "g": 0.8,
+          "b": 0.2
+        },
+        "fontSize": 24,
+        "moveMode": "group"
+      }
+    },
+    "id": 1
+  }'
+```
+
+### Comment Node Workflow
+1. Call `get-focused-blueprint` to get node GUIDs and understand graph structure
+2. Identify nodes to group by their GUIDs
+3. Create comment node with desired settings
+4. Comment automatically sizes and positions around selected nodes
+
+### Comment Node Features
+- **Group Movement**: When `moveMode` is "group", moving the comment moves all contained nodes
+- **No Group Movement**: When `moveMode` is "none", comment acts as visual annotation only
+- **Auto-sizing**: Comment automatically calculates bounds to encompass all specified nodes
+- **Color Coding**: Use colors to categorize different logic sections
+- **Nested Comments**: Comments support depth layering for organization
 
 ## Common Patterns
 
