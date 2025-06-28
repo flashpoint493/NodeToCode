@@ -62,6 +62,16 @@ This directory contains MCP tools for manipulating nodes and connections within 
 - **Returns**: Comment node info, included nodes, and any missing GUIDs
 - **Use Case**: Organizing and documenting Blueprint logic with visual grouping
 
+### find-nodes-in-graph
+- **Description**: Searches for specific nodes in the focused Blueprint graph by keywords or node GUIDs
+- **Parameters**:
+  - `searchTerms` (required): Array of keywords or GUIDs to search for
+  - `searchType` (optional): "keyword" or "guid" (default: "keyword")
+  - `caseSensitive` (optional): Whether keyword search is case-sensitive (default: false)
+  - `maxResults` (optional): Maximum nodes to return 1-200 (default: 50)
+- **Returns**: Matching nodes in N2C JSON format with full GUID information
+- **Use Case**: Quickly locate specific nodes in large graphs without fetching entire blueprint
+
 ## Node Search and Add Workflow
 
 The search and add tools work together in a two-step process:
@@ -370,6 +380,50 @@ curl -X POST http://localhost:27000/mcp \
 - **Auto-sizing**: Comment automatically calculates bounds to encompass all specified nodes
 - **Color Coding**: Use colors to categorize different logic sections
 - **Nested Comments**: Comments support depth layering for organization
+
+## Finding Nodes in Graph
+
+### Search by Keywords
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "find-nodes-in-graph",
+      "arguments": {
+        "searchTerms": ["print", "debug"],
+        "searchType": "keyword",
+        "caseSensitive": false,
+        "maxResults": 10
+      }
+    },
+    "id": 1
+  }'
+```
+
+### Search by Node GUIDs
+```bash
+curl -X POST http://localhost:27000/mcp \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "find-nodes-in-graph",
+      "arguments": {
+        "searchTerms": ["AAE5F1A0-4B2E-8F9E-003C-6B8F12345678"],
+        "searchType": "guid"
+      }
+    },
+    "id": 1
+  }'
+```
+
+### Find Nodes Workflow
+1. Use `find-nodes-in-graph` to search for specific nodes
+2. Get detailed node information including GUIDs and pin IDs
+3. Use node/pin GUIDs with other tools like `connect-pins` or `set-input-pin-value`
+4. More efficient than calling `get-focused-blueprint` for large graphs
 
 ## Common Patterns
 
