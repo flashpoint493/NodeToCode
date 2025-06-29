@@ -25,6 +25,10 @@ FMcpToolDefinition FN2CMcpOpenBlueprintAssetTool::GetDefinition() const
 	FMcpToolDefinition Definition(
 		TEXT("open-blueprint-asset"),
 		TEXT("Opens a specified blueprint asset in the Blueprint Editor, allowing agents to programmatically open blueprints for viewing or editing")
+	,
+
+		TEXT("Content Browser")
+
 	);
 	
 	// Define input schema

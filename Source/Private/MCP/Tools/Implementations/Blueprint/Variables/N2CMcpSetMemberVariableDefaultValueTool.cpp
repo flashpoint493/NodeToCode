@@ -24,6 +24,10 @@ FMcpToolDefinition FN2CMcpSetMemberVariableDefaultValueTool::GetDefinition() con
     FMcpToolDefinition Definition(
         TEXT("set-member-variable-default-value"),
         TEXT("Sets the default value of a member variable in the focused Blueprint. This modifies the variable's default value property (as shown in the Details panel), not creating any nodes in the graph.")
+    ,
+
+    	TEXT("Blueprint Variable Management")
+
     );
     
     // Build input schema

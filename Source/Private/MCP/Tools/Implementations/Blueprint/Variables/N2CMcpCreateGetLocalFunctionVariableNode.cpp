@@ -24,6 +24,10 @@ FMcpToolDefinition FN2CMcpCreateGetLocalFunctionVariableNode::GetDefinition() co
     FMcpToolDefinition Definition(
         TEXT("create-get-local-function-variable-node"),
         TEXT("Create a Get node for a local function variable in the currently focused Blueprint function graph")
+    ,
+
+    	TEXT("Blueprint Variable Management")
+
     );
     
     // Define input schema

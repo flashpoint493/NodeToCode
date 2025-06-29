@@ -393,9 +393,9 @@ bool FN2CMcpHttpServerManager::HandleHealthRequest(const FHttpServerRequest& Req
 void FN2CMcpHttpServerManager::RegisterMcpTools()
 {
 	FN2CLogger::Get().Log(TEXT("Registering NodeToCode MCP tools"), EN2CLogSeverity::Info);
-	
-	// Register all tools via the registry
-	FN2CMcpToolRegistry::Get().RegisterAllToolsWithManager();
+
+	// Set the default toolset (only assess-needed-tools)
+	FN2CMcpToolManager::Get().SetDefaultToolSet();
 	
 	FN2CLogger::Get().Log(TEXT("MCP tools registered successfully"), EN2CLogSeverity::Info);
 }

@@ -19,7 +19,8 @@ FMcpToolDefinition FN2CMcpRenameAssetTool::GetDefinition() const
 {
     FMcpToolDefinition Definition(
         TEXT("rename-asset"),
-        TEXT("Rename an asset or move it to a new location")
+        TEXT("Rename an asset or move it to a new location"),
+        TEXT("Content Browser")
     );
 
     // Build input schema

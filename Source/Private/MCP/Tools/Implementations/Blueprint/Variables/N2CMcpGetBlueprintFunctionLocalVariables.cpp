@@ -20,6 +20,10 @@ FMcpToolDefinition FN2CMcpGetBlueprintFunctionLocalVariables::GetDefinition() co
     FMcpToolDefinition Definition(
         TEXT("get-blueprint-function-local-variables"),
         TEXT("Extract local variables from the currently focused Blueprint function graph")
+    ,
+
+    	TEXT("Blueprint Variable Management")
+
     );
     
     // Define input schema

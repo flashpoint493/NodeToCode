@@ -1,6 +1,9 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
 #include "MCP/Tools/N2CMcpToolManager.h"
+#include "MCP/Tools/N2CMcpToolRegistry.h"
+#include "MCP/Server/N2CMcpHttpServerManager.h"
+#include "MCP/Server/N2CMcpJsonRpcTypes.h"
 #include "Utils/N2CLogger.h"
 
 FN2CMcpToolManager& FN2CMcpToolManager::Get()
@@ -9,33 +12,32 @@ FN2CMcpToolManager& FN2CMcpToolManager::Get()
 	return Instance;
 }
 
-bool FN2CMcpToolManager::RegisterTool(const FMcpToolDefinition& Definition, const FMcpToolHandlerDelegate& Handler)
+bool FN2CMcpToolManager::RegisterTool(TSharedPtr<IN2CMcpTool> Tool)
 {
-	if (Definition.Name.IsEmpty())
+	if (!Tool.IsValid())
+	{
+		FN2CLogger::Get().LogWarning(TEXT("Cannot register null tool"));
+		return false;
+	}
+
+	const FString& ToolName = Tool->GetDefinition().Name;
+	if (ToolName.IsEmpty())
 	{
 		FN2CLogger::Get().LogWarning(TEXT("Cannot register tool with empty name"));
 		return false;
 	}
 
-	if (!Handler.IsBound())
-	{
-		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Cannot register tool '%s' with unbound handler"), *Definition.Name));
-		return false;
-	}
-
 	FScopeLock Lock(&ToolsLock);
 
-	if (RegisteredTools.Contains(Definition.Name))
+	if (RegisteredTools.Contains(ToolName))
 	{
-		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Tool '%s' is already registered"), *Definition.Name));
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Tool '%s' is already registered"), *ToolName));
 		return false;
 	}
 
-	FToolEntry& Entry = RegisteredTools.Add(Definition.Name);
-	Entry.Definition = Definition;
-	Entry.Handler = Handler;
+	RegisteredTools.Add(ToolName, Tool);
 
-	FN2CLogger::Get().Log(FString::Printf(TEXT("Registered MCP tool: %s"), *Definition.Name), EN2CLogSeverity::Info);
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Registered active MCP tool: %s"), *ToolName), EN2CLogSeverity::Debug);
 	return true;
 }
 
@@ -54,13 +56,8 @@ bool FN2CMcpToolManager::UnregisterTool(const FString& ToolName)
 
 const FMcpToolDefinition* FN2CMcpToolManager::GetToolDefinition(const FString& ToolName) const
 {
-	FScopeLock Lock(&ToolsLock);
-
-	if (const FToolEntry* Entry = RegisteredTools.Find(ToolName))
-	{
-		return &Entry->Definition;
-	}
-
+	// This method can't return a pointer to a temporary, so we need to find a different approach
+	// For now, return nullptr - callers should use GetAllToolDefinitions instead
 	return nullptr;
 }
 
@@ -73,7 +70,7 @@ TArray<FMcpToolDefinition> FN2CMcpToolManager::GetAllToolDefinitions() const
 
 	for (const auto& Pair : RegisteredTools)
 	{
-		Definitions.Add(Pair.Value.Definition);
+		Definitions.Add(Pair.Value->GetDefinition());
 	}
 
 	return Definitions;
@@ -83,17 +80,11 @@ FMcpToolCallResult FN2CMcpToolManager::ExecuteTool(const FString& ToolName, cons
 {
 	FScopeLock Lock(&ToolsLock);
 
-	const FToolEntry* Entry = RegisteredTools.Find(ToolName);
-	if (!Entry)
+	const TSharedPtr<IN2CMcpTool>* ToolPtr = RegisteredTools.Find(ToolName);
+	if (!ToolPtr || !ToolPtr->IsValid())
 	{
 		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Tool '%s' not found"), *ToolName));
 		return FMcpToolCallResult::CreateErrorResult(FString::Printf(TEXT("Tool '%s' not found"), *ToolName));
-	}
-
-	if (!Entry->Handler.IsBound())
-	{
-		FN2CLogger::Get().LogError(FString::Printf(TEXT("Tool '%s' has unbound handler"), *ToolName));
-		return FMcpToolCallResult::CreateErrorResult(FString::Printf(TEXT("Tool '%s' has invalid handler"), *ToolName));
 	}
 
 	// Execute the tool handler
@@ -101,7 +92,7 @@ FMcpToolCallResult FN2CMcpToolManager::ExecuteTool(const FString& ToolName, cons
 	
 	try
 	{
-		return Entry->Handler.Execute(Arguments);
+		return (*ToolPtr)->Execute(Arguments);
 	}
 	catch (...)
 	{
@@ -114,6 +105,52 @@ bool FN2CMcpToolManager::IsToolRegistered(const FString& ToolName) const
 {
 	FScopeLock Lock(&ToolsLock);
 	return RegisteredTools.Contains(ToolName);
+}
+
+void FN2CMcpToolManager::UpdateActiveTools(const TArray<FString>& Categories)
+{
+	FScopeLock Lock(&ToolsLock);
+
+	RegisteredTools.Empty();
+	const auto& AllTools = FN2CMcpToolRegistry::Get().GetTools();
+
+	for (const auto& Tool : AllTools)
+	{
+		if (!Tool.IsValid()) continue;
+
+		const auto& Def = Tool->GetDefinition();
+		// Always register assess-needed-tools, or any tool whose category is in the requested list.
+		if (Def.Name == TEXT("assess-needed-tools") || Categories.Contains(Def.Category))
+		{
+			RegisterTool(Tool);
+		}
+	}
+
+	// Send notification that the tool list has changed
+	FJsonRpcNotification Notification;
+	Notification.Method = TEXT("notifications/tools/list_changed");
+	Notification.Params = MakeShared<FJsonValueObject>(MakeShared<FJsonObject>()); // Empty params
+	FN2CMcpHttpServerManager::Get().BroadcastNotification(Notification);
+
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Updated active toolset. Now have %d tools."), RegisteredTools.Num()), EN2CLogSeverity::Info);
+}
+
+void FN2CMcpToolManager::SetDefaultToolSet()
+{
+	FScopeLock Lock(&ToolsLock);
+
+	RegisteredTools.Empty();
+	const auto& AllTools = FN2CMcpToolRegistry::Get().GetTools();
+
+	for (const auto& Tool : AllTools)
+	{
+		if (Tool.IsValid() && Tool->GetDefinition().Name == TEXT("assess-needed-tools"))
+		{
+			RegisterTool(Tool);
+			break; // Found it, we're done
+		}
+	}
+	FN2CLogger::Get().Log(TEXT("Tool manager set to default toolset (assess-needed-tools only)."), EN2CLogSeverity::Info);
 }
 
 void FN2CMcpToolManager::ClearAllTools()

@@ -28,6 +28,10 @@ FMcpToolDefinition FN2CMcpSetInputPinValueTool::GetDefinition() const
     FMcpToolDefinition Definition(
         TEXT("set-input-pin-value"),
         TEXT("Sets the default value of an input pin on a Blueprint node. Only works on pins that accept default values (not exec, reference, or container pins).")
+    ,
+
+    	TEXT("Blueprint Graph Editing")
+
     );
 
     // Build input schema

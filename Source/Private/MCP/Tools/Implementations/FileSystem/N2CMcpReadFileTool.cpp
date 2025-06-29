@@ -25,7 +25,8 @@ FMcpToolDefinition FN2CMcpReadFileTool::GetDefinition() const
         TEXT("Reads the contents of a file within the Unreal Engine project. "
              "Use empty string \"\" for project root, NOT \".\" or \"/\". "
              "Enforces security boundaries to prevent directory traversal outside the project. "
-             "Supports text files up to 500KB in size. Binary files like .uasset and .umap are not supported.")
+             "Supports text files up to 500KB in size. Binary files like .uasset and .umap are not supported."),
+        TEXT("File System")
     );
     
     // Define input schema

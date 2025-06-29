@@ -24,6 +24,10 @@ FMcpToolDefinition FN2CMcpMoveAssetTool::GetDefinition() const
 	FMcpToolDefinition Definition(
 		TEXT("move-asset"),
 		TEXT("Move or rename an asset to a new location in the content browser. Accepts both package paths (/Game/Folder/Asset) and object paths (/Game/Folder/Asset.Asset)")
+	,
+
+		TEXT("Content Browser")
+
 	);
 
 	// Build input schema

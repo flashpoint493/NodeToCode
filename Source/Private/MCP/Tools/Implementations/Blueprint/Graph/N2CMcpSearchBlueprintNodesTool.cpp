@@ -28,11 +28,13 @@ FN2CMcpSearchBlueprintNodesTool::FN2CMcpSearchBlueprintNodesTool()
 
 FMcpToolDefinition FN2CMcpSearchBlueprintNodesTool::GetDefinition() const
 {
-    FMcpToolDefinition Definition;
-    Definition.Name = TEXT("search-blueprint-nodes");
-    Definition.Description = TEXT("Searches for Blueprint nodes/actions relevant to a given query. Can perform a context-sensitive search based on the current Blueprint or a global search. ")
-                             TEXT("For common math operations, you can simply search for symbols like '+', '-', '*', or '/'. ")
-                             TEXT("The promotable math nodes (e.g., Add, Subtract, Multiply, Divide) typically have wildcard pins that automatically promote to compatible types (e.g., float, integer, vector), so you usually don't need to search for type-specific versions like 'multiply float by float'.");
+    FMcpToolDefinition Definition(
+        TEXT("search-blueprint-nodes"),
+        TEXT("Searches for Blueprint nodes/actions relevant to a given query. Can perform a context-sensitive search based on the current Blueprint or a global search. ")
+        TEXT("For common math operations, you can simply search for symbols like '+', '-', '*', or '/'. ")
+        TEXT("The promotable math nodes (e.g., Add, Subtract, Multiply, Divide) typically have wildcard pins that automatically promote to compatible types (e.g., float, integer, vector), so you usually don't need to search for type-specific versions like 'multiply float by float'."),
+        TEXT("Blueprint Discovery")
+    );
     
     // Build input schema
     TSharedPtr<FJsonObject> Schema = MakeShareable(new FJsonObject);

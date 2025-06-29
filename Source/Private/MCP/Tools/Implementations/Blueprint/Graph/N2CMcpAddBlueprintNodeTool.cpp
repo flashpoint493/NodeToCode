@@ -30,9 +30,11 @@ FN2CMcpAddBlueprintNodeTool::FN2CMcpAddBlueprintNodeTool()
 
 FMcpToolDefinition FN2CMcpAddBlueprintNodeTool::GetDefinition() const
 {
-    FMcpToolDefinition Definition;
-    Definition.Name = TEXT("add-bp-node-to-active-graph");
-    Definition.Description = TEXT("Adds a Blueprint node to the currently active graph. IMPORTANT: The search-blueprint-nodes tool MUST have been used before this tool in order to find the node and get its actionIdentifier from the spawnMetadata alongside its Name. The node's Name and actionIdentifier are required to spawn the exact correct variant of the node.");
+    FMcpToolDefinition Definition(
+        TEXT("add-bp-node-to-active-graph"),
+        TEXT("Adds a Blueprint node to the currently active graph. IMPORTANT: The search-blueprint-nodes tool MUST have been used before this tool in order to find the node and get its actionIdentifier from the spawnMetadata alongside its Name. The node's Name and actionIdentifier are required to spawn the exact correct variant of the node."),
+        TEXT("Blueprint Graph Editing")
+    );
     
     // Build input schema
     TSharedPtr<FJsonObject> Schema = MakeShareable(new FJsonObject);

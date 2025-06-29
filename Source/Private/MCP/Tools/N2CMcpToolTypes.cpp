@@ -13,6 +13,11 @@ TSharedPtr<FJsonObject> FMcpToolDefinition::ToJson() const
 	{
 		JsonObject->SetStringField(TEXT("description"), Description);
 	}
+
+	if (!Category.IsEmpty())
+	{
+		JsonObject->SetStringField(TEXT("category"), Category);
+	}
 	
 	if (InputSchema.IsValid())
 	{
@@ -35,6 +40,7 @@ FMcpToolDefinition FMcpToolDefinition::FromJson(const TSharedPtr<FJsonObject>& J
 	{
 		JsonObject->TryGetStringField(TEXT("name"), Definition.Name);
 		JsonObject->TryGetStringField(TEXT("description"), Definition.Description);
+		JsonObject->TryGetStringField(TEXT("category"), Definition.Category);
 		
 		const TSharedPtr<FJsonObject>* InputSchemaObj = nullptr;
 		if (JsonObject->TryGetObjectField(TEXT("inputSchema"), InputSchemaObj))

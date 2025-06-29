@@ -20,6 +20,10 @@ FMcpToolDefinition FN2CMcpSetLocalFunctionVariableDefaultValue::GetDefinition() 
     FMcpToolDefinition Definition(
         TEXT("set-local-function-variable-default-value"),
         TEXT("Set the default value of a local function variable (like editing in the details panel)")
+    ,
+
+    	TEXT("Blueprint Variable Management")
+
     );
     
     // Define input schema

@@ -29,6 +29,10 @@ FMcpToolDefinition FN2CMcpSearchContentBrowserTool::GetDefinition() const
 	FMcpToolDefinition Definition(
 		TEXT("search-content-browser"),
 		TEXT("Search for assets across the entire content browser by name or type")
+	,
+
+		TEXT("Content Browser")
+
 	);
 
 	// Build input schema

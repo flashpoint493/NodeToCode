@@ -23,6 +23,10 @@ struct NODETOCODE_API FMcpToolDefinition
 	UPROPERTY()
 	FString Description;
 
+	/** The category this tool belongs to */
+	UPROPERTY()
+	FString Category;
+
 	/** JSON Schema defining the tool's input parameters */
 	TSharedPtr<FJsonObject> InputSchema;
 
@@ -37,9 +41,10 @@ struct NODETOCODE_API FMcpToolDefinition
 	{
 	}
 
-	FMcpToolDefinition(const FString& InName, const FString& InDescription = TEXT(""))
+	FMcpToolDefinition(const FString& InName, const FString& InDescription = TEXT(""), const FString& InCategory = TEXT(""))
 		: Name(InName)
 		, Description(InDescription)
+		, Category(InCategory)
 	{
 	}
 

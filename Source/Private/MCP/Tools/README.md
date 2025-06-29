@@ -62,13 +62,14 @@ This macro:
 ### Tool Categories
 
 Tools are organized into logical categories:
-
+- **[ToolManagement/](Implementations/ToolManagement/)** - Tools for managing the available toolset
 - **[Blueprint/](Implementations/Blueprint/)** - Comprehensive Blueprint manipulation
   - Analysis - Inspection and metadata extraction
   - Functions - Function creation and management
   - Variables - Variable creation and type discovery
   - Graph - Node and connection manipulation
   - Organization - Tagging and tracking system
+  - Discovery - Searching for nodes, functions, and variable types
 
 - **[Translation/](Implementations/Translation/)** - Code generation tools
   - LLM provider management
@@ -247,6 +248,71 @@ curl -X POST http://localhost:27000/mcp \
 # {"jsonrpc":"2.0","id":2,"result":{"status":"cancellation_initiated"}}
 ```
 
+## Dynamic Tool Management
+
+The NodeToCode MCP server implements a dynamic tool management system to prevent overwhelming LLM clients with a large number of tools. By default, only the `assess-needed-tools` tool is available when the server starts.
+
+### How It Works
+
+1. **Initial State**: When the MCP server starts, only the `assess-needed-tools` tool is registered.
+
+2. **Tool Assessment**: The LLM client calls `assess-needed-tools` with a list of required tool categories:
+   ```json
+   {
+     "categories": ["Blueprint Discovery", "Blueprint Graph Editing"]
+   }
+   ```
+
+3. **Dynamic Registration**: The server activates only the tools in the requested categories.
+
+4. **Notification**: The server sends a `notifications/tools/list_changed` notification to inform the client that the tool list has changed.
+
+5. **Client Refresh**: The client should call `tools/list` again to get the updated tool set.
+
+### Available Tool Categories
+
+- **Tool Management**: Tools for managing the available toolset
+- **Blueprint Discovery**: Tools for searching and listing Blueprints, functions, variables, and nodes
+- **Blueprint Graph Editing**: Tools for adding, connecting, and deleting nodes in a Blueprint graph
+- **Blueprint Function Management**: Tools for creating, deleting, and opening Blueprint functions
+- **Blueprint Variable Management**: Tools for creating member and local variables in Blueprints
+- **Blueprint Organization**: Tools for applying and managing tags on Blueprint graphs
+- **Content Browser**: Tools for interacting with the Unreal Engine Content Browser
+- **File System**: Tools for reading files and directories from the project's file system
+- **Translation**: Tools for translating Blueprints to code and managing LLM providers
+
+### Example Workflow
+
+```bash
+# 1. Initial connection - only assess-needed-tools is available
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "tools/list", "id": 1}'
+
+# 2. Assess needed tools for a task
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "assess-needed-tools",
+      "arguments": {
+        "categories": ["Blueprint Discovery", "Blueprint Graph Editing"]
+      }
+    },
+    "id": 2
+  }'
+
+# 3. Server sends notification about tool list change
+# Client receives: {"jsonrpc":"2.0","method":"notifications/tools/list_changed","params":{}}
+
+# 4. Get updated tool list
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "tools/list", "id": 3}'
+```
+
 ## Creating a New MCP Tool
 
 Follow these steps to add a new MCP tool:
@@ -298,7 +364,8 @@ FMcpToolDefinition FN2CMcpYourToolName::GetDefinition() const
 {
     FMcpToolDefinition Definition(
         TEXT("your-tool-name"),
-        TEXT("Description of what your tool does")
+        TEXT("Description of what your tool does"),
+        TEXT("Your Category") // Choose from available categories
     );
     
     // Define input schema

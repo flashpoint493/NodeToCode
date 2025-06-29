@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "MCP/Tools/N2CMcpToolTypes.h"
+#include "MCP/Tools/IN2CMcpTool.h"
 
 /**
  * Manager for MCP tools registration and execution
@@ -20,11 +21,10 @@ public:
 
 	/**
 	 * Register a new tool with the manager
-	 * @param Definition The tool definition containing metadata
-	 * @param Handler The delegate to call when the tool is invoked
+	 * @param Tool The tool instance to register
 	 * @return true if registration was successful
 	 */
-	bool RegisterTool(const FMcpToolDefinition& Definition, const FMcpToolHandlerDelegate& Handler);
+	bool RegisterTool(TSharedPtr<IN2CMcpTool> Tool);
 
 	/**
 	 * Unregister a tool by name
@@ -61,6 +61,15 @@ public:
 	 */
 	bool IsToolRegistered(const FString& ToolName) const;
 
+	/**
+	 * Updates the set of active tools based on a list of categories.
+	 * @param Categories The list of category names to enable.
+	 */
+	void UpdateActiveTools(const TArray<FString>& Categories);
+
+	/** Sets the active toolset to the default (only assess-needed-tools). */
+	void SetDefaultToolSet();
+
 	/** Clear all registered tools */
 	void ClearAllTools();
 
@@ -72,15 +81,8 @@ private:
 	FN2CMcpToolManager(const FN2CMcpToolManager&) = delete;
 	FN2CMcpToolManager& operator=(const FN2CMcpToolManager&) = delete;
 
-	/** Structure to hold tool definition and handler together */
-	struct FToolEntry
-	{
-		FMcpToolDefinition Definition;
-		FMcpToolHandlerDelegate Handler;
-	};
-
 	/** Map of tool names to their entries */
-	TMap<FString, FToolEntry> RegisteredTools;
+	TMap<FString, TSharedPtr<IN2CMcpTool>> RegisteredTools;
 
 	/** Mutex for thread-safe access */
 	mutable FCriticalSection ToolsLock;

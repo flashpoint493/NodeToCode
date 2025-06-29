@@ -29,7 +29,8 @@ FMcpToolDefinition FN2CMcpCreateBlueprintFunctionTool::GetDefinition() const
 {
 	FMcpToolDefinition Definition(
 		TEXT("create-blueprint-function"),
-		TEXT("Creates a new Blueprint function with specified parameters and opens it in the editor")
+		TEXT("Creates a new Blueprint function with specified parameters and opens it in the editor"),
+		TEXT("Blueprint Function Management")
 	);
 
 	// Build input schema

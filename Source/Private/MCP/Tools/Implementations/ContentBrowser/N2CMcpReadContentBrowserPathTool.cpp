@@ -16,6 +16,8 @@ FMcpToolDefinition FN2CMcpReadContentBrowserPathTool::GetDefinition() const
 	FMcpToolDefinition Definition(
 		TEXT("read-content-browser-path"),
 		TEXT("Returns blueprint assets and folders at the specified path in the content browser")
+	,
+		TEXT("Content Browser")
 	);
 	
 	// Define input schema

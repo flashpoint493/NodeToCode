@@ -22,7 +22,8 @@ FMcpToolDefinition FN2CMcpReadPathTool::GetDefinition() const
         TEXT("Lists all files and folders in a directory within the Unreal Engine project. "
              "Use empty string \"\" for project root, NOT \".\" or \"/\". "
              "Examples: \"\" for root, \"Config\" for Config folder, \"Content/Blueprints\" for nested paths. "
-             "Enforces security boundaries to prevent directory traversal outside the project.")
+             "Enforces security boundaries to prevent directory traversal outside the project."),
+        TEXT("File System")
     );
     
     // Define input schema

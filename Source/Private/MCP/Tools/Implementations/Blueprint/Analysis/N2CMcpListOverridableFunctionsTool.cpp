@@ -28,7 +28,8 @@ FMcpToolDefinition FN2CMcpListOverridableFunctionsTool::GetDefinition() const
 {
 	FMcpToolDefinition Definition(
 		TEXT("list-overridable-functions"),
-		TEXT("Lists all functions that can be overridden from parent classes and interfaces")
+		TEXT("Lists all functions that can be overridden from parent classes and interfaces"),
+		TEXT("Blueprint Discovery")
 	);
 
 	// Build input schema

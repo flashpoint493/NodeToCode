@@ -18,6 +18,10 @@ FMcpToolDefinition FN2CMcpCopyAssetTool::GetDefinition() const
     FMcpToolDefinition Definition(
         TEXT("copy-asset"),
         TEXT("Copy an asset to a new location in the content browser")
+    ,
+
+    	TEXT("Content Browser")
+
     );
 
     // Build input schema

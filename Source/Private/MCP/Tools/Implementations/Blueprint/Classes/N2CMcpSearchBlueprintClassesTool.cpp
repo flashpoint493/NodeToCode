@@ -64,7 +64,8 @@ FMcpToolDefinition FN2CMcpSearchBlueprintClassesTool::GetDefinition() const
 {
 	FMcpToolDefinition Definition(
 		TEXT("search-blueprint-classes"),
-		TEXT("Searches for available parent classes for Blueprint creation, similar to the 'Pick Parent Class' dialog")
+		TEXT("Searches for available parent classes for Blueprint creation, similar to the 'Pick Parent Class' dialog"),
+		TEXT("Blueprint Classes")
 	);
 
 	// Build input schema manually

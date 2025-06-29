@@ -10,7 +10,8 @@ FMcpToolDefinition FN2CMcpTranslateBlueprintTool::GetDefinition() const
 {
     FMcpToolDefinition Definition(
         TEXT("translate-focused-blueprint"),
-        TEXT("Translates the currently focused Blueprint graph using an LLM provider. This is a long-running task and requires a _meta.progressToken for SSE streaming.")
+        TEXT("Translates the currently focused Blueprint graph using an LLM provider. This is a long-running task and requires a _meta.progressToken for SSE streaming."),
+        TEXT("Translation")
     );
 
     Definition.bIsLongRunning = true; // Mark as long-running

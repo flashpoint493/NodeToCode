@@ -20,6 +20,10 @@ FMcpToolDefinition FN2CMcpMoveFolderTool::GetDefinition() const
     FMcpToolDefinition Definition(
         TEXT("move-folder"),
         TEXT("Move a folder and all its contents to a new location in the content browser")
+    ,
+
+    	TEXT("Content Browser")
+
     );
 
     // Build input schema

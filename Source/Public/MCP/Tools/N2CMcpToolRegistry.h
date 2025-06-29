@@ -21,11 +21,6 @@ public:
 	 */
 	void RegisterTool(TSharedPtr<IN2CMcpTool> Tool);
 	
-	/**
-	 * Register all tools in the registry with the MCP tool manager
-	 * Called during MCP server initialization
-	 */
-	void RegisterAllToolsWithManager();
 	
 	/**
 	 * Get all registered tools

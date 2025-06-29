@@ -26,6 +26,10 @@ FMcpToolDefinition FN2CMcpCreateGetMemberVariableNode::GetDefinition() const
     FMcpToolDefinition Definition(
         TEXT("create-get-member-variable-node"),
         TEXT("Creates a Get node for a member variable in the focused blueprint graph. This node can be used to read values from member variables.")
+    ,
+
+    	TEXT("Blueprint Variable Management")
+
     );
     
     // Build input schema

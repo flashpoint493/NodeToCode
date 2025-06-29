@@ -24,7 +24,8 @@ FMcpToolDefinition FN2CMcpConnectPinsTool::GetDefinition() const
 {
 	FMcpToolDefinition Definition(
 		TEXT("connect-pins"),
-		TEXT("Connect pins between Blueprint nodes using their GUIDs. Supports batch connections with transactional safety. Output data pins can connect to multiple input pins, while execution pins maintain single connections.")
+		TEXT("Connect pins between Blueprint nodes using their GUIDs. Supports batch connections with transactional safety. Output data pins can connect to multiple input pins, while execution pins maintain single connections."),
+		TEXT("Blueprint Graph Editing")
 	);
 
 	// Build input schema

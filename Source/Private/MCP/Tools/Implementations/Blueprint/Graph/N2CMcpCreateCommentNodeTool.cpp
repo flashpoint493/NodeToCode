@@ -25,6 +25,10 @@ FMcpToolDefinition FN2CMcpCreateCommentNodeTool::GetDefinition() const
     FMcpToolDefinition Definition(
         TEXT("create-comment-node"),
         TEXT("Creates a comment node around specified Blueprint nodes using their GUIDs. Requires get-focused-blueprint to be called first to obtain node GUIDs. Do NOT set a color unless the user requests it.")
+    ,
+
+    	TEXT("Blueprint Graph Editing")
+
     );
     
     // Define input schema

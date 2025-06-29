@@ -20,6 +20,10 @@ FMcpToolDefinition FN2CMcpRenameFolderTool::GetDefinition() const
     FMcpToolDefinition Definition(
         TEXT("rename-folder"),
         TEXT("Rename a folder in the content browser")
+    ,
+
+    	TEXT("Content Browser")
+
     );
 
     // Build input schema

@@ -25,6 +25,10 @@ FMcpToolDefinition FN2CMcpRemoveFunctionReturnPinTool::GetDefinition() const
 	FMcpToolDefinition Definition(
 		TEXT("remove-function-return-pin"),
 		TEXT("Removes a return value from the currently focused Blueprint function")
+	,
+
+		TEXT("Blueprint Function Management")
+
 	);
 
 	// Build input schema

@@ -25,6 +25,10 @@ FMcpToolDefinition FN2CMcpAddFunctionEntryPinTool::GetDefinition() const
 	FMcpToolDefinition Definition(
 		TEXT("add-function-input-pin"),
 		TEXT("Adds a new input parameter to the currently focused Blueprint function")
+	,
+
+		TEXT("Blueprint Function Management")
+
 	);
 
 	// Build input schema

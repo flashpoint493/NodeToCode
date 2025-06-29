@@ -33,7 +33,8 @@ FMcpToolDefinition FN2CMcpDeleteBlueprintFunctionTool::GetDefinition() const
 {
 	FMcpToolDefinition Definition(
 		TEXT("delete-blueprint-function"),
-		TEXT("Deletes a specific Blueprint function using its GUID. Supports reference detection and forced deletion.")
+		TEXT("Deletes a specific Blueprint function using its GUID. Supports reference detection and forced deletion."),
+		TEXT("Blueprint Function Management")
 	);
 
 	// Build input schema

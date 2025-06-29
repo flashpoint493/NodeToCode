@@ -26,6 +26,10 @@ FMcpToolDefinition FN2CMcpAddFunctionReturnPinTool::GetDefinition() const
 	FMcpToolDefinition Definition(
 		TEXT("add-function-return-pin"),
 		TEXT("Adds a new return value to the currently focused Blueprint function")
+	,
+
+		TEXT("Blueprint Function Management")
+
 	);
 
 	// Build input schema

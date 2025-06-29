@@ -26,7 +26,8 @@ FMcpToolDefinition FN2CMcpListBlueprintFunctionsTool::GetDefinition() const
 {
 	FMcpToolDefinition Definition(
 		TEXT("list-blueprint-functions"),
-		TEXT("Lists all functions defined in a Blueprint with their parameters and metadata")
+		TEXT("Lists all functions defined in a Blueprint with their parameters and metadata"),
+		TEXT("Blueprint Discovery")
 	);
 
 	// Build input schema

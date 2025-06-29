@@ -16,7 +16,8 @@ FMcpToolDefinition FN2CMcpGetTranslationOutputDirectoryTool::GetDefinition() con
 {
     FMcpToolDefinition Definition(
         TEXT("get-translation-output-directory"),
-        TEXT("Returns the translation output directory configuration from NodeToCode settings. Shows whether a custom directory is set or if the default location is being used.")
+        TEXT("Returns the translation output directory configuration from NodeToCode settings. Shows whether a custom directory is set or if the default location is being used."),
+        TEXT("Translation")
     );
     
     // This tool takes no input parameters

@@ -25,6 +25,10 @@ FMcpToolDefinition FN2CMcpRemoveFunctionEntryPinTool::GetDefinition() const
 	FMcpToolDefinition Definition(
 		TEXT("remove-function-entry-pin"),
 		TEXT("Removes a input paramter pin from the function entry node")
+	,
+
+		TEXT("Blueprint Function Management")
+
 	);
 
 	// Build input schema

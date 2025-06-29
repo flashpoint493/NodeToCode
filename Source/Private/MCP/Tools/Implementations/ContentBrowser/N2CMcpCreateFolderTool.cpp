@@ -17,6 +17,10 @@ FMcpToolDefinition FN2CMcpCreateFolderTool::GetDefinition() const
     FMcpToolDefinition Definition(
         TEXT("create-folder"),
         TEXT("Create a new folder in the content browser")
+    ,
+
+    	TEXT("Content Browser")
+
     );
 
     // Build input schema

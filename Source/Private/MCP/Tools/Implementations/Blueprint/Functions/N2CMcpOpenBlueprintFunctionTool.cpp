@@ -23,9 +23,11 @@ REGISTER_MCP_TOOL(FN2CMcpOpenBlueprintFunctionTool)
 
 FMcpToolDefinition FN2CMcpOpenBlueprintFunctionTool::GetDefinition() const
 {
-	FMcpToolDefinition Definition;
-	Definition.Name = TEXT("open-blueprint-function");
-	Definition.Description = TEXT("Opens a Blueprint function in the editor using its GUID");
+	FMcpToolDefinition Definition(
+		TEXT("open-blueprint-function"),
+		TEXT("Opens a Blueprint function in the editor using its GUID"),
+		TEXT("Blueprint Function Management")
+	);
 	
 	// Define input schema
 	TSharedPtr<FJsonObject> InputSchema = MakeShareable(new FJsonObject);

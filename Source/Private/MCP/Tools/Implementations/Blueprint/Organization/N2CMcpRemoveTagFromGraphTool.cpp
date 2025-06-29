@@ -15,7 +15,8 @@ FMcpToolDefinition FN2CMcpRemoveTagFromGraphTool::GetDefinition() const
 {
 	FMcpToolDefinition Definition(
 		TEXT("remove-tag-from-graph"),
-		TEXT("Removes a specific tag from a Blueprint graph by its GUID and tag name")
+		TEXT("Removes a specific tag from a Blueprint graph by its GUID and tag name"),
+		TEXT("Blueprint Organization")
 	);
 	
 	// Define input schema
