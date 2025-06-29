@@ -13,6 +13,7 @@
 #include "MCP/Server/N2CMcpHttpServerManager.h"
 #include "MCP/Server/N2CMcpSSEResponseManager.h"
 #include "MCP/Async/N2CToolAsyncTaskManager.h"
+#include "MCP/Server/N2CSseServer.h"
 #include "HttpServerRequest.h"
 
 // Define supported protocol versions in order of preference (newest first)
@@ -351,6 +352,17 @@ bool FN2CMcpHttpRequestHandler::HandleInitialize(const TSharedPtr<FJsonValue>& P
 	}
 	ServerInfo->SetStringField(TEXT("version"), PluginVersion);
 	Result->SetObjectField(TEXT("serverInfo"), ServerInfo);
+
+	// Add _meta field with notificationUrl
+	int32 SsePort = NodeToCodeSseServer::GetSseServerPort();
+	if (SsePort > 0)
+	{
+		TSharedPtr<FJsonObject> MetaObject = MakeShareable(new FJsonObject);
+		FString NotificationUrl = FString::Printf(TEXT("http://localhost:%d/mcp/notifications"), SsePort);
+		MetaObject->SetStringField(TEXT("notificationUrl"), NotificationUrl);
+		Result->SetObjectField(TEXT("_meta"), MetaObject);
+		FN2CLogger::Get().Log(FString::Printf(TEXT("Providing notificationUrl in initialize response: %s"), *NotificationUrl), EN2CLogSeverity::Info);
+	}
 
 	// Create success response
 	OutResponse = FJsonRpcUtils::CreateSuccessResponse(Id, MakeShareable(new FJsonValueObject(Result)));

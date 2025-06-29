@@ -84,4 +84,10 @@ namespace NodeToCodeSseServer
     */
     std::string FormatSseMessage(const FString& EventType, const FString& JsonData);
 
+    /**
+     * Pushes a notification event to all connected general notification clients.
+     * @param SseMessage The fully formatted SSE message string.
+     */
+    void PushNotificationToAllClients(const std::string& SseMessage);
+
 } // namespace NodeToCodeSseServer

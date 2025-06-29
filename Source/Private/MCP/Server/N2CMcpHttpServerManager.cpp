@@ -3,6 +3,7 @@
 #include "MCP/Server/N2CMcpHttpServerManager.h"
 #include "MCP/Server/N2CMcpHttpRequestHandler.h"
 #include "MCP/Server/N2CSseServer.h"
+#include "MCP/Server/N2CMcpJsonRpcTypes.h"
 #include "Utils/N2CLogger.h"
 #include "HttpServerModule.h"
 #include "HttpServerResponse.h"
@@ -545,40 +546,21 @@ void FN2CMcpHttpServerManager::UnregisterClient(const FString& SessionId)
 
 void FN2CMcpHttpServerManager::BroadcastNotification(const FJsonRpcNotification& Notification)
 {
-	FScopeLock Lock(&ClientChannelLock);
-	
-	TArray<FString> InactiveChannels;
-	
-	// Send to all registered clients
-	for (const auto& Pair : ClientChannels)
+	// Serialize the notification to JSON
+	FString NotificationJson = FJsonRpcUtils::SerializeNotification(Notification);
+	if (NotificationJson.IsEmpty())
 	{
-		const FString& SessionId = Pair.Key;
-		const TSharedPtr<IN2CMcpNotificationChannel>& Channel = Pair.Value;
-		
-		if (Channel.IsValid() && Channel->IsActive())
-		{
-			if (!Channel->SendNotification(Notification))
-			{
-				FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Failed to send notification to session: %s"), *SessionId));
-			}
-		}
-		else
-		{
-			// Mark inactive channels for removal
-			InactiveChannels.Add(SessionId);
-		}
+		FN2CLogger::Get().LogError(FString::Printf(TEXT("Failed to serialize notification: %s"), *Notification.Method));
+		return;
 	}
-	
-	// Clean up inactive channels
-	for (const FString& SessionId : InactiveChannels)
-	{
-		ClientChannels.Remove(SessionId);
-		SessionProtocolVersions.Remove(SessionId);
-		FN2CLogger::Get().Log(FString::Printf(TEXT("Removed inactive notification channel for session: %s"), *SessionId), EN2CLogSeverity::Debug);
-	}
-	
-	FN2CLogger::Get().Log(FString::Printf(TEXT("Broadcast notification '%s' to %d active clients"), 
-		*Notification.Method, ClientChannels.Num() - InactiveChannels.Num()), EN2CLogSeverity::Debug);
+
+	// Format as an SSE message with event type "notification"
+	std::string SseMessage = NodeToCodeSseServer::FormatSseMessage(TEXT("notification"), NotificationJson);
+
+	// Push to all connected notification clients
+	NodeToCodeSseServer::PushNotificationToAllClients(SseMessage);
+
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Broadcast notification '%s' via SSE"), *Notification.Method), EN2CLogSeverity::Debug);
 }
 
 void FN2CMcpHttpServerManager::SendNotificationToClient(const FString& SessionId, const FJsonRpcNotification& Notification)

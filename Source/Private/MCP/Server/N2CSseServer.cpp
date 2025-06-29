@@ -37,6 +37,10 @@ namespace NodeToCodeSseServer
     TMap<FGuid, TSharedPtr<SseClientConnection>> GActiveSseClients;
     FCriticalSection GActiveSseClientsMutex; // UE's critical section
 
+    // Map for general notification clients
+    TMap<FString, TSharedPtr<SseClientConnection>> GNotificationClients;
+    FCriticalSection GNotificationClientsMutex;
+
     // httplib server instance and thread
     TSharedPtr<httplib::Server> GSseHttpServer;
     std::unique_ptr<std::thread> GSseServerThreadPtr; // Use unique_ptr for better management
@@ -97,6 +101,26 @@ namespace NodeToCodeSseServer
         }
         sse_message += "\n"; // Double newline to end the event
         return sse_message;
+    }
+
+    void PushNotificationToAllClients(const std::string& SseMessage)
+    {
+        FScopeLock Lock(&GNotificationClientsMutex);
+        for (auto& Pair : GNotificationClients)
+        {
+            if (Pair.Value)
+            {
+                {
+                    std::lock_guard<std::mutex> q_lock(Pair.Value->queue_mutex);
+                    if (Pair.Value->stop_requested.load()) {
+                        continue; // Skip stopped clients
+                    }
+                    Pair.Value->event_queue.push(SseMessage);
+                }
+                Pair.Value->cv.notify_one();
+            }
+        }
+        FN2CLogger::Get().Log(FString::Printf(TEXT("SSE: Pushed notification to %d clients. Message: %s"), GNotificationClients.Num(), UTF8_TO_TCHAR(SseMessage.substr(0, 100).c_str())), EN2CLogSeverity::Debug);
     }
 
     void PushFormattedSseEventToClient(const FGuid& TaskId, const std::string& SseMessage)
@@ -303,6 +327,60 @@ namespace NodeToCodeSseServer
             );
         });
         
+        GSseHttpServer->Get("/mcp/notifications", [](const httplib::Request& req, httplib::Response& res) {
+            FString ConnectionId = FGuid::NewGuid().ToString();
+            auto ClientConn = MakeShared<SseClientConnection>();
+            
+            {
+                FScopeLock Lock(&GNotificationClientsMutex);
+                GNotificationClients.Add(ConnectionId, ClientConn);
+            }
+        
+            FN2CLogger::Get().Log(FString::Printf(TEXT("SSE: General notification client connected. ConnectionId: %s"), *ConnectionId), EN2CLogSeverity::Info);
+        
+            res.set_header("Content-Type", "text/event-stream");
+            res.set_header("Cache-Control", "no-cache");
+            res.set_header("Connection", "keep-alive");
+            res.set_header("Access-Control-Allow-Origin", "*");
+        
+            res.set_content_provider(
+                "text/event-stream",
+                [ClientConn](size_t offset, httplib::DataSink &sink) -> bool {
+                    std::unique_lock<std::mutex> q_lock(ClientConn->queue_mutex);
+                    
+                    ClientConn->cv.wait(q_lock, [&ClientConn] {
+                        return !ClientConn->event_queue.empty() || ClientConn->stop_requested.load();
+                    });
+        
+                    if (ClientConn->stop_requested.load()) {
+                        q_lock.unlock();
+                        sink.done();
+                        return false;
+                    }
+        
+                    if (!ClientConn->event_queue.empty()) {
+                        std::string event_data_to_send = ClientConn->event_queue.front();
+                        ClientConn->event_queue.pop();
+                        q_lock.unlock();
+                        
+                        if (!sink.write(event_data_to_send.c_str(), event_data_to_send.length())) {
+                            ClientConn->stop_requested.store(true);
+                            return false;
+                        }
+                    } else {
+                        q_lock.unlock();
+                    }
+                    
+                    return true;
+                },
+                [ConnectionId](bool success) {
+                    FScopeLock Lock(&GNotificationClientsMutex);
+                    GNotificationClients.Remove(ConnectionId);
+                    FN2CLogger::Get().Log(FString::Printf(TEXT("SSE: General notification client disconnected. ConnectionId: %s. Success: %d"), *ConnectionId, success), EN2CLogSeverity::Info);
+                }
+            );
+        });
+        
         GbSseServerIsRunning.store(false); // Ensure it's false before starting thread
         GSseServerThreadPtr = std::make_unique<std::thread>([Port]() {
             FN2CLogger::Get().Log(FString::Printf(TEXT("SSE: httplib server thread starting, attempting to listen on 0.0.0.0:%d"), Port), EN2CLogSeverity::Info);
@@ -376,6 +454,18 @@ namespace NodeToCodeSseServer
             }
             // Don't clear GActiveSseClients here, let the releaser lambdas do it
         }
+        {
+            FScopeLock Lock(&GNotificationClientsMutex);
+            for (auto& Pair : GNotificationClients)
+            {
+                if (Pair.Value)
+                {
+                    std::lock_guard<std::mutex> q_lock(Pair.Value->queue_mutex);
+                    Pair.Value->stop_requested.store(true);
+                    Pair.Value->cv.notify_all();
+                }
+            }
+        }
 
         if (GSseHttpServer.IsValid()) {
             GSseHttpServer->stop(); // This is thread-safe and signals listen() to return
@@ -400,6 +490,14 @@ namespace NodeToCodeSseServer
              {
                 FN2CLogger::Get().LogWarning(FString::Printf(TEXT("SSE: %d client connections remained after server stop. Clearing now."), GActiveSseClients.Num()));
                 GActiveSseClients.Empty();
+             }
+        }
+        {
+             FScopeLock Lock(&GNotificationClientsMutex);
+             if(GNotificationClients.Num() > 0)
+             {
+                FN2CLogger::Get().LogWarning(FString::Printf(TEXT("SSE: %d notification clients remained after server stop. Clearing now."), GNotificationClients.Num()));
+                GNotificationClients.Empty();
              }
         }
         FN2CLogger::Get().Log(TEXT("SSE: Server fully stopped."), EN2CLogSeverity::Info);
