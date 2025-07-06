@@ -116,6 +116,33 @@ public:
      */
     static bool PassesComponentTypeFilter(UClass* ComponentClass, const FString& TypeFilter);
 
+    /**
+     * Deletes a component node from the SCS
+     * @param SCS The Simple Construction Script containing the node
+     * @param NodeToDelete The node to delete
+     * @param bDeleteChildren Whether to delete child nodes as well
+     * @param OutErrorMsg Error message if operation fails
+     * @return True if deletion was successful
+     */
+    static bool DeleteSCSNode(USimpleConstructionScript* SCS, USCS_Node* NodeToDelete, 
+        bool bDeleteChildren, FString& OutErrorMsg);
+
+    /**
+     * Gets all child nodes of a component recursively
+     * @param Node The parent node
+     * @param OutChildren Array to fill with all child nodes
+     */
+    static void GetAllChildNodes(USCS_Node* Node, TArray<USCS_Node*>& OutChildren);
+
+    /**
+     * Checks if a node can be safely deleted
+     * @param Node The node to check
+     * @param bIsInherited Whether the node is from a parent Blueprint
+     * @param OutErrorMsg Error message if node cannot be deleted
+     * @return True if the node can be deleted
+     */
+    static bool CanDeleteNode(USCS_Node* Node, bool bIsInherited, FString& OutErrorMsg);
+
 private:
     /**
      * Recursively builds JSON for a node and its children

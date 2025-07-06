@@ -502,3 +502,125 @@ TSharedPtr<FJsonObject> FN2CMcpComponentUtils::GetComponentTransformJson(USceneC
 
     return TransformJson;
 }
+
+bool FN2CMcpComponentUtils::DeleteSCSNode(USimpleConstructionScript* SCS, USCS_Node* NodeToDelete, 
+    bool bDeleteChildren, FString& OutErrorMsg)
+{
+    if (!SCS)
+    {
+        OutErrorMsg = TEXT("NO_SCS|Simple Construction Script is null");
+        return false;
+    }
+
+    if (!NodeToDelete)
+    {
+        OutErrorMsg = TEXT("NO_NODE|Node to delete is null");
+        return false;
+    }
+
+    // Check if node can be deleted
+    bool bIsInherited = false;
+    const TArray<USCS_Node*>& AllNodes = SCS->GetAllNodes();
+    if (!AllNodes.Contains(NodeToDelete))
+    {
+        // Check if it's an inherited node
+        UBlueprint* Blueprint = Cast<UBlueprint>(SCS->GetOuter());
+        if (Blueprint)
+        {
+            TArray<USCS_Node*> InheritedNodes;
+            GetInheritedSCSNodes(Blueprint, InheritedNodes);
+            bIsInherited = InheritedNodes.Contains(NodeToDelete);
+        }
+    }
+
+    if (!CanDeleteNode(NodeToDelete, bIsInherited, OutErrorMsg))
+    {
+        return false;
+    }
+
+    // Handle children
+    TArray<USCS_Node*> ChildNodes = NodeToDelete->GetChildNodes();
+    if (!bDeleteChildren && ChildNodes.Num() > 0)
+    {
+        // Reparent children to the parent of the node being deleted
+        USCS_Node* ParentNode = nullptr;
+        if (!NodeToDelete->ParentComponentOrVariableName.IsNone())
+        {
+            ParentNode = FindSCSNodeByName(SCS, NodeToDelete->ParentComponentOrVariableName.ToString());
+        }
+
+        for (USCS_Node* ChildNode : ChildNodes)
+        {
+            if (ParentNode)
+            {
+                ChildNode->SetParent(ParentNode);
+            }
+            else
+            {
+                // Make it a root node
+                ChildNode->SetParent(static_cast<USCS_Node*>(nullptr));
+            }
+        }
+    }
+    else if (bDeleteChildren)
+    {
+        // Recursively delete all children
+        TArray<USCS_Node*> AllChildren;
+        GetAllChildNodes(NodeToDelete, AllChildren);
+
+        // Delete from deepest to shallowest
+        for (int32 i = AllChildren.Num() - 1; i >= 0; i--)
+        {
+            SCS->RemoveNode(AllChildren[i]);
+        }
+    }
+
+    // Remove the node from SCS
+    SCS->RemoveNode(NodeToDelete);
+
+    return true;
+}
+
+void FN2CMcpComponentUtils::GetAllChildNodes(USCS_Node* Node, TArray<USCS_Node*>& OutChildren)
+{
+    if (!Node)
+    {
+        return;
+    }
+
+    TArray<USCS_Node*> DirectChildren = Node->GetChildNodes();
+    for (USCS_Node* Child : DirectChildren)
+    {
+        OutChildren.Add(Child);
+        // Recursively get children of children
+        GetAllChildNodes(Child, OutChildren);
+    }
+}
+
+bool FN2CMcpComponentUtils::CanDeleteNode(USCS_Node* Node, bool bIsInherited, FString& OutErrorMsg)
+{
+    if (!Node)
+    {
+        OutErrorMsg = TEXT("NO_NODE|Node is null");
+        return false;
+    }
+
+    if (bIsInherited)
+    {
+        OutErrorMsg = TEXT("INHERITED_NODE|Cannot delete components inherited from parent Blueprint");
+        return false;
+    }
+
+    // Check if it's the default scene root
+    if (Node->ComponentTemplate && Node->ComponentTemplate->GetFName() == TEXT("DefaultSceneRoot"))
+    {
+        // Only prevent deletion if it has children
+        if (Node->GetChildNodes().Num() > 0)
+        {
+            OutErrorMsg = TEXT("DEFAULT_ROOT_WITH_CHILDREN|Cannot delete DefaultSceneRoot when it has child components");
+            return false;
+        }
+    }
+
+    return true;
+}

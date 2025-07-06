@@ -1,6 +1,6 @@
 # Blueprint Component Tools
 
-This directory contains MCP tools for managing components in Blueprint actors. These tools provide functionality for listing, adding, and manipulating the component hierarchy within actor Blueprints.
+This directory contains MCP tools for managing components in Blueprint actors. These tools provide functionality for listing, adding, deleting, and manipulating the component hierarchy within actor Blueprints.
 
 ## Available Tools
 
@@ -24,6 +24,15 @@ This directory contains MCP tools for managing components in Blueprint actors. T
   - `blueprintPath` (optional): Asset path of the Blueprint. Uses focused Blueprint if not provided
 - **Returns**: Details about the created component including name, class, GUID, and compilation status
 - **Use Case**: Programmatically building component hierarchies in Blueprint actors
+
+### delete-component-in-actor
+- **Description**: Deletes a component from a Blueprint actor
+- **Parameters**:
+  - `componentName` (required): Name of the component to delete
+  - `deleteChildren` (optional): If true, deletes all child components. If false, reparents children to deleted component's parent (default: false)
+  - `blueprintPath` (optional): Asset path of the Blueprint. Uses focused Blueprint if not provided
+- **Returns**: Information about the deleted component and affected children, including reparenting details
+- **Use Case**: Removing components from Blueprint actors while managing child component relationships
 
 ## Component Type Filters
 
@@ -164,6 +173,41 @@ curl -X POST http://localhost:27000/mcp \
   }'
 ```
 
+### Delete a Component
+```bash
+# Delete a single component (reparent children)
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "delete-component-in-actor",
+      "arguments": {
+        "componentName": "WeaponMesh",
+        "deleteChildren": false
+      }
+    },
+    "id": 1
+  }'
+
+# Delete a component and all its children
+curl -X POST http://localhost:27000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "delete-component-in-actor",
+      "arguments": {
+        "componentName": "CameraBoom",
+        "deleteChildren": true
+      }
+    },
+    "id": 2
+  }'
+```
+
 ## Component Hierarchy Output Format
 
 The `list-components-in-actor` tool returns a hierarchical structure:
@@ -241,14 +285,42 @@ These component tools work seamlessly with other Blueprint MCP tools:
 4. **Transform Application**: Apply transforms after attachment for proper relative positioning
 5. **Type Checking**: Always verify component classes exist before attempting to add them
 
+## Component Deletion Behavior
+
+### Child Component Handling
+When deleting a component that has children:
+- **`deleteChildren: false`** (default): Children are reparented to the deleted component's parent
+  - If the deleted component was a root component, children become new root components
+  - Preserves the component hierarchy as much as possible
+- **`deleteChildren: true`**: All child components are recursively deleted
+  - Deletes from deepest to shallowest to maintain integrity
+  - Use with caution as this can remove large portions of the hierarchy
+
+### Deletion Restrictions
+- **Inherited Components**: Cannot delete components from parent Blueprints
+- **DefaultSceneRoot**: Can only be deleted if it has no children
+- **Non-existent Components**: Returns error if component name doesn't match any in the Blueprint
+
 ## Error Handling
 
 Common errors and their meanings:
+
+### General Errors
 - `NOT_ACTOR_BLUEPRINT`: The Blueprint doesn't derive from Actor
+- `NO_COMPONENTS`: Blueprint has no components (for list/delete operations)
+
+### Add Component Errors
 - `CLASS_NOT_FOUND`: The specified component class doesn't exist
 - `PARENT_NOT_FOUND`: The specified parent component doesn't exist in the Blueprint
 - `CIRCULAR_ATTACHMENT`: Attempting to create a circular attachment hierarchy
 - `NOT_COMPONENT`: The specified class isn't derived from UActorComponent
+- `NAME_EXISTS`: Component with the specified name already exists
+
+### Delete Component Errors
+- `COMPONENT_NOT_FOUND`: The specified component doesn't exist in the Blueprint
+- `INHERITED_COMPONENT`: Cannot delete components inherited from parent Blueprint
+- `DEFAULT_ROOT_WITH_CHILDREN`: Cannot delete DefaultSceneRoot when it has child components
+- `INHERITED_NODE`: Attempting to delete an inherited component
 
 ## Implementation Notes
 
