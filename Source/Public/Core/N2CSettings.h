@@ -481,6 +481,14 @@ public:
         meta=(DisplayName="Server Port", ClampMin="1024", ClampMax="65535", UIMin="1024", UIMax="65535"))
     int32 McpServerPort = 27000;
     
+    /** Enable dynamic tool discovery for MCP server. When enabled, only assess-needed-tools will be available initially. 
+     * This feature requires MCP clients that support discovery (e.g., VSCode, Cline). 
+     * Note: Changing this setting requires an editor restart to take effect. */
+    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Node to Code | MCP Server",
+        meta=(DisplayName="Enable Dynamic Tool Discovery", 
+              ToolTip="Enable dynamic tool discovery for MCP server. When enabled, only assess-needed-tools will be available initially. This feature requires MCP clients that support discovery (e.g., VSCode, Cline). Note: Changing this setting requires an editor restart to take effect."))
+    bool bEnableDynamicToolDiscovery = false;
+    
     /** Get the API key for the selected provider */
     FString GetActiveApiKey() const;
 

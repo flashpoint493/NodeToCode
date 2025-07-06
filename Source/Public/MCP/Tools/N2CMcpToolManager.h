@@ -69,6 +69,9 @@ public:
 
 	/** Sets the active toolset to the default (only assess-needed-tools). */
 	void SetDefaultToolSet();
+	
+	/** Register all available tools except assess-needed-tools */
+	void RegisterAllToolsExceptAssess();
 
 	/** Clear all registered tools */
 	void ClearAllTools();

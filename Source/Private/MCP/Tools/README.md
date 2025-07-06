@@ -250,11 +250,13 @@ curl -X POST http://localhost:27000/mcp \
 
 ## Dynamic Tool Management
 
-The NodeToCode MCP server implements a dynamic tool management system to prevent overwhelming LLM clients with a large number of tools. By default, only the `assess-needed-tools` tool is available when the server starts.
+The NodeToCode MCP server can be configured to use dynamic tool management to prevent overwhelming LLM clients with a large number of tools. This behavior is controlled by the "Enable Dynamic Tool Discovery" setting in the plugin settings.
 
 ### How It Works
 
-1. **Initial State**: When the MCP server starts, only the `assess-needed-tools` tool is registered.
+1. **Initial State**: 
+   - **Dynamic Discovery Enabled**: Only the `assess-needed-tools` tool is registered when the server starts.
+   - **Dynamic Discovery Disabled (Default)**: All tools except `assess-needed-tools` are registered when the server starts.
 
 2. **Tool Assessment**: The LLM client calls `assess-needed-tools` with a list of required tool categories:
    ```json
@@ -269,7 +271,18 @@ The NodeToCode MCP server implements a dynamic tool management system to prevent
 
 5. **Client Refresh**: The client should call `tools/list` again to get the updated tool set.
 
+### Configuration
+
+To enable dynamic tool discovery:
+1. Open Project Settings → Plugins → Node to Code
+2. Under "MCP Server", check "Enable Dynamic Tool Discovery"
+3. Restart the editor for the change to take effect
+
+**Note**: Dynamic tool discovery is only supported by MCP clients that implement the discovery protocol (e.g., VSCode, Cline). Other clients may not work properly with this feature enabled.
+
 ### Available Tool Categories
+
+When using dynamic tool discovery with `assess-needed-tools`, these categories are available:
 
 - **Tool Management**: Tools for managing the available toolset
 - **Blueprint Discovery**: Tools for searching and listing Blueprints, functions, variables, and nodes
@@ -282,6 +295,8 @@ The NodeToCode MCP server implements a dynamic tool management system to prevent
 - **Translation**: Tools for translating Blueprints to code and managing LLM providers
 
 ### Example Workflow
+
+When dynamic tool discovery is enabled:
 
 ```bash
 # 1. Initial connection - only assess-needed-tools is available

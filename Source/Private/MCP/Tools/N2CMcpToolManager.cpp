@@ -153,6 +153,24 @@ void FN2CMcpToolManager::SetDefaultToolSet()
 	FN2CLogger::Get().Log(TEXT("Tool manager set to default toolset (assess-needed-tools only)."), EN2CLogSeverity::Info);
 }
 
+void FN2CMcpToolManager::RegisterAllToolsExceptAssess()
+{
+	FScopeLock Lock(&ToolsLock);
+
+	RegisteredTools.Empty();
+	const auto& AllTools = FN2CMcpToolRegistry::Get().GetTools();
+
+	for (const auto& Tool : AllTools)
+	{
+		if (Tool.IsValid() && Tool->GetDefinition().Name != TEXT("assess-needed-tools"))
+		{
+			RegisterTool(Tool);
+		}
+	}
+	
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Registered all tools except assess-needed-tools. Total tools: %d"), RegisteredTools.Num()), EN2CLogSeverity::Info);
+}
+
 void FN2CMcpToolManager::ClearAllTools()
 {
 	FScopeLock Lock(&ToolsLock);

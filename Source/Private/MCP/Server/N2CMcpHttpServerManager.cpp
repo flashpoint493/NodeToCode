@@ -64,6 +64,24 @@ bool FN2CMcpHttpServerManager::StartServer(int32 Port)
 	});
 	HttpRouter->BindRoute(FHttpPath(TEXT("/mcp/health")), EHttpServerRequestVerbs::VERB_GET, HealthHandler);
 
+	// Register a dummy SSE endpoint to prevent 404s from clients that auto-probe for a default SSE stream.
+	// The official notification stream is advertised via the 'initialize' response's _meta.notificationUrl field.
+	FHttpRequestHandler SseDummyHandler;
+	SseDummyHandler.BindLambda([](const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete) -> bool
+	{
+		FN2CLogger::Get().Log(TEXT("Received probe for default SSE endpoint at /mcp/sse. Responding with 204 No Content."), EN2CLogSeverity::Debug);
+		auto Response = FHttpServerResponse::Create(TEXT(""), TEXT("text/plain"));
+		Response->Code = EHttpServerResponseCodes::NoContent;
+		
+		// Add CORS headers to be safe, as this is a pre-flight like request.
+		Response->Headers.Add(TEXT("Access-Control-Allow-Origin"), { TEXT("*") });
+		Response->Headers.Add(TEXT("Access-Control-Allow-Methods"), { TEXT("GET, OPTIONS") });
+		Response->Headers.Add(TEXT("Access-Control-Allow-Headers"), { TEXT("Content-Type, Mcp-Session-Id") });
+		OnComplete(MoveTemp(Response));
+		return true;
+	});
+	HttpRouter->BindRoute(FHttpPath(TEXT("/mcp/sse")), EHttpServerRequestVerbs::VERB_GET, SseDummyHandler);
+
 	// Start listening
 	HttpServerModule->StartAllListeners();
 
@@ -202,11 +220,20 @@ bool FN2CMcpHttpServerManager::HandleMcpRequest(const FHttpServerRequest& Reques
 				// Check if tool is long-running
 				if (!ToolName.IsEmpty())
 				{
-					const FMcpToolDefinition* ToolDef = FN2CMcpToolManager::Get().GetToolDefinition(ToolName);
-					if (ToolDef && ToolDef->bIsLongRunning)
+					// Since GetToolDefinition returns nullptr, we need to check all definitions
+					TArray<FMcpToolDefinition> AllDefs = FN2CMcpToolManager::Get().GetAllToolDefinitions();
+					for (const auto& Def : AllDefs)
 					{
-						bIsLongRunningTool = true;
-						
+						if (Def.Name == ToolName && Def.bIsLongRunning)
+						{
+							bIsLongRunningTool = true;
+							break;
+						}
+					}
+					
+					
+					if (bIsLongRunningTool)
+					{
 						// Extract arguments
 						const TSharedPtr<FJsonObject>* ArgsObj = nullptr;
 						if ((*ParamsObj)->TryGetObjectField(TEXT("arguments"), ArgsObj) && ArgsObj->IsValid())
@@ -395,8 +422,20 @@ void FN2CMcpHttpServerManager::RegisterMcpTools()
 {
 	FN2CLogger::Get().Log(TEXT("Registering NodeToCode MCP tools"), EN2CLogSeverity::Info);
 
-	// Set the default toolset (only assess-needed-tools)
-	FN2CMcpToolManager::Get().SetDefaultToolSet();
+	// Check the dynamic tool discovery setting
+	const UN2CSettings* Settings = GetDefault<UN2CSettings>();
+	if (Settings && Settings->bEnableDynamicToolDiscovery)
+	{
+		// Set the default toolset (only assess-needed-tools)
+		FN2CMcpToolManager::Get().SetDefaultToolSet();
+		FN2CLogger::Get().Log(TEXT("Dynamic tool discovery enabled - registered assess-needed-tools only"), EN2CLogSeverity::Info);
+	}
+	else
+	{
+		// Register all tools except assess-needed-tools
+		FN2CMcpToolManager::Get().RegisterAllToolsExceptAssess();
+		FN2CLogger::Get().Log(TEXT("Dynamic tool discovery disabled - registered all tools"), EN2CLogSeverity::Info);
+	}
 	
 	FN2CLogger::Get().Log(TEXT("MCP tools registered successfully"), EN2CLogSeverity::Info);
 }
