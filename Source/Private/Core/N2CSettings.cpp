@@ -8,6 +8,12 @@
 #include "IDetailsView.h"
 #include "LLM/N2CLLMModels.h"
 #include "Utils/N2CLogger.h"
+#include "Framework/Notifications/NotificationManager.h"
+#include "Widgets/Notifications/SNotificationList.h"
+
+#if WITH_EDITOR
+#include "UnrealEdMisc.h"
+#endif
 
 #if PLATFORM_WINDOWS
 #include "Windows/WindowsPlatformApplicationMisc.h"
@@ -275,6 +281,12 @@ void UN2CSettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyChanged
         {
             FN2CLogger::Get().SetMinSeverity(MinSeverity);
         }
+        
+        // Show restart notification when bEnableDynamicToolDiscovery changes
+        if (PropertyName == GET_MEMBER_NAME_CHECKED(UN2CSettings, bEnableDynamicToolDiscovery))
+        {
+            ShowRestartEditorNotification();
+        }
 
         // Check for both array changes and changes to FilePath within the struct                                                                                                                         
         const bool bIsFilePathChange = PropertyName == GET_MEMBER_NAME_CHECKED(FFilePath, FilePath);                                                                                              
@@ -388,3 +400,66 @@ const FN2CCodeEditorColors* UN2CSettings::GetThemeColors(EN2CCodeLanguage Langua
 
     return nullptr;
 }
+
+#undef LOCTEXT_NAMESPACE
+
+#if WITH_EDITOR
+void UN2CSettings::ShowRestartEditorNotification()
+{
+    #define LOCTEXT_NAMESPACE "NodeToCode"
+    
+    // Don't show multiple notifications
+    TSharedPtr<SNotificationItem> NotificationPin = RestartNotificationPtr.Pin();
+    if (NotificationPin.IsValid())
+    {
+        return;
+    }
+    
+    FNotificationInfo Info(LOCTEXT("MCPServerRestartRequired", "MCP Server settings changed. Restart the editor to apply changes."));
+    
+    // Add restart button
+    Info.ButtonDetails.Add(FNotificationButtonInfo(
+        LOCTEXT("RestartNow", "Restart Now"),
+        LOCTEXT("RestartNowToolTip", "Restart the editor now to apply the MCP server changes."),
+        FSimpleDelegate::CreateLambda([]()
+        {
+            // Request editor restart
+            FUnrealEdMisc::Get().RestartEditor(false);
+        })
+    ));
+    
+    // Add dismiss button
+    Info.ButtonDetails.Add(FNotificationButtonInfo(
+        LOCTEXT("RestartLater", "Restart Later"),
+        LOCTEXT("RestartLaterToolTip", "Dismiss this notification. The MCP server changes will be applied on next editor restart."),
+        FSimpleDelegate::CreateLambda([this]()
+        {
+            TSharedPtr<SNotificationItem> Notification = RestartNotificationPtr.Pin();
+            if (Notification.IsValid())
+            {
+                Notification->SetCompletionState(SNotificationItem::CS_None);
+                Notification->ExpireAndFadeout();
+                RestartNotificationPtr.Reset();
+            }
+        })
+    ));
+    
+    // Configure notification
+    Info.bFireAndForget = false;
+    Info.WidthOverride = 400.0f;
+    Info.bUseLargeFont = false;
+    Info.bUseThrobber = false;
+    Info.bUseSuccessFailIcons = false;
+    Info.ExpireDuration = 0.0f; // Don't auto-expire
+    
+    // Show notification
+    RestartNotificationPtr = FSlateNotificationManager::Get().AddNotification(Info);
+    TSharedPtr<SNotificationItem> Notification = RestartNotificationPtr.Pin();
+    if (Notification.IsValid())
+    {
+        Notification->SetCompletionState(SNotificationItem::CS_Pending);
+    }
+    
+    #undef LOCTEXT_NAMESPACE
+}
+#endif

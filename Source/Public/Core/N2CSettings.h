@@ -669,4 +669,12 @@ private:
     FProperty* LastEditedProperty;
 
     void InitializePricing();
+    
+#if WITH_EDITOR
+    /** Show a notification that the editor needs to restart */
+    void ShowRestartEditorNotification();
+    
+    /** Weak pointer to the restart notification */
+    TWeakPtr<SNotificationItem> RestartNotificationPtr;
+#endif
 };
