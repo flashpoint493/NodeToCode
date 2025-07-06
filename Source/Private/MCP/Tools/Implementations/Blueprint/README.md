@@ -7,6 +7,9 @@ This directory contains MCP tools for interacting with Blueprint assets in Unrea
 Blueprint tools are organized into the following categories:
 
 - **[Analysis/](Analysis/)** - Tools for inspecting and analyzing Blueprint content
+- **[Classes/](Classes/)** - Tools for discovering and creating Blueprint classes
+- **[Compilation/](Compilation/)** - Tools for compiling and saving Blueprints
+- **[Components/](Components/)** - Tools for managing actor components in Blueprints
 - **[Functions/](Functions/)** - Tools for creating and managing Blueprint functions
 - **[Variables/](Variables/)** - Tools for creating variables and searching variable types
 - **[Graph/](Graph/)** - Tools for manipulating nodes and connections in Blueprint graphs
