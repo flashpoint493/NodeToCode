@@ -92,7 +92,7 @@ namespace NodeToCodeSseServer
         TArray<FString> Lines;
         // Ensure JsonData is parsed correctly as lines, even if it contains newlines itself
         FString TempData = JsonData;
-        TempData.Replace(TEXT("\r\n"), TEXT("\n")); // Normalize newlines
+        TempData = TempData.Replace(TEXT("\r\n"), TEXT("\n")); // Normalize newlines
         TempData.ParseIntoArrayLines(Lines, false); // false to keep empty lines if any
 
         for (const FString& Line : Lines)

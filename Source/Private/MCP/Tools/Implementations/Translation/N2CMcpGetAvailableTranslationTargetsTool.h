@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "MCP/Tools/N2CMcpToolBase.h"
+#include "Code Editor/Models/N2CCodeLanguage.h"
 
 /**
  * MCP tool that returns the list of available programming languages that NodeToCode can translate Blueprints into.
