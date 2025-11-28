@@ -9,15 +9,21 @@
 #include "Misc/Guid.h"
 
 // Include httplib.h here in the .cpp file
+// httplib.h includes Windows headers which define macros that conflict with UE methods
+// We must use Unreal's platform type guards to prevent macro pollution
 #if PLATFORM_WINDOWS
+#include "Windows/AllowWindowsPlatformTypes.h"
 #pragma warning(push)
 // Disable specific warnings httplib.h might trigger
 #pragma warning(disable : 4267) // size_t to int truncation
 #pragma warning(disable : 4244) // conversion from 'X' to 'Y', possible loss of data
 #endif
+
 #include "httplib.h"
+
 #if PLATFORM_WINDOWS
 #pragma warning(pop)
+#include "Windows/HideWindowsPlatformTypes.h"
 #endif
 
 namespace NodeToCodeSseServer
