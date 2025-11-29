@@ -92,6 +92,23 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "NodeToCode|Batch Translation")
 	FOnBatchTranslationProgress OnProgress;
 
+	// ==================== Batch JSON Export (No LLM) ====================
+
+	/**
+	 * Export multiple graphs to JSON files without LLM translation
+	 * Creates individual JSON files and a combined markdown file for easy LLM chat upload
+	 * @param TagInfos Array of tagged graph information to export
+	 * @param Result Output result with paths and statistics
+	 * @param bMinifyJson If true, outputs minified JSON; if false, outputs pretty-printed JSON
+	 * @return True if export completed (check Result for individual failures)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NodeToCode|Batch Export")
+	bool BatchExportJson(const TArray<FN2CTagInfo>& TagInfos, FN2CBatchJsonExportResult& Result, bool bMinifyJson = false);
+
+	/** Delegate fired when batch JSON export completes */
+	UPROPERTY(BlueprintAssignable, Category = "NodeToCode|Batch Export")
+	FOnBatchJsonExportComplete OnJsonExportComplete;
+
 private:
 	/** Process the next pending item in the batch */
 	void ProcessNextItem();
@@ -155,6 +172,13 @@ private:
 
 	/** Ensure a directory exists */
 	bool EnsureDirectoryExists(const FString& DirectoryPath) const;
+
+	/**
+	 * Generate combined markdown file from all successfully exported JSON files
+	 * @param Items The batch items that were processed
+	 * @param OutputPath The directory containing the JSON files
+	 */
+	void GenerateCombinedMarkdown(const TArray<FN2CBatchTranslationItem>& Items, const FString& OutputPath);
 
 	/** Items in the current batch */
 	UPROPERTY()

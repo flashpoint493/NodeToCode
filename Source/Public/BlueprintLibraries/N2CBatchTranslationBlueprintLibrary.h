@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "BlueprintLibraries/N2CTagBlueprintLibrary.h"
+#include "Models/N2CBatchTranslationTypes.h"
 #include "N2CBatchTranslationBlueprintLibrary.generated.h"
 
 class UN2CBatchTranslationOrchestrator;
@@ -96,4 +97,63 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "NodeToCode|Batch Translation",
 		meta = (DisplayName = "Get Batch Orchestrator"))
 	static UN2CBatchTranslationOrchestrator* GetBatchOrchestrator();
+
+	// ==================== Batch JSON Export (No LLM) ====================
+
+	/**
+	 * Export multiple graphs to JSON files without LLM translation
+	 * Creates individual JSON files and a combined markdown file
+	 * @param TaggedGraphs Array of FN2CTagInfo structs identifying graphs to export
+	 * @param bMinifyJson If true, outputs minified JSON; if false, outputs pretty-printed JSON
+	 * @param bSuccess Whether the export completed
+	 * @param Result The export result with paths and statistics
+	 * @param ErrorMessage Error message if the operation failed
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NodeToCode|Batch Export",
+		meta = (DisplayName = "Batch Export JSON", ExpandBoolAsExecs = "bSuccess"))
+	static void BatchExportJson(
+		const TArray<FN2CTagInfo>& TaggedGraphs,
+		bool bMinifyJson,
+		bool& bSuccess,
+		FN2CBatchJsonExportResult& Result,
+		FString& ErrorMessage
+	);
+
+	/**
+	 * Export all graphs with a specific tag to JSON
+	 * @param Tag The tag name to match
+	 * @param OptionalCategory Optional category filter (empty for all)
+	 * @param bMinifyJson If true, outputs minified JSON; if false, outputs pretty-printed JSON
+	 * @param bSuccess Whether the export completed
+	 * @param Result The export result with paths and statistics
+	 * @param ErrorMessage Error message if the operation failed
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NodeToCode|Batch Export",
+		meta = (DisplayName = "Export Graphs With Tag To JSON", ExpandBoolAsExecs = "bSuccess"))
+	static void ExportGraphsWithTagToJson(
+		const FString& Tag,
+		const FString& OptionalCategory,
+		bool bMinifyJson,
+		bool& bSuccess,
+		FN2CBatchJsonExportResult& Result,
+		FString& ErrorMessage
+	);
+
+	/**
+	 * Export all graphs in a specific category to JSON
+	 * @param Category The category name
+	 * @param bMinifyJson If true, outputs minified JSON; if false, outputs pretty-printed JSON
+	 * @param bSuccess Whether the export completed
+	 * @param Result The export result with paths and statistics
+	 * @param ErrorMessage Error message if the operation failed
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NodeToCode|Batch Export",
+		meta = (DisplayName = "Export Graphs In Category To JSON", ExpandBoolAsExecs = "bSuccess"))
+	static void ExportGraphsInCategoryToJson(
+		const FString& Category,
+		bool bMinifyJson,
+		bool& bSuccess,
+		FN2CBatchJsonExportResult& Result,
+		FString& ErrorMessage
+	);
 };

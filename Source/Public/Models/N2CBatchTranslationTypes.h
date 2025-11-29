@@ -142,3 +142,52 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 	int32, TotalCount,
 	const FString&, CurrentGraphName
 );
+
+/**
+ * @struct FN2CBatchJsonExportResult
+ * @brief Summary result of a batch JSON export operation (no LLM translation)
+ */
+USTRUCT(BlueprintType)
+struct NODETOCODE_API FN2CBatchJsonExportResult
+{
+	GENERATED_BODY()
+
+	/** Total number of items in the export */
+	UPROPERTY(BlueprintReadOnly, Category = "NodeToCode|Batch Export")
+	int32 TotalCount = 0;
+
+	/** Number of successfully exported items */
+	UPROPERTY(BlueprintReadOnly, Category = "NodeToCode|Batch Export")
+	int32 SuccessCount = 0;
+
+	/** Number of failed items */
+	UPROPERTY(BlueprintReadOnly, Category = "NodeToCode|Batch Export")
+	int32 FailureCount = 0;
+
+	/** Path to the batch output directory */
+	UPROPERTY(BlueprintReadOnly, Category = "NodeToCode|Batch Export")
+	FString OutputPath;
+
+	/** Path to the combined markdown file */
+	UPROPERTY(BlueprintReadOnly, Category = "NodeToCode|Batch Export")
+	FString CombinedMarkdownPath;
+
+	/** Names of graphs that failed to export */
+	UPROPERTY(BlueprintReadOnly, Category = "NodeToCode|Batch Export")
+	TArray<FString> FailedGraphNames;
+
+	/** Total time taken for the export in seconds */
+	UPROPERTY(BlueprintReadOnly, Category = "NodeToCode|Batch Export")
+	float TotalTimeSeconds = 0.0f;
+
+	FN2CBatchJsonExportResult() = default;
+};
+
+/**
+ * Batch JSON export completion delegate
+ * @param Result The final export result with paths and statistics
+ */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FOnBatchJsonExportComplete,
+	const FN2CBatchJsonExportResult&, Result
+);

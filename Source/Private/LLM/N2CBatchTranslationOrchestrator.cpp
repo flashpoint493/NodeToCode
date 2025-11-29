@@ -738,3 +738,405 @@ bool UN2CBatchTranslationOrchestrator::EnsureDirectoryExists(const FString& Dire
 	}
 	return true;
 }
+
+// ==================== Batch JSON Export (No LLM) ====================
+
+bool UN2CBatchTranslationOrchestrator::BatchExportJson(
+	const TArray<FN2CTagInfo>& TagInfos,
+	FN2CBatchJsonExportResult& Result,
+	bool bMinifyJson)
+{
+	Result = FN2CBatchJsonExportResult();
+
+	// Validate input
+	if (TagInfos.IsEmpty())
+	{
+		FN2CLogger::Get().LogError(TEXT("Cannot export with empty TagInfos array"), TEXT("BatchOrchestrator"));
+		return false;
+	}
+
+	// Check if batch translation is in progress (don't overlap)
+	if (bBatchInProgress)
+	{
+		FN2CLogger::Get().LogWarning(TEXT("A batch translation is in progress, cannot start JSON export"), TEXT("BatchOrchestrator"));
+		return false;
+	}
+
+	double StartTime = FPlatformTime::Seconds();
+
+	// Prepare items for export
+	TArray<FN2CBatchTranslationItem> ExportItems;
+	for (const FN2CTagInfo& TagInfo : TagInfos)
+	{
+		FN2CBatchTranslationItem Item;
+		Item.TagInfo = TagInfo;
+		Item.Status = EN2CBatchItemStatus::Pending;
+		ExportItems.Add(Item);
+	}
+	Result.TotalCount = ExportItems.Num();
+
+	FN2CLogger::Get().Log(
+		FString::Printf(TEXT("Starting batch JSON export with %d items"), ExportItems.Num()),
+		EN2CLogSeverity::Info, TEXT("BatchOrchestrator"));
+
+	// Create output directory with timestamp
+	FDateTime Now = FDateTime::Now();
+	FString Timestamp = Now.ToString(TEXT("%Y-%m-%d-%H.%M.%S"));
+	FString OutputPath = GetTranslationBasePath() / FString::Printf(TEXT("BatchJson_%s"), *Timestamp);
+
+	if (!EnsureDirectoryExists(OutputPath))
+	{
+		FN2CLogger::Get().LogError(
+			FString::Printf(TEXT("Failed to create output directory: %s"), *OutputPath),
+			TEXT("BatchOrchestrator"));
+		return false;
+	}
+	Result.OutputPath = OutputPath;
+
+	// Clear and prepare blueprint cache
+	TMap<FString, TWeakObjectPtr<UBlueprint>> LocalBlueprintCache;
+
+	// Process each item synchronously
+	for (FN2CBatchTranslationItem& Item : ExportItems)
+	{
+		// Load blueprint (using cache if already loaded)
+		UBlueprint* Blueprint = nullptr;
+		if (TWeakObjectPtr<UBlueprint>* CachedBP = LocalBlueprintCache.Find(Item.TagInfo.BlueprintPath))
+		{
+			Blueprint = CachedBP->Get();
+		}
+		else
+		{
+			Blueprint = LoadBlueprintFromPath(Item.TagInfo.BlueprintPath);
+			if (Blueprint)
+			{
+				LocalBlueprintCache.Add(Item.TagInfo.BlueprintPath, Blueprint);
+			}
+		}
+
+		if (!Blueprint)
+		{
+			Item.Status = EN2CBatchItemStatus::Failed;
+			Item.ErrorMessage = TEXT("Failed to load blueprint");
+			Result.FailureCount++;
+			Result.FailedGraphNames.Add(Item.TagInfo.GraphName);
+			FN2CLogger::Get().LogError(
+				FString::Printf(TEXT("Failed to load blueprint: %s"), *Item.TagInfo.BlueprintPath),
+				TEXT("BatchOrchestrator"));
+			continue;
+		}
+
+		Item.CachedBlueprint = Blueprint;
+
+		// Parse and find graph by GUID
+		FGuid GraphGuid;
+		if (!FGuid::Parse(Item.TagInfo.GraphGuid, GraphGuid) || !GraphGuid.IsValid())
+		{
+			Item.Status = EN2CBatchItemStatus::Failed;
+			Item.ErrorMessage = TEXT("Invalid graph GUID");
+			Result.FailureCount++;
+			Result.FailedGraphNames.Add(Item.TagInfo.GraphName);
+			FN2CLogger::Get().LogError(
+				FString::Printf(TEXT("Invalid graph GUID: %s"), *Item.TagInfo.GraphGuid),
+				TEXT("BatchOrchestrator"));
+			continue;
+		}
+
+		UEdGraph* Graph = FindGraphByGuid(Blueprint, GraphGuid);
+		if (!Graph)
+		{
+			Item.Status = EN2CBatchItemStatus::Failed;
+			Item.ErrorMessage = TEXT("Graph not found");
+			Result.FailureCount++;
+			Result.FailedGraphNames.Add(Item.TagInfo.GraphName);
+			FN2CLogger::Get().LogError(
+				FString::Printf(TEXT("Graph not found with GUID: %s"), *Item.TagInfo.GraphGuid),
+				TEXT("BatchOrchestrator"));
+			continue;
+		}
+
+		Item.CachedGraph = Graph;
+
+		// Collect nodes from the graph
+		TArray<UK2Node*> CollectedNodes;
+		if (!FN2CNodeCollector::Get().CollectNodesFromGraph(Graph, CollectedNodes) || CollectedNodes.IsEmpty())
+		{
+			Item.Status = EN2CBatchItemStatus::Failed;
+			Item.ErrorMessage = TEXT("Failed to collect nodes");
+			Result.FailureCount++;
+			Result.FailedGraphNames.Add(Item.TagInfo.GraphName);
+			FN2CLogger::Get().LogError(
+				FString::Printf(TEXT("Failed to collect nodes from graph: %s"), *Item.TagInfo.GraphName),
+				TEXT("BatchOrchestrator"));
+			continue;
+		}
+
+		// Translate to N2CBlueprint structure
+		FN2CNodeTranslator& Translator = FN2CNodeTranslator::Get();
+		if (!Translator.GenerateN2CStruct(CollectedNodes))
+		{
+			Item.Status = EN2CBatchItemStatus::Failed;
+			Item.ErrorMessage = TEXT("Failed to serialize");
+			Result.FailureCount++;
+			Result.FailedGraphNames.Add(Item.TagInfo.GraphName);
+			FN2CLogger::Get().LogError(
+				FString::Printf(TEXT("Failed to generate N2CStruct for: %s"), *Item.TagInfo.GraphName),
+				TEXT("BatchOrchestrator"));
+			continue;
+		}
+
+		// Serialize with formatting based on minify option
+		FN2CSerializer::SetPrettyPrint(!bMinifyJson);
+		FString JsonOutput = FN2CSerializer::ToJson(Translator.GetN2CBlueprint());
+
+		if (JsonOutput.IsEmpty())
+		{
+			Item.Status = EN2CBatchItemStatus::Failed;
+			Item.ErrorMessage = TEXT("Failed to serialize to JSON");
+			Result.FailureCount++;
+			Result.FailedGraphNames.Add(Item.TagInfo.GraphName);
+			continue;
+		}
+
+		// Save individual JSON file
+		FString SafeGraphName = Item.TagInfo.GraphName.Replace(TEXT("/"), TEXT("_")).Replace(TEXT("\\"), TEXT("_"));
+		FString JsonPath = OutputPath / FString::Printf(TEXT("%s.json"), *SafeGraphName);
+
+		if (FFileHelper::SaveStringToFile(JsonOutput, *JsonPath))
+		{
+			Item.Status = EN2CBatchItemStatus::Completed;
+			Result.SuccessCount++;
+			FN2CLogger::Get().Log(
+				FString::Printf(TEXT("Exported: %s"), *SafeGraphName),
+				EN2CLogSeverity::Info, TEXT("BatchOrchestrator"));
+		}
+		else
+		{
+			Item.Status = EN2CBatchItemStatus::Failed;
+			Item.ErrorMessage = TEXT("Failed to save file");
+			Result.FailureCount++;
+			Result.FailedGraphNames.Add(Item.TagInfo.GraphName);
+			FN2CLogger::Get().LogError(
+				FString::Printf(TEXT("Failed to save JSON file: %s"), *JsonPath),
+				TEXT("BatchOrchestrator"));
+		}
+	}
+
+	// Generate combined markdown file
+	GenerateCombinedMarkdown(ExportItems, OutputPath);
+	Result.CombinedMarkdownPath = OutputPath / TEXT("Combined_Blueprints.md");
+
+	// Calculate duration
+	Result.TotalTimeSeconds = static_cast<float>(FPlatformTime::Seconds() - StartTime);
+
+	FN2CLogger::Get().Log(
+		FString::Printf(TEXT("Batch JSON export complete. Success: %d, Failed: %d, Time: %.2fs"),
+			Result.SuccessCount, Result.FailureCount, Result.TotalTimeSeconds),
+		EN2CLogSeverity::Info, TEXT("BatchOrchestrator"));
+
+	// Broadcast completion
+	OnJsonExportComplete.Broadcast(Result);
+
+	return true;
+}
+
+void UN2CBatchTranslationOrchestrator::GenerateCombinedMarkdown(
+	const TArray<FN2CBatchTranslationItem>& Items,
+	const FString& OutputPath)
+{
+	FString MarkdownContent;
+
+	// Header
+	MarkdownContent += TEXT("# Combined Blueprint JSON Export\n\n");
+	MarkdownContent += FString::Printf(TEXT("Generated: %s\n\n"), *FDateTime::Now().ToString());
+	MarkdownContent += TEXT("This document contains serialized Unreal Engine Blueprint graphs in the NodeToCode JSON format. ");
+	MarkdownContent += TEXT("Each graph represents visual scripting logic that can be understood and translated to code.\n\n");
+	MarkdownContent += TEXT("---\n\n");
+
+	// NodeToCode JSON Specification
+	MarkdownContent += TEXT("## NodeToCode JSON Format Specification\n\n");
+	MarkdownContent += TEXT("The JSON format below (\"N2C JSON\") represents Unreal Engine Blueprint graphs as structured data. ");
+	MarkdownContent += TEXT("This format captures the complete logic of Blueprint visual scripts including nodes, pins, connections, and execution flow.\n\n");
+
+	MarkdownContent += TEXT("### Understanding the Format\n\n");
+	MarkdownContent += TEXT("**Blueprints** in Unreal Engine are visual scripting assets that contain one or more **graphs**. ");
+	MarkdownContent += TEXT("Each graph contains **nodes** (representing operations like function calls, variable access, or flow control) ");
+	MarkdownContent += TEXT("connected by **pins** (typed input/output connectors). The N2C JSON preserves this structure:\n\n");
+	MarkdownContent += TEXT("- **Execution Flow**: Nodes connected via `Exec` pins run sequentially. The `flows.execution` array shows this order (e.g., `N1->N2->N3`).\n");
+	MarkdownContent += TEXT("- **Data Flow**: Data passes between nodes via typed pins. The `flows.data` map shows these connections (e.g., `N1.P2` connects to `N2.P1`).\n");
+	MarkdownContent += TEXT("- **Node Types**: Each node has a `type` indicating its purpose (CallFunction, VariableGet, VariableSet, Event, Branch, ForLoop, etc.).\n");
+	MarkdownContent += TEXT("- **Pin Types**: Pins have types like Exec, Boolean, Integer, Float, String, Object, Struct, etc.\n\n");
+
+	MarkdownContent += TEXT("### JSON Structure Reference\n\n");
+	MarkdownContent += TEXT("```json\n");
+	MarkdownContent += TEXT("{\n");
+	MarkdownContent += TEXT("  \"version\": \"1.0.0\",\n");
+	MarkdownContent += TEXT("  \"metadata\": {\n");
+	MarkdownContent += TEXT("    \"Name\": \"BlueprintName\",\n");
+	MarkdownContent += TEXT("    \"BlueprintType\": \"Normal | Const | MacroLibrary | Interface | LevelScript | FunctionLibrary\",\n");
+	MarkdownContent += TEXT("    \"BlueprintClass\": \"ClassName\"\n");
+	MarkdownContent += TEXT("  },\n");
+	MarkdownContent += TEXT("  \"graphs\": [\n");
+	MarkdownContent += TEXT("    {\n");
+	MarkdownContent += TEXT("      \"name\": \"GraphName\",\n");
+	MarkdownContent += TEXT("      \"graph_type\": \"Function | EventGraph | Macro | Composite | Construction\",\n");
+	MarkdownContent += TEXT("      \"nodes\": [\n");
+	MarkdownContent += TEXT("        {\n");
+	MarkdownContent += TEXT("          \"id\": \"N1\",\n");
+	MarkdownContent += TEXT("          \"type\": \"CallFunction | VariableGet | VariableSet | Event | Branch | ...\",\n");
+	MarkdownContent += TEXT("          \"name\": \"Node Display Name\",\n");
+	MarkdownContent += TEXT("          \"member_parent\": \"OwningClass (optional)\",\n");
+	MarkdownContent += TEXT("          \"member_name\": \"FunctionOrVariableName (optional)\",\n");
+	MarkdownContent += TEXT("          \"pure\": false,\n");
+	MarkdownContent += TEXT("          \"latent\": false,\n");
+	MarkdownContent += TEXT("          \"input_pins\": [...],\n");
+	MarkdownContent += TEXT("          \"output_pins\": [...]\n");
+	MarkdownContent += TEXT("        }\n");
+	MarkdownContent += TEXT("      ],\n");
+	MarkdownContent += TEXT("      \"flows\": {\n");
+	MarkdownContent += TEXT("        \"execution\": [\"N1->N2->N3\"],\n");
+	MarkdownContent += TEXT("        \"data\": { \"N1.P2\": \"N2.P1\" }\n");
+	MarkdownContent += TEXT("      }\n");
+	MarkdownContent += TEXT("    }\n");
+	MarkdownContent += TEXT("  ],\n");
+	MarkdownContent += TEXT("  \"structs\": [...],\n");
+	MarkdownContent += TEXT("  \"enums\": [...]\n");
+	MarkdownContent += TEXT("}\n");
+	MarkdownContent += TEXT("```\n\n");
+
+	MarkdownContent += TEXT("### Pin Object Structure\n\n");
+	MarkdownContent += TEXT("Each pin in `input_pins` or `output_pins` has:\n\n");
+	MarkdownContent += TEXT("| Field | Description |\n");
+	MarkdownContent += TEXT("|-------|-------------|\n");
+	MarkdownContent += TEXT("| `id` | Pin identifier (e.g., \"P1\") |\n");
+	MarkdownContent += TEXT("| `name` | Display name of the pin |\n");
+	MarkdownContent += TEXT("| `type` | Pin type: Exec, Boolean, Integer, Float, String, Object, Struct, etc. |\n");
+	MarkdownContent += TEXT("| `sub_type` | Additional type info (e.g., struct/class name) |\n");
+	MarkdownContent += TEXT("| `default_value` | Literal value if not connected |\n");
+	MarkdownContent += TEXT("| `connected` | Whether this pin is linked to another |\n");
+	MarkdownContent += TEXT("| `is_reference` | Passed by reference |\n");
+	MarkdownContent += TEXT("| `is_array`, `is_map`, `is_set` | Container type flags |\n\n");
+
+	MarkdownContent += TEXT("### Common Node Types\n\n");
+	MarkdownContent += TEXT("| Type | Description |\n");
+	MarkdownContent += TEXT("|------|-------------|\n");
+	MarkdownContent += TEXT("| `Event` | Entry point (BeginPlay, Tick, custom events) |\n");
+	MarkdownContent += TEXT("| `CallFunction` | Function call on an object or static library |\n");
+	MarkdownContent += TEXT("| `VariableGet` | Read a variable value |\n");
+	MarkdownContent += TEXT("| `VariableSet` | Write a variable value |\n");
+	MarkdownContent += TEXT("| `Branch` | If/else conditional |\n");
+	MarkdownContent += TEXT("| `Sequence` | Execute multiple paths in order |\n");
+	MarkdownContent += TEXT("| `ForLoop` | For loop with index |\n");
+	MarkdownContent += TEXT("| `ForEachLoop` | Iterate over array elements |\n");
+	MarkdownContent += TEXT("| `Cast` | Type cast to specific class |\n");
+	MarkdownContent += TEXT("| `MakeStruct` | Construct a struct value |\n");
+	MarkdownContent += TEXT("| `BreakStruct` | Extract struct members |\n\n");
+
+	MarkdownContent += TEXT("---\n\n");
+
+	// Blueprint Structure Overview
+	MarkdownContent += TEXT("## Blueprint Structure Overview\n\n");
+	MarkdownContent += TEXT("The following Blueprint assets and their graphs are included in this export:\n\n");
+
+	// Group items by blueprint path
+	TMap<FString, TArray<const FN2CBatchTranslationItem*>> BlueprintGroups;
+	for (const FN2CBatchTranslationItem& Item : Items)
+	{
+		if (Item.Status == EN2CBatchItemStatus::Completed)
+		{
+			BlueprintGroups.FindOrAdd(Item.TagInfo.BlueprintPath).Add(&Item);
+		}
+	}
+
+	// Output hierarchical structure
+	for (const auto& Pair : BlueprintGroups)
+	{
+		// Extract just the asset name from the full path
+		FString AssetName = FPaths::GetBaseFilename(Pair.Key);
+		MarkdownContent += FString::Printf(TEXT("### `%s`\n\n"), *AssetName);
+		MarkdownContent += FString::Printf(TEXT("**Asset Path:** `%s`\n\n"), *Pair.Key);
+		MarkdownContent += TEXT("**Graphs:**\n");
+		for (const FN2CBatchTranslationItem* Item : Pair.Value)
+		{
+			FString AnchorName = Item->TagInfo.GraphName.ToLower().Replace(TEXT(" "), TEXT("-"));
+			MarkdownContent += FString::Printf(TEXT("- [%s](#%s)"),
+				*Item->TagInfo.GraphName,
+				*AnchorName);
+			if (!Item->TagInfo.Tag.IsEmpty())
+			{
+				MarkdownContent += FString::Printf(TEXT(" *(Tag: %s)*"), *Item->TagInfo.Tag);
+			}
+			MarkdownContent += TEXT("\n");
+		}
+		MarkdownContent += TEXT("\n");
+	}
+	MarkdownContent += TEXT("---\n\n");
+
+	// Table of contents for graphs
+	MarkdownContent += TEXT("## Graph Contents\n\n");
+	for (const FN2CBatchTranslationItem& Item : Items)
+	{
+		if (Item.Status == EN2CBatchItemStatus::Completed)
+		{
+			FString AnchorName = Item.TagInfo.GraphName.ToLower().Replace(TEXT(" "), TEXT("-"));
+			MarkdownContent += FString::Printf(TEXT("- [%s](#%s)\n"),
+				*Item.TagInfo.GraphName,
+				*AnchorName);
+		}
+	}
+	MarkdownContent += TEXT("\n---\n\n");
+
+	// Each graph's JSON
+	for (const FN2CBatchTranslationItem& Item : Items)
+	{
+		if (Item.Status != EN2CBatchItemStatus::Completed)
+		{
+			continue;
+		}
+
+		// Section header with blueprint and graph name
+		MarkdownContent += FString::Printf(TEXT("## %s\n\n"), *Item.TagInfo.GraphName);
+		MarkdownContent += FString::Printf(TEXT("**Blueprint:** `%s`\n\n"), *Item.TagInfo.BlueprintPath);
+
+		if (!Item.TagInfo.Tag.IsEmpty() || !Item.TagInfo.Category.IsEmpty())
+		{
+			MarkdownContent += FString::Printf(TEXT("**Tag:** %s | **Category:** %s\n\n"),
+				*Item.TagInfo.Tag,
+				*Item.TagInfo.Category);
+		}
+
+		// Read the JSON file we saved
+		FString SafeGraphName = Item.TagInfo.GraphName.Replace(TEXT("/"), TEXT("_")).Replace(TEXT("\\"), TEXT("_"));
+		FString JsonPath = OutputPath / FString::Printf(TEXT("%s.json"), *SafeGraphName);
+		FString JsonContent;
+
+		if (FFileHelper::LoadFileToString(JsonContent, *JsonPath))
+		{
+			// JSON code block
+			MarkdownContent += TEXT("```json\n");
+			MarkdownContent += JsonContent;
+			MarkdownContent += TEXT("\n```\n\n");
+		}
+		else
+		{
+			MarkdownContent += TEXT("*Failed to load JSON content*\n\n");
+		}
+
+		MarkdownContent += TEXT("---\n\n");
+	}
+
+	// Save combined markdown
+	FString MarkdownPath = OutputPath / TEXT("Combined_Blueprints.md");
+	if (!FFileHelper::SaveStringToFile(MarkdownContent, *MarkdownPath))
+	{
+		FN2CLogger::Get().LogWarning(
+			FString::Printf(TEXT("Failed to save combined markdown: %s"), *MarkdownPath),
+			TEXT("BatchOrchestrator"));
+	}
+	else
+	{
+		FN2CLogger::Get().Log(
+			FString::Printf(TEXT("Generated combined markdown: %s"), *MarkdownPath),
+			EN2CLogSeverity::Info, TEXT("BatchOrchestrator"));
+	}
+}
