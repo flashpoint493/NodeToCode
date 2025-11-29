@@ -1,0 +1,187 @@
+// Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "UObject/NoExportTypes.h"
+#include "Models/N2CBatchTranslationTypes.h"
+#include "N2CBatchTranslationOrchestrator.generated.h"
+
+class UBlueprint;
+class UEdGraph;
+
+/**
+ * @class UN2CBatchTranslationOrchestrator
+ * @brief Manages batch translation of multiple Blueprint graphs from FN2CTagInfo arrays
+ *
+ * This class orchestrates sequential translation of multiple graphs, managing:
+ * - Blueprint loading and caching
+ * - Graph resolution by GUID
+ * - Sequential LLM translation requests
+ * - Progress tracking and cancellation
+ * - Batch output file generation
+ */
+UCLASS(BlueprintType)
+class NODETOCODE_API UN2CBatchTranslationOrchestrator : public UObject
+{
+	GENERATED_BODY()
+
+public:
+	/** Get the singleton instance */
+	static UN2CBatchTranslationOrchestrator& Get();
+
+	/**
+	 * Start a batch translation operation
+	 * @param TagInfos Array of tagged graph information to translate
+	 * @return True if batch started successfully, false if already in progress or invalid input
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NodeToCode|Batch Translation")
+	bool StartBatchTranslation(const TArray<FN2CTagInfo>& TagInfos);
+
+	/**
+	 * Cancel the current batch translation
+	 * Remaining items will be marked as Skipped
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NodeToCode|Batch Translation")
+	void CancelBatch();
+
+	/**
+	 * Check if a batch translation is currently in progress
+	 * @return True if batch is running
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "NodeToCode|Batch Translation")
+	bool IsBatchInProgress() const { return bBatchInProgress; }
+
+	/**
+	 * Get the current batch progress as a percentage (0.0 - 1.0)
+	 * @return Progress percentage
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "NodeToCode|Batch Translation")
+	float GetBatchProgress() const;
+
+	/**
+	 * Get the current item index being processed
+	 * @return Current item index, or -1 if not processing
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "NodeToCode|Batch Translation")
+	int32 GetCurrentItemIndex() const { return CurrentItemIndex; }
+
+	/**
+	 * Get the total number of items in the current batch
+	 * @return Total item count
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "NodeToCode|Batch Translation")
+	int32 GetTotalItemCount() const { return BatchItems.Num(); }
+
+	/**
+	 * Get the current batch result (may be partial if in progress)
+	 * @return Current batch result
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "NodeToCode|Batch Translation")
+	const FN2CBatchTranslationResult& GetCurrentResult() const { return CurrentResult; }
+
+	/** Delegate fired when each item completes translation */
+	UPROPERTY(BlueprintAssignable, Category = "NodeToCode|Batch Translation")
+	FOnBatchItemTranslationComplete OnItemComplete;
+
+	/** Delegate fired when the entire batch completes */
+	UPROPERTY(BlueprintAssignable, Category = "NodeToCode|Batch Translation")
+	FOnBatchTranslationComplete OnBatchComplete;
+
+	/** Delegate fired for progress updates */
+	UPROPERTY(BlueprintAssignable, Category = "NodeToCode|Batch Translation")
+	FOnBatchTranslationProgress OnProgress;
+
+private:
+	/** Process the next pending item in the batch */
+	void ProcessNextItem();
+
+	/** Handle translation response from LLM module - must be UFUNCTION for dynamic delegate */
+	UFUNCTION()
+	void HandleTranslationResponse(const FN2CTranslationResponse& Response, bool bSuccess);
+
+	/** Finalize the batch and broadcast completion */
+	void FinalizeBatch();
+
+	/** Clean up resources after batch completes */
+	void CleanupBatch();
+
+	/**
+	 * Resolve all blueprints and graphs from TagInfos
+	 * @return True if at least one item was successfully resolved
+	 */
+	bool ResolveBlueprintsAndGraphs();
+
+	/**
+	 * Load a blueprint from a soft object path
+	 * @param BlueprintPath Path to the blueprint asset
+	 * @return Loaded blueprint or nullptr
+	 */
+	UBlueprint* LoadBlueprintFromPath(const FString& BlueprintPath);
+
+	/**
+	 * Find a graph within a blueprint by its GUID
+	 * @param Blueprint The blueprint to search
+	 * @param GraphGuid The GUID of the graph to find
+	 * @return The graph if found, nullptr otherwise
+	 */
+	UEdGraph* FindGraphByGuid(UBlueprint* Blueprint, const FGuid& GraphGuid);
+
+	/**
+	 * Collect nodes from a graph and serialize to JSON
+	 * @param Graph The graph to process
+	 * @param Blueprint The owning blueprint
+	 * @return JSON string, empty on failure
+	 */
+	FString CollectAndSerializeGraph(UEdGraph* Graph, UBlueprint* Blueprint);
+
+	/** Create the batch output directory */
+	void CreateBatchOutputDirectory();
+
+	/**
+	 * Save translation files for a completed item
+	 * @param Item The completed item to save
+	 */
+	void SaveItemTranslation(const FN2CBatchTranslationItem& Item);
+
+	/** Generate the batch summary JSON file */
+	void GenerateBatchSummary();
+
+	/** Get the base path for translations */
+	FString GetTranslationBasePath() const;
+
+	/** Get file extension for current target language */
+	FString GetFileExtensionForLanguage() const;
+
+	/** Ensure a directory exists */
+	bool EnsureDirectoryExists(const FString& DirectoryPath) const;
+
+	/** Items in the current batch */
+	UPROPERTY()
+	TArray<FN2CBatchTranslationItem> BatchItems;
+
+	/** Cache of loaded blueprints by path */
+	TMap<FString, TWeakObjectPtr<UBlueprint>> BlueprintCache;
+
+	/** Current item index being processed */
+	int32 CurrentItemIndex = -1;
+
+	/** Whether a batch is currently in progress */
+	bool bBatchInProgress = false;
+
+	/** Whether cancellation has been requested */
+	bool bCancellationRequested = false;
+
+	/** Path to the batch output directory */
+	FString BatchOutputPath;
+
+	/** Time when the batch started */
+	double BatchStartTime = 0.0;
+
+	/** Current accumulated result */
+	UPROPERTY()
+	FN2CBatchTranslationResult CurrentResult;
+
+	/** Whether we are bound to the LLM module's response delegate */
+	bool bIsBoundToLLMModule = false;
+};
