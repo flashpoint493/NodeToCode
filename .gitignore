@@ -91,3 +91,4 @@ CLAUDE.md
 *.sh
 *.ps1
 /BuildLogs
+/Documentation
