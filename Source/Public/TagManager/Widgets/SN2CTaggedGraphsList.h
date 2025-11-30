@@ -7,6 +7,7 @@
 #include "Widgets/Views/SListView.h"
 #include "Widgets/Views/SHeaderRow.h"
 #include "TagManager/Models/N2CTagManagerTypes.h"
+#include "TagManager/Widgets/SN2CGraphListRow.h"
 
 /**
  * Slate widget for displaying tagged graphs in a list/table view
@@ -83,15 +84,8 @@ private:
 	/** Generate a row for the list view */
 	TSharedRef<ITableRow> OnGenerateRow(TSharedPtr<FN2CGraphListItem> Item, const TSharedRef<STableViewBase>& OwnerTable);
 
-	/** Handle checkbox state change */
-	void OnCheckboxChanged(ECheckBoxState NewState, TSharedPtr<FN2CGraphListItem> Item);
-
 	/** Handle select-all checkbox */
 	void OnSelectAllChanged(ECheckBoxState NewState);
-
-
-	/** Handle row double-click */
-	void OnRowDoubleClicked(TSharedPtr<FN2CGraphListItem> Item);
 
 	/** Get checkbox state for select-all */
 	ECheckBoxState GetSelectAllCheckboxState() const;
@@ -108,14 +102,21 @@ private:
 	/** Update selection count display */
 	void UpdateSelectionDisplay();
 
-	/** Handle translate button click */
-	FReply OnTranslateClicked(TSharedPtr<FN2CGraphListItem> Item);
+	// Row widget callbacks
+	/** Handle checkbox change from row widget */
+	void HandleRowCheckboxChanged(TSharedPtr<FN2CGraphListItem> Item);
 
-	/** Handle JSON export button click */
-	FReply OnJsonExportClicked(TSharedPtr<FN2CGraphListItem> Item);
+	/** Handle translate button click from row widget */
+	void HandleRowTranslateClicked(TSharedPtr<FN2CGraphListItem> Item);
 
-	/** Handle view translation button click */
-	FReply OnViewTranslationClicked(TSharedPtr<FN2CGraphListItem> Item);
+	/** Handle JSON export button click from row widget */
+	void HandleRowJsonExportClicked(TSharedPtr<FN2CGraphListItem> Item);
+
+	/** Handle view translation button click from row widget */
+	void HandleRowViewTranslationClicked(TSharedPtr<FN2CGraphListItem> Item);
+
+	/** Handle double-click from row widget */
+	void HandleRowDoubleClicked(TSharedPtr<FN2CGraphListItem> Item);
 
 	/** The list view widget */
 	TSharedPtr<SListView<TSharedPtr<FN2CGraphListItem>>> ListView;
@@ -146,9 +147,6 @@ private:
 
 	/** Last graph for which view translation was requested */
 	FN2CTagInfo LastViewTranslationRequestedGraph;
-
-	/** Currently hovered item (for showing action buttons) */
-	TWeakPtr<FN2CGraphListItem> HoveredItem;
 
 	/** Column IDs */
 	static const FName Column_Checkbox;

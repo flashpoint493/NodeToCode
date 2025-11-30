@@ -60,7 +60,7 @@ void SN2CTaggedGraphsList::Construct(const FArguments& InArgs)
 		// Header path display
 		+ SVerticalBox::Slot()
 		.AutoHeight()
-		.Padding(8.0f, 4.0f)
+		.Padding(0.0f, 4.0f)
 		[
 			SNew(SBorder)
 			.BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
@@ -82,7 +82,6 @@ void SN2CTaggedGraphsList::Construct(const FArguments& InArgs)
 				SAssignNew(ListView, SListView<TSharedPtr<FN2CGraphListItem>>)
 				.ListItemsSource(&FilteredItems)
 				.OnGenerateRow(this, &SN2CTaggedGraphsList::OnGenerateRow)
-				.OnMouseButtonDoubleClick(this, &SN2CTaggedGraphsList::OnRowDoubleClicked)
 				.SelectionMode(ESelectionMode::None) // We handle selection via checkboxes
 				.HeaderRow(HeaderRow)
 			]
@@ -209,137 +208,29 @@ FN2CTagInfo SN2CTaggedGraphsList::GetViewTranslationRequestedGraph() const
 
 TSharedRef<ITableRow> SN2CTaggedGraphsList::OnGenerateRow(TSharedPtr<FN2CGraphListItem> Item, const TSharedRef<STableViewBase>& OwnerTable)
 {
-	// Capture Item by value for lambdas to ensure it stays valid
-	TSharedPtr<FN2CGraphListItem> ItemCopy = Item;
-
 	return SNew(STableRow<TSharedPtr<FN2CGraphListItem>>, OwnerTable)
 		.Style(&FAppStyle::Get().GetWidgetStyle<FTableRowStyle>("TableView.Row"))
+		.Padding(0)
 		[
-			SNew(SBorder)
-			.BorderImage(FAppStyle::GetBrush("NoBorder"))
-			// Use lambda for dynamic background color based on selection state
-			.BorderBackgroundColor_Lambda([ItemCopy]()
-			{
-				return ItemCopy->bIsSelected
-					? FSlateColor(FLinearColor(0.83f, 0.63f, 0.29f, 0.15f)) // Subtle orange for selected
-					: FSlateColor(FLinearColor::Transparent);
-			})
-			.Padding(FMargin(0.0f, 2.0f))
-			[
-				SNew(SHorizontalBox)
-				// Checkbox column
-				+ SHorizontalBox::Slot()
-				.AutoWidth()
-				.HAlign(HAlign_Center)
-				.VAlign(VAlign_Center)
-				.Padding(4.0f, 0.0f)
-				[
-					SNew(SBox)
-					.WidthOverride(22.0f)
-					[
-						SNew(SCheckBox)
-						// Use lambda for dynamic checkbox state
-						.IsChecked_Lambda([ItemCopy]()
-						{
-							return ItemCopy->bIsSelected ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
-						})
-						.OnCheckStateChanged(this, &SN2CTaggedGraphsList::OnCheckboxChanged, Item)
-					]
-				]
-				// Graph name column
-				+ SHorizontalBox::Slot()
-				.FillWidth(1.0f)
-				.VAlign(VAlign_Center)
-				.Padding(4.0f, 0.0f)
-				[
-					SNew(STextBlock)
-					.Text(FText::FromString(Item->TagInfo.GraphName))
-					.Font(FAppStyle::GetFontStyle("SmallFont"))
-				]
-				// Blueprint column
-				+ SHorizontalBox::Slot()
-				.FillWidth(1.0f)
-				.VAlign(VAlign_Center)
-				.Padding(4.0f, 0.0f)
-				[
-					SNew(STextBlock)
-					.Text(FText::FromString(Item->GetBlueprintDisplayName()))
-					.Font(FAppStyle::GetFontStyle("SmallFont"))
-					.ColorAndOpacity(FLinearColor(0.31f, 0.76f, 1.0f, 1.0f)) // Blue for blueprint names
-				]
-				// Action buttons column (always visible for MVP)
-				+ SHorizontalBox::Slot()
-				.AutoWidth()
-				.HAlign(HAlign_Right)
-				.VAlign(VAlign_Center)
-				.Padding(4.0f, 0.0f)
-				[
-					SNew(SHorizontalBox)
-					// Translate button
-					+ SHorizontalBox::Slot()
-					.AutoWidth()
-					.Padding(2.0f, 0.0f)
-					[
-						SNew(SButton)
-						.ButtonStyle(FAppStyle::Get(), "SimpleButton")
-						.ToolTipText(LOCTEXT("TranslateTooltip", "Translate this graph"))
-						.ContentPadding(2.0f)
-						.OnClicked(this, &SN2CTaggedGraphsList::OnTranslateClicked, ItemCopy)
-						[
-							SNew(STextBlock)
-							.Text(FText::FromString(TEXT("\u27A1"))) // Arrow symbol for translate
-							.Font(FAppStyle::GetFontStyle("NormalFont"))
-						]
-					]
-					// JSON export button
-					+ SHorizontalBox::Slot()
-					.AutoWidth()
-					.Padding(2.0f, 0.0f)
-					[
-						SNew(SButton)
-						.ButtonStyle(FAppStyle::Get(), "SimpleButton")
-						.ToolTipText(LOCTEXT("JsonTooltip", "Export as JSON"))
-						.ContentPadding(2.0f)
-						.OnClicked(this, &SN2CTaggedGraphsList::OnJsonExportClicked, ItemCopy)
-						[
-							SNew(STextBlock)
-							.Text(FText::FromString(TEXT("{}"))) // Braces for JSON
-							.Font(FAppStyle::GetFontStyle("SmallFont"))
-						]
-					]
-					// View translation button (disabled for MVP)
-					+ SHorizontalBox::Slot()
-					.AutoWidth()
-					.Padding(2.0f, 0.0f)
-					[
-						SNew(SButton)
-						.ButtonStyle(FAppStyle::Get(), "SimpleButton")
-						.IsEnabled(false) // Always disabled for MVP
-						.ToolTipText(LOCTEXT("ViewTooltip", "View translation (not available)"))
-						.ContentPadding(2.0f)
-						.OnClicked(this, &SN2CTaggedGraphsList::OnViewTranslationClicked, ItemCopy)
-						[
-							SNew(STextBlock)
-							.Text(FText::FromString(TEXT("\u{1F441}"))) // Eye symbol for view (fallback to simple text)
-							.Font(FAppStyle::GetFontStyle("SmallFont"))
-						]
-					]
-				]
-			]
+			SNew(SN2CGraphListRow)
+			.Item(Item)
+			.OnCheckboxChanged(this, &SN2CTaggedGraphsList::HandleRowCheckboxChanged)
+			.OnTranslateClicked(this, &SN2CTaggedGraphsList::HandleRowTranslateClicked)
+			.OnJsonExportClicked(this, &SN2CTaggedGraphsList::HandleRowJsonExportClicked)
+			.OnViewTranslationClicked(this, &SN2CTaggedGraphsList::HandleRowViewTranslationClicked)
+			.OnDoubleClicked(this, &SN2CTaggedGraphsList::HandleRowDoubleClicked)
 		];
 }
 
-void SN2CTaggedGraphsList::OnCheckboxChanged(ECheckBoxState NewState, TSharedPtr<FN2CGraphListItem> Item)
+void SN2CTaggedGraphsList::HandleRowCheckboxChanged(TSharedPtr<FN2CGraphListItem> Item)
 {
-	if (Item.IsValid())
+	// Item selection state is already updated by the row widget
+	// Just refresh the list and notify
+	if (ListView.IsValid())
 	{
-		Item->bIsSelected = (NewState == ECheckBoxState::Checked);
-		if (ListView.IsValid())
-		{
-			ListView->RequestListRefresh();
-		}
-		OnSelectionChangedDelegate.ExecuteIfBound();
+		ListView->RequestListRefresh();
 	}
+	OnSelectionChangedDelegate.ExecuteIfBound();
 }
 
 void SN2CTaggedGraphsList::OnSelectAllChanged(ECheckBoxState NewState)
@@ -389,7 +280,7 @@ FReply SN2CTaggedGraphsList::OnSelectAllClicked()
 	return FReply::Handled();
 }
 
-void SN2CTaggedGraphsList::OnRowDoubleClicked(TSharedPtr<FN2CGraphListItem> Item)
+void SN2CTaggedGraphsList::HandleRowDoubleClicked(TSharedPtr<FN2CGraphListItem> Item)
 {
 	if (Item.IsValid())
 	{
@@ -464,7 +355,7 @@ void SN2CTaggedGraphsList::UpdateSelectionDisplay()
 	// This could update a selection count display if added to the UI
 }
 
-FReply SN2CTaggedGraphsList::OnTranslateClicked(TSharedPtr<FN2CGraphListItem> Item)
+void SN2CTaggedGraphsList::HandleRowTranslateClicked(TSharedPtr<FN2CGraphListItem> Item)
 {
 	if (Item.IsValid())
 	{
@@ -472,10 +363,9 @@ FReply SN2CTaggedGraphsList::OnTranslateClicked(TSharedPtr<FN2CGraphListItem> It
 		LastTranslateRequestedGraph = Item->TagInfo;
 		OnSingleTranslateRequestedDelegate.ExecuteIfBound();
 	}
-	return FReply::Handled();
 }
 
-FReply SN2CTaggedGraphsList::OnJsonExportClicked(TSharedPtr<FN2CGraphListItem> Item)
+void SN2CTaggedGraphsList::HandleRowJsonExportClicked(TSharedPtr<FN2CGraphListItem> Item)
 {
 	if (Item.IsValid())
 	{
@@ -483,10 +373,9 @@ FReply SN2CTaggedGraphsList::OnJsonExportClicked(TSharedPtr<FN2CGraphListItem> I
 		LastJsonExportRequestedGraph = Item->TagInfo;
 		OnSingleJsonExportRequestedDelegate.ExecuteIfBound();
 	}
-	return FReply::Handled();
 }
 
-FReply SN2CTaggedGraphsList::OnViewTranslationClicked(TSharedPtr<FN2CGraphListItem> Item)
+void SN2CTaggedGraphsList::HandleRowViewTranslationClicked(TSharedPtr<FN2CGraphListItem> Item)
 {
 	if (Item.IsValid())
 	{
@@ -494,7 +383,6 @@ FReply SN2CTaggedGraphsList::OnViewTranslationClicked(TSharedPtr<FN2CGraphListIt
 		LastViewTranslationRequestedGraph = Item->TagInfo;
 		OnViewTranslationRequestedDelegate.ExecuteIfBound();
 	}
-	return FReply::Handled();
 }
 
 #undef LOCTEXT_NAMESPACE
