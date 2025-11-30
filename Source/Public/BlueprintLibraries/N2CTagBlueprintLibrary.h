@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "Models/N2CTaggedBlueprintGraph.h"
+#include "Models/N2CTranslation.h"
 #include "Engine/Blueprint.h"
 #include "N2CTagBlueprintLibrary.generated.h"
 
@@ -224,4 +225,32 @@ public:
 		const FString& SearchTerm,
 		bool bSearchInDescription = false
 	);
+
+	// ==================== Translation Functions ====================
+
+	/**
+	 * Check if a graph has a translation available
+	 * @param GraphGuid The GUID of the graph (as string)
+	 * @return True if a translation exists for this graph
+	 */
+	UFUNCTION(BlueprintPure, Category = "NodeToCode|Translation", meta = (DisplayName = "Has Translation"))
+	static bool HasTranslation(const FString& GraphGuid);
+
+	/**
+	 * Load a translation for a graph
+	 * @param GraphGuid The GUID of the graph (as string)
+	 * @param OutTranslation The loaded translation data
+	 * @return True if the translation was loaded successfully
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NodeToCode|Translation", meta = (DisplayName = "Load Translation"))
+	static bool LoadTranslation(const FString& GraphGuid, FN2CGraphTranslation& OutTranslation);
+
+	/**
+	 * Load a translation for a graph using tag info
+	 * @param TagInfo The tag info containing the graph GUID
+	 * @param OutTranslation The loaded translation data
+	 * @return True if the translation was loaded successfully
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NodeToCode|Translation", meta = (DisplayName = "Load Translation From Tag Info"))
+	static bool LoadTranslationFromTagInfo(const FN2CTagInfo& TagInfo, FN2CGraphTranslation& OutTranslation);
 };

@@ -2,6 +2,7 @@
 
 #include "BlueprintLibraries/N2CTagBlueprintLibrary.h"
 #include "Core/N2CTagManager.h"
+#include "Core/N2CGraphStateManager.h"
 #include "Core/N2CEditorIntegration.h"
 #include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "Utils/N2CLogger.h"
@@ -391,6 +392,37 @@ TArray<FN2CTagInfo> UN2CTagBlueprintLibrary::SearchTags(
 			Result.Add(FN2CTagInfo::FromTaggedGraph(Tag));
 		}
 	}
-	
+
 	return Result;
+}
+
+// ==================== Translation Functions ====================
+
+bool UN2CTagBlueprintLibrary::HasTranslation(const FString& GraphGuid)
+{
+	FGuid Guid;
+	if (!FGuid::Parse(GraphGuid, Guid))
+	{
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("HasTranslation: Invalid GUID format: %s"), *GraphGuid));
+		return false;
+	}
+
+	return UN2CGraphStateManager::Get().HasTranslation(Guid);
+}
+
+bool UN2CTagBlueprintLibrary::LoadTranslation(const FString& GraphGuid, FN2CGraphTranslation& OutTranslation)
+{
+	FGuid Guid;
+	if (!FGuid::Parse(GraphGuid, Guid))
+	{
+		FN2CLogger::Get().LogWarning(FString::Printf(TEXT("LoadTranslation: Invalid GUID format: %s"), *GraphGuid));
+		return false;
+	}
+
+	return UN2CGraphStateManager::Get().LoadTranslation(Guid, OutTranslation);
+}
+
+bool UN2CTagBlueprintLibrary::LoadTranslationFromTagInfo(const FN2CTagInfo& TagInfo, FN2CGraphTranslation& OutTranslation)
+{
+	return LoadTranslation(TagInfo.GraphGuid, OutTranslation);
 }

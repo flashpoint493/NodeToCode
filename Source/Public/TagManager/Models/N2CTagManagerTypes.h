@@ -101,10 +101,14 @@ struct FN2CGraphListItem : public TSharedFromThis<FN2CGraphListItem>
 	/** Whether this item is starred/pinned */
 	bool bIsStarred;
 
+	/** Whether a translation exists for this graph (can be viewed) */
+	bool bHasTranslation;
+
 	FN2CGraphListItem()
 		: Status(EN2CGraphTranslationStatus::Pending)
 		, bIsSelected(false)
 		, bIsStarred(false)
+		, bHasTranslation(false)
 	{
 	}
 

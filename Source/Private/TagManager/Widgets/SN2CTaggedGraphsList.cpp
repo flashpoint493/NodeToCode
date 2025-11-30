@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
 #include "TagManager/Widgets/SN2CTaggedGraphsList.h"
+#include "Core/N2CGraphStateManager.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Text/STextBlock.h"
@@ -99,6 +100,18 @@ void SN2CTaggedGraphsList::SetGraphs(const TArray<FN2CTagInfo>& InTagInfos)
 		Item->TagInfo = TagInfo;
 		Item->bIsSelected = false;
 		Item->bIsStarred = false;
+
+		// Check if a translation exists for this graph
+		FGuid GraphGuid;
+		if (FGuid::Parse(TagInfo.GraphGuid, GraphGuid) && GraphGuid.IsValid())
+		{
+			Item->bHasTranslation = UN2CGraphStateManager::Get().HasTranslation(GraphGuid);
+		}
+		else
+		{
+			Item->bHasTranslation = false;
+		}
+
 		AllItems.Add(Item);
 	}
 

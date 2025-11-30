@@ -135,15 +135,15 @@ void SN2CGraphListRow::Construct(const FArguments& InArgs)
 					]
 				]
 
-				// View Translation button (disabled for MVP)
+				// View Translation button
 				+ SHorizontalBox::Slot()
 				.AutoWidth()
 				.Padding(2.0f, 0.0f)
 				[
 					SNew(SButton)
 					.ButtonStyle(FAppStyle::Get(), "SimpleButton")
-					.IsEnabled(false) // Always disabled for MVP
-					.ToolTipText(LOCTEXT("ViewTranslationTooltip", "View translation (not available)"))
+					.IsEnabled(this, &SN2CGraphListRow::IsViewButtonEnabled)
+					.ToolTipText(this, &SN2CGraphListRow::GetViewButtonTooltip)
 					.OnClicked(this, &SN2CGraphListRow::HandleViewTranslationClicked)
 					.ContentPadding(FMargin(4.0f, 2.0f))
 					[
@@ -284,6 +284,20 @@ ECheckBoxState SN2CGraphListRow::GetCheckboxState() const
 		return ECheckBoxState::Checked;
 	}
 	return ECheckBoxState::Unchecked;
+}
+
+bool SN2CGraphListRow::IsViewButtonEnabled() const
+{
+	return Item.IsValid() && Item->bHasTranslation;
+}
+
+FText SN2CGraphListRow::GetViewButtonTooltip() const
+{
+	if (Item.IsValid() && Item->bHasTranslation)
+	{
+		return LOCTEXT("ViewTranslationTooltipEnabled", "View translation");
+	}
+	return LOCTEXT("ViewTranslationTooltipDisabled", "No translation available");
 }
 
 #undef LOCTEXT_NAMESPACE

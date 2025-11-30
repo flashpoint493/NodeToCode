@@ -12,10 +12,14 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FOnBlueprintTagRemoved, const FGuid& /*Grap
 /**
  * @class UN2CTagManager
  * @brief Singleton manager for Blueprint graph tagging functionality
- * 
+ *
  * This class manages tags applied to Blueprint graphs, providing functionality
- * to add, remove, query, and persist tags. It maintains an in-memory cache
- * of tags and handles JSON file persistence.
+ * to add, remove, query, and persist tags.
+ *
+ * NOTE: This class now delegates to UN2CGraphStateManager for all operations.
+ * It is maintained for backward compatibility with existing code.
+ * New code should use UN2CGraphStateManager directly for access to
+ * translation and JSON export state in addition to tags.
  */
 UCLASS()
 class NODETOCODE_API UN2CTagManager : public UObject
@@ -26,10 +30,10 @@ public:
 	/** Get the singleton instance */
 	static UN2CTagManager& Get();
 
-	/** Initialize the tag manager (loads persisted tags) */
+	/** Initialize the tag manager (initializes UN2CGraphStateManager) */
 	void Initialize();
 
-	/** Shutdown the tag manager (saves tags) */
+	/** Shutdown the tag manager (shuts down UN2CGraphStateManager) */
 	void Shutdown();
 
 	/**
@@ -108,7 +112,7 @@ public:
 	bool GraphHasTag(const FGuid& GraphGuid, const FString& Tag, const FString& Category) const;
 
 	/** Get all tags in the system */
-	const TArray<FN2CTaggedBlueprintGraph>& GetAllTags() const { return Tags; }
+	const TArray<FN2CTaggedBlueprintGraph>& GetAllTags() const;
 
 	/** Clear all tags (use with caution) */
 	void ClearAllTags();
@@ -129,16 +133,6 @@ private:
 	/** Constructor */
 	UN2CTagManager();
 
-	/** Get the file path for tag persistence */
-	FString GetTagsFilePath() const;
-
 	/** The singleton instance */
 	static UN2CTagManager* Instance;
-
-	/** Array of all tags */
-	UPROPERTY()
-	TArray<FN2CTaggedBlueprintGraph> Tags;
-
-	/** Flag indicating if tags have been modified since last save */
-	bool bIsDirty;
 };

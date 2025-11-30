@@ -74,4 +74,6 @@ private:
 	FSlateColor GetButtonBackgroundColor() const;
 	EVisibility GetActionButtonsVisibility() const;
 	ECheckBoxState GetCheckboxState() const;
+	bool IsViewButtonEnabled() const;
+	FText GetViewButtonTooltip() const;
 };

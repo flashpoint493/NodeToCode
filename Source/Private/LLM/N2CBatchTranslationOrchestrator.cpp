@@ -6,6 +6,7 @@
 #include "Core/N2CNodeTranslator.h"
 #include "Core/N2CSerializer.h"
 #include "Core/N2CSettings.h"
+#include "Core/N2CGraphStateManager.h"
 #include "Utils/N2CLogger.h"
 #include "Engine/Blueprint.h"
 #include "EdGraph/EdGraph.h"
@@ -607,6 +608,75 @@ void UN2CBatchTranslationOrchestrator::SaveItemTranslation(const FN2CBatchTransl
 					TEXT("BatchOrchestrator"));
 			}
 		}
+
+		// Record translation state in the graph state manager
+		FGuid GraphGuid;
+		FGuid::Parse(Item.TagInfo.GraphGuid, GraphGuid);
+
+		if (GraphGuid.IsValid())
+		{
+			// Build translation summary
+			FN2CTranslationSummary Summary;
+
+			// Get first line of declaration as preview
+			if (!Graph.Code.GraphDeclaration.IsEmpty())
+			{
+				int32 NewlineIndex;
+				if (Graph.Code.GraphDeclaration.FindChar('\n', NewlineIndex))
+				{
+					Summary.DeclarationPreview = Graph.Code.GraphDeclaration.Left(NewlineIndex).TrimStartAndEnd();
+				}
+				else
+				{
+					Summary.DeclarationPreview = Graph.Code.GraphDeclaration.TrimStartAndEnd();
+				}
+			}
+
+			// Count implementation lines
+			if (!Graph.Code.GraphImplementation.IsEmpty())
+			{
+				int32 LineCount = 1;
+				for (const TCHAR& Char : Graph.Code.GraphImplementation)
+				{
+					if (Char == '\n')
+					{
+						LineCount++;
+					}
+				}
+				Summary.ImplementationLines = LineCount;
+			}
+
+			Summary.bHasNotes = !Graph.Code.ImplementationNotes.IsEmpty();
+
+			// Get provider info
+			FString Provider = Settings ? UEnum::GetValueAsString(Settings->Provider) : TEXT("Unknown");
+			FString Model = Settings ? Settings->GetActiveModel() : TEXT("Unknown");
+			FString Language = Settings ? UEnum::GetValueAsString(Settings->TargetLanguage) : TEXT("Cpp");
+
+			// Make the output path relative to the project directory
+			FString RelativeGraphDir = GraphDir;
+			FString ProjectDir = FPaths::ProjectDir();
+			if (RelativeGraphDir.StartsWith(ProjectDir))
+			{
+				RelativeGraphDir = RelativeGraphDir.Mid(ProjectDir.Len());
+			}
+
+			// Set translation state
+			UN2CGraphStateManager::Get().SetTranslationState(
+				GraphGuid,
+				GraphName,
+				FSoftObjectPath(Item.TagInfo.BlueprintPath),
+				RelativeGraphDir,
+				Provider,
+				Model,
+				Language,
+				Summary
+			);
+
+			FN2CLogger::Get().Log(
+				FString::Printf(TEXT("Recorded translation state for graph: %s"), *GraphName),
+				EN2CLogSeverity::Info, TEXT("BatchOrchestrator"));
+		}
 	}
 }
 
@@ -909,6 +979,26 @@ bool UN2CBatchTranslationOrchestrator::BatchExportJson(
 			FN2CLogger::Get().Log(
 				FString::Printf(TEXT("Exported: %s"), *SafeGraphName),
 				EN2CLogSeverity::Info, TEXT("BatchOrchestrator"));
+
+			// Record JSON export state in the graph state manager
+			if (GraphGuid.IsValid())
+			{
+				// Make the output path relative to the project directory
+				FString RelativeJsonPath = JsonPath;
+				FString ProjectDir = FPaths::ProjectDir();
+				if (RelativeJsonPath.StartsWith(ProjectDir))
+				{
+					RelativeJsonPath = RelativeJsonPath.Mid(ProjectDir.Len());
+				}
+
+				UN2CGraphStateManager::Get().SetJsonExportState(
+					GraphGuid,
+					Item.TagInfo.GraphName,
+					FSoftObjectPath(Item.TagInfo.BlueprintPath),
+					RelativeJsonPath,
+					bMinifyJson
+				);
+			}
 		}
 		else
 		{
