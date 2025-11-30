@@ -287,30 +287,25 @@ void SN2CTagCategoryTree::ClearSelection()
 
 TSharedRef<ITableRow> SN2CTagCategoryTree::OnGenerateRow(TSharedPtr<FN2CTreeItem> Item, const TSharedRef<STableViewBase>& OwnerTable)
 {
-	// Determine icon based on item type
-	// For tags, we use a simple hash/tag symbol rendered as text instead of an icon brush
-	// since "Icons.Label" may not exist in all UE versions
-	const FSlateBrush* IconBrush = Item->IsCategory()
-		? FAppStyle::GetBrush("ContentBrowser.AssetTreeFolderOpen")
-		: nullptr;  // We'll use text for tags instead
+	// Build display text with count
+	FText DisplayText = FText::Format(LOCTEXT("ItemDisplayFormat", "{0} ({1})"), FText::FromString(Item->Name), FText::AsNumber(Item->GraphCount));
 
-	// Build display text with count for tags
-	FText DisplayText = Item->IsCategory()
-		? FText::Format(LOCTEXT("CategoryDisplayFormat", "{0} ({1})"), FText::FromString(Item->Name), FText::AsNumber(Item->GraphCount))
-		: FText::Format(LOCTEXT("TagDisplayFormat", "{0} ({1})"), FText::FromString(Item->Name), FText::AsNumber(Item->GraphCount));
-
-	// Create the icon widget - either an image for categories or a text symbol for tags
+	// Create the icon widget with dynamic binding for categories
 	TSharedRef<SWidget> IconWidget = Item->IsCategory()
 		? StaticCastSharedRef<SWidget>(
 			SNew(SImage)
-			.Image(IconBrush)
+			.Image_Lambda([Item]() -> const FSlateBrush*
+			{
+				return Item->bIsExpanded
+					? FAppStyle::GetBrush("Icons.FolderOpen")
+					: FAppStyle::GetBrush("Icons.FolderClosed");
+			})
 			.ColorAndOpacity(FSlateColor::UseForeground())
 		)
 		: StaticCastSharedRef<SWidget>(
-			SNew(STextBlock)
-			.Text(FText::FromString(TEXT("#")))  // Hash symbol for tags
-			.Font(FAppStyle::GetFontStyle("NormalFontBold"))
-			.ColorAndOpacity(FLinearColor(0.83f, 0.63f, 0.29f, 1.0f))  // Orange for tags
+			SNew(SImage)
+			.Image(FAppStyle::GetBrush("GraphEditor.Bookmark"))
+			.ColorAndOpacity(FSlateColor(FLinearColor(0.83f, 0.63f, 0.29f, 1.0f)))
 		);
 
 	return SNew(STableRow<TSharedPtr<FN2CTreeItem>>, OwnerTable)

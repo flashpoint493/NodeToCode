@@ -13,7 +13,9 @@
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SCheckBox.h"
 #include "Widgets/Input/SComboBox.h"
+#include "Widgets/Images/SImage.h"
 #include "Styling/AppStyle.h"
+#include "Styling/SlateIconFinder.h"
 #include "DesktopPlatformModule.h"
 #include "Misc/Paths.h"
 
@@ -155,8 +157,9 @@ void SN2CTagManager::Construct(const FArguments& InArgs)
 								.VAlign(VAlign_Center)
 								.Padding(0.0f, 0.0f, 4.0f, 0.0f)
 								[
-									SNew(STextBlock)
-									.Text(FText::FromString(TEXT("\U0001F504"))) // Refresh emoji
+									SNew(SImage)
+									.Image(FSlateIconFinder::FindIconBrushForClass(nullptr, FName("Icons.Convert")))
+									.DesiredSizeOverride(FVector2D(16.0f, 16.0f))
 								]
 								+ SHorizontalBox::Slot()
 								.AutoWidth()
@@ -183,8 +186,9 @@ void SN2CTagManager::Construct(const FArguments& InArgs)
 								.VAlign(VAlign_Center)
 								.Padding(0.0f, 0.0f, 4.0f, 0.0f)
 								[
-									SNew(STextBlock)
-									.Text(FText::FromString(TEXT("\U0001F4C4"))) // Page emoji
+									SNew(SImage)
+									.Image(FAppStyle::GetBrush("MainFrame.RefreshSourceCodeEditor"))
+									.DesiredSizeOverride(FVector2D(16.0f, 16.0f))
 								]
 								+ SHorizontalBox::Slot()
 								.AutoWidth()
@@ -210,8 +214,9 @@ void SN2CTagManager::Construct(const FArguments& InArgs)
 								.VAlign(VAlign_Center)
 								.Padding(0.0f, 0.0f, 4.0f, 0.0f)
 								[
-									SNew(STextBlock)
-									.Text(FText::FromString(TEXT("\U0001F5D1"))) // Trash emoji
+									SNew(SImage)
+									.Image(FAppStyle::GetBrush("GenericCommands.Delete"))
+									.DesiredSizeOverride(FVector2D(16.0f, 16.0f))
 								]
 								+ SHorizontalBox::Slot()
 								.AutoWidth()

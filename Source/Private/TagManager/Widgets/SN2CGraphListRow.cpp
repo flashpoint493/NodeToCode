@@ -112,9 +112,10 @@ void SN2CGraphListRow::Construct(const FArguments& InArgs)
 					.OnClicked(this, &SN2CGraphListRow::HandleTranslateClicked)
 					.ContentPadding(FMargin(4.0f, 2.0f))
 					[
-						SNew(STextBlock)
-						.Text(FText::FromString(TEXT("\U0001F504"))) // Right arrow
-						.Font(FAppStyle::GetFontStyle("NormalFont"))
+						SNew(SImage)
+						.Image(FAppStyle::GetBrush("Icons.Convert"))
+						.DesiredSizeOverride(FVector2D(14.0f, 14.0f))
+						.ColorAndOpacity(FSlateColor::UseForeground())
 					]
 				]
 
@@ -129,9 +130,10 @@ void SN2CGraphListRow::Construct(const FArguments& InArgs)
 					.OnClicked(this, &SN2CGraphListRow::HandleJsonExportClicked)
 					.ContentPadding(FMargin(4.0f, 2.0f))
 					[
-						SNew(STextBlock)
-						.Text(FText::FromString(TEXT("{  }")))
-						.Font(FAppStyle::GetFontStyle("NormalFont"))
+						SNew(SImage)
+						.Image(FAppStyle::GetBrush("MainFrame.RefreshSourceCodeEditor"))
+						.DesiredSizeOverride(FVector2D(14.0f, 14.0f))
+						.ColorAndOpacity(FSlateColor::UseForeground())
 					]
 				]
 
@@ -148,7 +150,7 @@ void SN2CGraphListRow::Construct(const FArguments& InArgs)
 					.ContentPadding(FMargin(4.0f, 2.0f))
 					[
 						SNew(SImage)
-						.Image(FAppStyle::GetBrush("Icons.Visible"))
+						.Image(FAppStyle::GetBrush("Icons.OpenInExternalEditor"))
 						.DesiredSizeOverride(FVector2D(14.0f, 14.0f))
 						.ColorAndOpacity(FSlateColor::UseForeground())
 					]
