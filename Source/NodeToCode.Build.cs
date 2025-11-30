@@ -45,14 +45,15 @@ public class NodeToCode : ModuleRules
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"DeveloperSettings", 
-				"Blutility", 
+				"DeveloperSettings",
+				"Blutility",
 				"UMGEditor",
 				"KismetWidgets",          // For action menu widgets
 				"EditorSubsystem",        // For editor subsystem access
 				"EditorWidgets",          // For editor widgets
 				"AssetRegistry",          // For asset path resolution
-				"ContentBrowserData"      // For content browser data subsystem
+				"ContentBrowserData",     // For content browser data subsystem
+				"DesktopPlatform"         // For folder browser dialog in Tag Manager
 			}
 		);
 
