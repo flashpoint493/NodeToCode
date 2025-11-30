@@ -16,6 +16,7 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Layout/SSeparator.h"
 #include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/Input/SComboBox.h"
 #include "Styling/AppStyle.h"
 #include "HAL/PlatformApplicationMisc.h"
 
@@ -380,19 +381,193 @@ TSharedRef<SWidget> SN2CGraphOverlay::CreateTagPopoverContent()
 		SNew(SSeparator)
 	];
 
-	// Add tag button
+	// Add new tag section header
+	TagList->AddSlot()
+	.AutoHeight()
+	.Padding(8.0f, 4.0f, 8.0f, 2.0f)
+	[
+		SNew(STextBlock)
+		.Text(LOCTEXT("AddNewTagHeader", "Add New Tag"))
+		.TextStyle(FAppStyle::Get(), "SmallText")
+		.ColorAndOpacity(FSlateColor::UseSubduedForeground())
+	];
+
+	// Get existing tags and categories for the dropdowns
+	TArray<FString> ExistingTags = UN2CTagManager::Get().GetAllTagNames();
+	TArray<FString> ExistingCategories = UN2CTagManager::Get().GetAllCategories();
+
+	// Ensure "Default" is always an option for categories
+	if (!ExistingCategories.Contains(TEXT("Default")))
+	{
+		ExistingCategories.Insert(TEXT("Default"), 0);
+	}
+
+	// Populate member arrays for combo box options (must persist beyond this function)
+	TagOptions.Empty();
+	for (const FString& TagName : ExistingTags)
+	{
+		TagOptions.Add(MakeShared<FString>(TagName));
+	}
+
+	CategoryOptions.Empty();
+	for (const FString& Category : ExistingCategories)
+	{
+		CategoryOptions.Add(MakeShared<FString>(Category));
+	}
+
+	// Add tag input fields
+	TSharedPtr<SEditableTextBox> TagInputBox;
+	TSharedPtr<SEditableTextBox> CategoryInputBox;
+	TSharedPtr<SComboBox<TSharedPtr<FString>>> TagComboBox;
+	TSharedPtr<SComboBox<TSharedPtr<FString>>> CategoryComboBox;
+
+	// Tag name row with combo box and text input
+	TagList->AddSlot()
+	.AutoHeight()
+	.Padding(8.0f, 2.0f, 8.0f, 2.0f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot()
+		.AutoWidth()
+		.VAlign(VAlign_Center)
+		.Padding(0.0f, 0.0f, 8.0f, 0.0f)
+		[
+			SNew(SBox)
+			.WidthOverride(60.0f)
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("TagLabel", "Tag:"))
+			]
+		]
+		+ SHorizontalBox::Slot()
+		.FillWidth(1.0f)
+		.VAlign(VAlign_Center)
+		[
+			SNew(SHorizontalBox)
+			// Editable text box for tag
+			+ SHorizontalBox::Slot()
+			.FillWidth(1.0f)
+			[
+				SAssignNew(TagInputBox, SEditableTextBox)
+				.HintText(LOCTEXT("TagNameHint", "Enter or select..."))
+			]
+			// Dropdown button for existing tags (only show if there are existing tags)
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.Padding(2.0f, 0.0f, 0.0f, 0.0f)
+			[
+				SNew(SBox)
+				.Visibility(TagOptions.Num() > 0 ? EVisibility::Visible : EVisibility::Collapsed)
+				[
+					SAssignNew(TagComboBox, SComboBox<TSharedPtr<FString>>)
+					.OptionsSource(&TagOptions)
+					.OnGenerateWidget_Lambda([](TSharedPtr<FString> Item)
+					{
+						return SNew(STextBlock).Text(FText::FromString(*Item));
+					})
+					.OnSelectionChanged_Lambda([TagInputBox](TSharedPtr<FString> SelectedItem, ESelectInfo::Type SelectInfo)
+					{
+						if (SelectedItem.IsValid() && TagInputBox.IsValid())
+						{
+							TagInputBox->SetText(FText::FromString(*SelectedItem));
+						}
+					})
+					[
+						SNew(SImage)
+						.Image(FAppStyle::GetBrush("Icons.ChevronDown"))
+					]
+				]
+			]
+		]
+	];
+
+	// Category row with combo box and text input
+	TagList->AddSlot()
+	.AutoHeight()
+	.Padding(8.0f, 2.0f, 8.0f, 4.0f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot()
+		.AutoWidth()
+		.VAlign(VAlign_Center)
+		.Padding(0.0f, 0.0f, 8.0f, 0.0f)
+		[
+			SNew(SBox)
+			.WidthOverride(60.0f)
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("CategoryLabel", "Category:"))
+			]
+		]
+		+ SHorizontalBox::Slot()
+		.FillWidth(1.0f)
+		.VAlign(VAlign_Center)
+		[
+			SNew(SHorizontalBox)
+			// Editable text box for category
+			+ SHorizontalBox::Slot()
+			.FillWidth(1.0f)
+			[
+				SAssignNew(CategoryInputBox, SEditableTextBox)
+				.HintText(LOCTEXT("CategoryHint", "Enter or select..."))
+				.Text(FText::FromString(TEXT("Default")))
+			]
+			// Dropdown button for existing categories
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.Padding(2.0f, 0.0f, 0.0f, 0.0f)
+			[
+				SAssignNew(CategoryComboBox, SComboBox<TSharedPtr<FString>>)
+				.OptionsSource(&CategoryOptions)
+				.OnGenerateWidget_Lambda([](TSharedPtr<FString> Item)
+				{
+					return SNew(STextBlock).Text(FText::FromString(*Item));
+				})
+				.OnSelectionChanged_Lambda([CategoryInputBox](TSharedPtr<FString> SelectedItem, ESelectInfo::Type SelectInfo)
+				{
+					if (SelectedItem.IsValid() && CategoryInputBox.IsValid())
+					{
+						CategoryInputBox->SetText(FText::FromString(*SelectedItem));
+					}
+				})
+				[
+					SNew(SImage)
+					.Image(FAppStyle::GetBrush("Icons.ChevronDown"))
+				]
+			]
+		]
+	];
+
+	// Add button
 	TagList->AddSlot()
 	.AutoHeight()
 	.Padding(8.0f, 4.0f, 8.0f, 8.0f)
 	[
 		SNew(SButton)
-		.ButtonStyle(FAppStyle::Get(), "SimpleButton")
-		.OnClicked_Lambda([this]()
+		.ButtonStyle(FAppStyle::Get(), "Button")
+		.HAlign(HAlign_Center)
+		.OnClicked_Lambda([this, TagInputBox, CategoryInputBox]()
 		{
-			OnAddTagWithDefaults();
+			if (TagInputBox.IsValid() && CategoryInputBox.IsValid())
+			{
+				FString TagName = TagInputBox->GetText().ToString();
+				FString CategoryName = CategoryInputBox->GetText().ToString();
+
+				if (TagName.IsEmpty())
+				{
+					return FReply::Handled();
+				}
+
+				if (CategoryName.IsEmpty())
+				{
+					CategoryName = TEXT("Default");
+				}
+
+				OnAddTagRequested(TagName, CategoryName);
+			}
 			return FReply::Handled();
 		})
-		.ContentPadding(FMargin(4.0f, 2.0f))
+		.ContentPadding(FMargin(8.0f, 4.0f))
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot()
@@ -409,7 +584,7 @@ TSharedRef<SWidget> SN2CGraphOverlay::CreateTagPopoverContent()
 			.Padding(4.0f, 0.0f, 0.0f, 0.0f)
 			[
 				SNew(STextBlock)
-				.Text(LOCTEXT("AddTag", "Add Tag..."))
+				.Text(LOCTEXT("AddTagButton", "Add Tag"))
 			]
 		]
 	];
@@ -419,18 +594,11 @@ TSharedRef<SWidget> SN2CGraphOverlay::CreateTagPopoverContent()
 		.Padding(0.0f)
 		[
 			SNew(SBox)
-			.MinDesiredWidth(200.0f)
+			.MinDesiredWidth(280.0f)
 			[
 				TagList
 			]
 		];
-}
-
-void SN2CGraphOverlay::OnAddTagWithDefaults()
-{
-	// Add a default tag with timestamp
-	FString DefaultTag = FString::Printf(TEXT("Tag_%s"), *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")));
-	OnAddTagRequested(DefaultTag, TEXT("Default"));
 }
 
 void SN2CGraphOverlay::OnAddTagRequested(const FString& TagName, const FString& CategoryName)

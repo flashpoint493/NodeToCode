@@ -59,6 +59,10 @@ private:
 	bool bIsTranslating = false;
 	int32 CachedTagCount = 0;
 
+	// Combo box options (must persist for SComboBox)
+	TArray<TSharedPtr<FString>> TagOptions;
+	TArray<TSharedPtr<FString>> CategoryOptions;
+
 	// Delegate handles for cleanup
 	FDelegateHandle OnTagAddedHandle;
 	FDelegateHandle OnTagRemovedHandle;
@@ -70,7 +74,6 @@ private:
 
 	// Tag popover content
 	TSharedRef<SWidget> CreateTagPopoverContent();
-	void OnAddTagWithDefaults();
 	void OnAddTagRequested(const FString& TagName, const FString& CategoryName);
 	void OnRemoveTagRequested(const FN2CTaggedBlueprintGraph& TagInfo);
 
