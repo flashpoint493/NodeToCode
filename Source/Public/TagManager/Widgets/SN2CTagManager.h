@@ -176,4 +176,18 @@ private:
 
 	/** Current search filter text */
 	FString CurrentSearchFilter;
+
+	/** Delegate handles for tag manager events */
+	FDelegateHandle OnTagAddedHandle;
+	FDelegateHandle OnTagRemovedHandle;
+
+	/** Handle tag added event */
+	void HandleTagAdded(const struct FN2CTaggedBlueprintGraph& TagInfo);
+
+	/** Handle tag removed event */
+	void HandleTagRemoved(const FGuid& GraphGuid, const FString& RemovedTag);
+
+public:
+	/** Destructor - cleans up delegate bindings */
+	virtual ~SN2CTagManager();
 };

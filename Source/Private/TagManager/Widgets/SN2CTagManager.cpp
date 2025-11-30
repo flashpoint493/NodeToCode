@@ -292,7 +292,34 @@ void SN2CTagManager::Construct(const FArguments& InArgs)
 		]
 	];
 
+	// Subscribe to tag manager events for live updates
+	OnTagAddedHandle = UN2CTagManager::Get().OnBlueprintTagAdded.AddRaw(this, &SN2CTagManager::HandleTagAdded);
+	OnTagRemovedHandle = UN2CTagManager::Get().OnBlueprintTagRemoved.AddRaw(this, &SN2CTagManager::HandleTagRemoved);
+
 	// Initial data load
+	RefreshData();
+}
+
+SN2CTagManager::~SN2CTagManager()
+{
+	// Unsubscribe from tag manager events
+	if (OnTagAddedHandle.IsValid())
+	{
+		UN2CTagManager::Get().OnBlueprintTagAdded.Remove(OnTagAddedHandle);
+	}
+	if (OnTagRemovedHandle.IsValid())
+	{
+		UN2CTagManager::Get().OnBlueprintTagRemoved.Remove(OnTagRemovedHandle);
+	}
+}
+
+void SN2CTagManager::HandleTagAdded(const FN2CTaggedBlueprintGraph& TagInfo)
+{
+	RefreshData();
+}
+
+void SN2CTagManager::HandleTagRemoved(const FGuid& GraphGuid, const FString& RemovedTag)
+{
 	RefreshData();
 }
 
