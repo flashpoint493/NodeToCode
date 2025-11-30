@@ -60,7 +60,7 @@ void SN2CTaggedGraphsList::Construct(const FArguments& InArgs)
 		// Header path display
 		+ SVerticalBox::Slot()
 		.AutoHeight()
-		.Padding(0.0f, 4.0f)
+		.Padding(0.0f, 0.0f, 0.0, 4.0f)
 		[
 			SNew(SBorder)
 			.BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
