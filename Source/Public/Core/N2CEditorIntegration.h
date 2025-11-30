@@ -10,6 +10,10 @@
 #include "LLM/IN2CLLMService.h"
 #include "Models/N2CBlueprint.h"
 
+// Forward declarations
+class SN2CGraphEditorWrapper;
+class SDockTab;
+
 /**
  * @class FN2CEditorIntegration
  * @brief Handles integration with the Blueprint Editor
@@ -80,6 +84,25 @@ public:
         FOnLLMResponseReceived OnComplete
     );
 
+    /**
+     * Wrap a graph tab with the NodeToCode overlay if not already wrapped
+     * @param Tab The dock tab to wrap
+     * @param Graph The graph being displayed in the tab
+     * @param Editor The Blueprint editor instance
+     */
+    void WrapGraphTabIfNeeded(TSharedPtr<SDockTab> Tab, UEdGraph* Graph, TWeakPtr<FBlueprintEditor> Editor);
+
+    /**
+     * Try to wrap the currently focused graph tab in the given editor
+     * @param Editor The Blueprint editor to check
+     */
+    void TryWrapFocusedGraphTab(TWeakPtr<FBlueprintEditor> Editor);
+
+    /**
+     * Clean up any stale wrapper references
+     */
+    void CleanupStaleWrappers();
+
 private:
     /** Constructor */
     FN2CEditorIntegration() = default;
@@ -97,6 +120,21 @@ private:
 
     /** The currently active Blueprint editor */
     TWeakPtr<FBlueprintEditor> ActiveBlueprintEditor;
+
+    /** Map of wrapped tabs to their wrapper widgets (legacy, kept for compatibility) */
+    TMap<TWeakPtr<SDockTab>, TSharedPtr<SN2CGraphEditorWrapper>> WrappedTabs;
+
+    /** Set of graph GUIDs that have had overlays injected */
+    TSet<FGuid> InjectedGraphOverlays;
+
+    /** Timer handle for deferred graph tab wrapping */
+    FTimerHandle GraphTabWrapTimerHandle;
+
+    /** Delegate handle for tab change subscription */
+    FDelegateHandle OnActiveTabChangedHandle;
+
+    /** Handle tab activation to wrap new graph tabs */
+    void OnActiveTabChanged(TSharedPtr<SDockTab> PreviouslyActive, TSharedPtr<SDockTab> NewlyActivated);
 
     /** Register toolbar for a specific Blueprint Editor */
     void RegisterToolbarForEditor(TSharedPtr<FBlueprintEditor> InEditor);
