@@ -173,4 +173,7 @@ private:
 
 	/** Output directory path */
 	FString OutputPath;
+
+	/** Current search filter text */
+	FString CurrentSearchFilter;
 };

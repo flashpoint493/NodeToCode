@@ -449,14 +449,43 @@ void SN2CTagManager::HandleGraphDoubleClicked()
 void SN2CTagManager::HandleSearchTextChanged(const FText& NewText)
 {
 	FString SearchText = NewText.ToString();
+	CurrentSearchFilter = SearchText;
 
 	if (CategoryTree.IsValid())
 	{
 		CategoryTree->SetSearchFilter(SearchText);
 	}
-	if (GraphsList.IsValid())
+
+	// When search is active, load ALL graphs so search can find matches across all tags
+	// When search is cleared, go back to showing graphs for selected category/tag
+	if (!SearchText.IsEmpty())
 	{
-		GraphsList->SetSearchFilter(SearchText);
+		// Load all graphs from all tags
+		if (GraphsList.IsValid())
+		{
+			UN2CTagManager& TagManager = UN2CTagManager::Get();
+			const TArray<FN2CTaggedBlueprintGraph>& AllTaggedGraphs = TagManager.GetAllTags();
+
+			TArray<FN2CTagInfo> AllTagInfos;
+			for (const FN2CTaggedBlueprintGraph& Graph : AllTaggedGraphs)
+			{
+				FN2CTagInfo Info = FN2CTagInfo::FromTaggedGraph(Graph);
+				AllTagInfos.Add(Info);
+			}
+
+			GraphsList->SetGraphs(AllTagInfos);
+			GraphsList->SetHeaderPath(TEXT("Search Results"), TEXT(""));
+			GraphsList->SetSearchFilter(SearchText);
+		}
+	}
+	else
+	{
+		// Search cleared - go back to selection-based view
+		UpdateGraphsList();
+		if (GraphsList.IsValid())
+		{
+			GraphsList->SetSearchFilter(SearchText);
+		}
 	}
 }
 
