@@ -473,8 +473,8 @@ TSharedRef<SWidget> SN2CGraphOverlay::CreateTagPopoverContent()
 						}
 					})
 					[
-						SNew(SImage)
-						.Image(FAppStyle::GetBrush("Icons.ChevronDown"))
+						SNew(STextBlock)
+						.Text(FText::GetEmpty())
 					]
 				]
 			]
@@ -531,8 +531,8 @@ TSharedRef<SWidget> SN2CGraphOverlay::CreateTagPopoverContent()
 					}
 				})
 				[
-					SNew(SImage)
-					.Image(FAppStyle::GetBrush("Icons.ChevronDown"))
+					SNew(STextBlock)
+					.Text(FText::GetEmpty())
 				]
 			]
 		]
