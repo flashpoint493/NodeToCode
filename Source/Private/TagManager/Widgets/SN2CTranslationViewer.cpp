@@ -147,7 +147,7 @@ void SN2CTranslationViewer::Construct(const FArguments& InArgs)
 								.HeightOverride(14.0f)
 								[
 									SNew(SImage)
-									.Image(FAppStyle::GetBrush("GenericCommands.Copy"))
+									.Image(FAppStyle::GetBrush("Icons.Clipboard"))
 								]
 							]
 						]
@@ -225,7 +225,7 @@ void SN2CTranslationViewer::Construct(const FArguments& InArgs)
 										.HeightOverride(14.0f)
 										[
 											SNew(SImage)
-											.Image(FAppStyle::GetBrush("GenericCommands.Copy"))
+											.Image(FAppStyle::GetBrush("Icons.Clipboard"))
 										]
 									]
 								]

@@ -114,12 +114,13 @@ void UN2CLLMModule::ProcessN2CJson(
     }
 
     // Send request through service
+    // Capture OnComplete callback to invoke it when response is received
     ActiveService->SendRequest(JsonInput, SystemPrompt, FOnLLMResponseReceived::CreateLambda(
-        [this](const FString& Response)
+        [this, OnComplete](const FString& Response)
         {
             // Create translation response struct
             FN2CTranslationResponse TranslationResponse;
-            
+
             // Get active service's response parser
             TScriptInterface<IN2CLLMService> ActiveServiceParser = GetActiveService();
             if (ActiveServiceParser.GetInterface())
@@ -130,14 +131,14 @@ void UN2CLLMModule::ProcessN2CJson(
                     if (Parser->ParseLLMResponse(Response, TranslationResponse))
                     {
                         CurrentStatus = EN2CSystemStatus::Idle;
-                            
+
                         // Save translation to disk
                         const FN2CBlueprint& Blueprint = FN2CNodeTranslator::Get().GetN2CBlueprint();
                         if (SaveTranslationToDisk(TranslationResponse, Blueprint))
                         {
                             FN2CLogger::Get().Log(TEXT("Successfully saved translation to disk"), EN2CLogSeverity::Info);
                         }
-                            
+
                         OnTranslationResponseReceived.Broadcast(TranslationResponse, true);
                         FN2CLogger::Get().Log(TEXT("Successfully parsed LLM response"), EN2CLogSeverity::Info);
                     }
@@ -161,6 +162,9 @@ void UN2CLLMModule::ProcessN2CJson(
                 FN2CLogger::Get().LogError(TEXT("No active LLM service"));
                 OnTranslationResponseReceived.Broadcast(TranslationResponse, false);
             }
+
+            // Invoke the completion callback with the raw response
+            OnComplete.ExecuteIfBound(Response);
         }));
 }
 
