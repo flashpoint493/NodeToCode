@@ -5,6 +5,7 @@
 #include "Core/N2CEditorWindow.h"
 #include "Core/N2CTagManager.h"
 #include "Core/N2CGraphStateManager.h"
+#include "Models/N2CStyle.h"
 #include "Utils/N2CLogger.h"
 #include "BlueprintEditor.h"
 #include "TagManager/Models/N2CTagManagerTypes.h"
@@ -67,7 +68,7 @@ void SN2CGraphOverlay::Construct(const FArguments& InArgs)
 		[
 			SNew(SHorizontalBox)
 
-			// Open Window button
+			// NodeToCode branding
 			+ SHorizontalBox::Slot()
 			.AutoWidth()
 			.VAlign(VAlign_Center)
@@ -77,10 +78,31 @@ void SN2CGraphOverlay::Construct(const FArguments& InArgs)
 				.ButtonStyle(FAppStyle::Get(), "SimpleButton")
 				.ToolTipText(LOCTEXT("OpenWindowTooltip", "Open NodeToCode Window"))
 				.OnClicked(this, &SN2CGraphOverlay::OnOpenWindowClicked)
-				.ContentPadding(FMargin(4.0f, 2.0f))
+				.ContentPadding(FMargin(2.0f, 2.0f))
 				[
-					SNew(SImage)
-					.Image(FAppStyle::GetBrush("Icons.Layout"))
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot()
+					.AutoWidth()
+					.VAlign(VAlign_Center)
+					[
+						SNew(SBox)
+						.WidthOverride(20.0f)
+						.HeightOverride(20.0f)
+						[
+							SNew(SImage)
+							.Image(N2CStyle::Get().GetBrush("NodeToCode.ToolbarButton"))
+						]
+					]
+					+ SHorizontalBox::Slot()
+					.AutoWidth()
+					.VAlign(VAlign_Center)
+					.Padding(4.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock)
+						.Text(LOCTEXT("N2CBranding", "N2C"))
+						.TextStyle(FAppStyle::Get(), "SmallText")
+						.ColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f)))
+					]
 				]
 			]
 
@@ -116,9 +138,14 @@ void SN2CGraphOverlay::Construct(const FArguments& InArgs)
 						.AutoWidth()
 						.VAlign(VAlign_Center)
 						[
-							SNew(SImage)
-							.Image(FAppStyle::GetBrush("Icons.Star"))
-							.ColorAndOpacity(this, &SN2CGraphOverlay::GetTagButtonColor)
+							SNew(SBox)
+							.WidthOverride(16.0f)
+							.HeightOverride(16.0f)
+							[
+								SNew(SImage)
+								.Image(FAppStyle::GetBrush("GraphEditor.Bookmark"))
+								.ColorAndOpacity(this, &SN2CGraphOverlay::GetTagButtonColor)
+							]
 						]
 						+ SHorizontalBox::Slot()
 						.AutoWidth()
@@ -157,8 +184,13 @@ void SN2CGraphOverlay::Construct(const FArguments& InArgs)
 				.OnClicked(this, &SN2CGraphOverlay::OnCopyJsonClicked)
 				.ContentPadding(FMargin(4.0f, 2.0f))
 				[
-					SNew(SImage)
-					.Image(FAppStyle::GetBrush("Icons.Clipboard"))
+					SNew(SBox)
+					.WidthOverride(16.0f)
+					.HeightOverride(16.0f)
+					[
+						SNew(SImage)
+						.Image(FAppStyle::GetBrush("Icons.Clipboard"))
+					]
 				]
 			]
 
@@ -191,9 +223,14 @@ void SN2CGraphOverlay::Construct(const FArguments& InArgs)
 					.AutoWidth()
 					.VAlign(VAlign_Center)
 					[
-						SNew(SImage)
-						.Image(FAppStyle::GetBrush("Icons.Play"))
-						.Visibility(this, &SN2CGraphOverlay::GetTranslateTextVisibility)
+						SNew(SBox)
+						.WidthOverride(16.0f)
+						.HeightOverride(16.0f)
+						[
+							SNew(SImage)
+							.Image(FAppStyle::GetBrush("Icons.Convert"))
+							.Visibility(this, &SN2CGraphOverlay::GetTranslateTextVisibility)
+						]
 					]
 					+ SHorizontalBox::Slot()
 					.AutoWidth()
@@ -216,10 +253,10 @@ void SN2CGraphOverlay::Construct(const FArguments& InArgs)
 		]
 	];
 
-	FN2CLogger::Get().Log(TEXT("SN2CGraphOverlay::Construct: Widget hierarchy built successfully"), EN2CLogSeverity::Warning);
-	FN2CLogger::Get().Log(FString::Printf(TEXT("SN2CGraphOverlay::Construct: TagMenuAnchor valid=%d"), TagMenuAnchor.IsValid() ? 1 : 0), EN2CLogSeverity::Warning);
-	FN2CLogger::Get().Log(FString::Printf(TEXT("SN2CGraphOverlay::Construct: TranslateSpinner valid=%d"), TranslateSpinner.IsValid() ? 1 : 0), EN2CLogSeverity::Warning);
-	FN2CLogger::Get().Log(TEXT("SN2CGraphOverlay::Construct: EXIT"), EN2CLogSeverity::Warning);
+	//FN2CLogger::Get().Log(TEXT("SN2CGraphOverlay::Construct: Widget hierarchy built successfully"), EN2CLogSeverity::Warning);
+	//FN2CLogger::Get().Log(FString::Printf(TEXT("SN2CGraphOverlay::Construct: TagMenuAnchor valid=%d"), TagMenuAnchor.IsValid() ? 1 : 0), EN2CLogSeverity::Warning);
+	//FN2CLogger::Get().Log(FString::Printf(TEXT("SN2CGraphOverlay::Construct: TranslateSpinner valid=%d"), TranslateSpinner.IsValid() ? 1 : 0), EN2CLogSeverity::Warning);
+	//FN2CLogger::Get().Log(TEXT("SN2CGraphOverlay::Construct: EXIT"), EN2CLogSeverity::Warning);
 }
 
 SN2CGraphOverlay::~SN2CGraphOverlay()
