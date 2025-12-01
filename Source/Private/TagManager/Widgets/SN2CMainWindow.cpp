@@ -7,7 +7,11 @@
 #include "Core/N2CEditorIntegration.h"
 #include "Core/N2CGraphStateManager.h"
 #include "LLM/N2CLLMModule.h"
+#include "LLM/N2CLLMTypes.h"
 #include "LLM/N2CBatchTranslationOrchestrator.h"
+#include "LLM/IN2CLLMService.h"
+#include "LLM/N2CResponseParserBase.h"
+#include "Async/Async.h"
 #include "Core/N2CSerializer.h"
 #include "Core/N2CNodeCollector.h"
 #include "Core/N2CNodeTranslator.h"
@@ -73,10 +77,8 @@ void SN2CMainWindow::Construct(const FArguments& InArgs)
 			]
 		]
 
-		// Batch Progress modal layer (centered)
+		// Batch Progress modal layer with full-screen overlay background
 		+ SOverlay::Slot()
-		.HAlign(HAlign_Center)
-		.VAlign(VAlign_Center)
 		[
 			SNew(SBorder)
 			.Visibility(this, &SN2CMainWindow::GetBatchProgressVisibility)
@@ -84,12 +86,18 @@ void SN2CMainWindow::Construct(const FArguments& InArgs)
 			.BorderBackgroundColor(N2CMainWindowColors::BgOverlay)
 			.Padding(0.0f)
 			[
-				SAssignNew(BatchProgressModal, SN2CBatchProgressModal)
-				.OnCancelRequested(FSimpleDelegate::CreateLambda([this]()
-				{
-					UN2CBatchTranslationOrchestrator::Get().CancelBatch();
-					HideBatchProgress();
-				}))
+				// Center the modal within the full-screen overlay
+				SNew(SBox)
+				.HAlign(HAlign_Center)
+				.VAlign(VAlign_Center)
+				[
+					SAssignNew(BatchProgressModal, SN2CBatchProgressModal)
+					.OnCancelRequested(FSimpleDelegate::CreateLambda([this]()
+					{
+						UN2CBatchTranslationOrchestrator::Get().CancelBatch();
+						HideBatchProgress();
+					}))
+				]
 			]
 		]
 	];
@@ -129,6 +137,17 @@ void SN2CMainWindow::Construct(const FArguments& InArgs)
 			}
 		}
 	);
+
+	// Subscribe to overlay translation requests
+	OverlayTranslationRequestHandle = FN2CEditorIntegration::Get().OnOverlayTranslationRequested.AddLambda(
+		[WeakSelf](const FGuid& GraphGuid, const FString& GraphName, const FString& BlueprintPath)
+		{
+			if (TSharedPtr<SN2CMainWindow> StrongSelf = WeakSelf.Pin())
+			{
+				StrongSelf->HandleOverlayTranslationRequest(GraphGuid, GraphName, BlueprintPath);
+			}
+		}
+	);
 }
 
 SN2CMainWindow::~SN2CMainWindow()
@@ -147,6 +166,12 @@ SN2CMainWindow::~SN2CMainWindow()
 	if (BatchProgressHandle.IsValid())
 	{
 		Orchestrator.OnProgressNative.Remove(BatchProgressHandle);
+	}
+
+	// Unbind from overlay translation requests
+	if (OverlayTranslationRequestHandle.IsValid())
+	{
+		FN2CEditorIntegration::Get().OnOverlayTranslationRequested.Remove(OverlayTranslationRequestHandle);
 	}
 }
 
@@ -295,6 +320,16 @@ void SN2CMainWindow::HandleBatchTranslateRequested()
 	{
 		return;
 	}
+
+	// Check if already translating
+	if (FN2CEditorIntegration::Get().IsAnyTranslationInProgress())
+	{
+		UE_LOG(LogNodeToCode, Warning, TEXT("[SN2CMainWindow] Translation already in progress"));
+		return;
+	}
+
+	// Set global translation state
+	FN2CEditorIntegration::Get().SetTranslationInProgress(true);
 
 	// Initialize and show the batch progress modal
 	TArray<FString> GraphNames;
@@ -540,6 +575,9 @@ UEdGraph* SN2CMainWindow::FindGraphByGuid(UBlueprint* Blueprint, const FGuid& Gr
 void SN2CMainWindow::OnBatchItemComplete(const FN2CTagInfo& TagInfo, const FN2CTranslationResponse& Response,
 	bool bSuccess, int32 ItemIndex, int32 TotalCount)
 {
+	UE_LOG(LogNodeToCode, Log, TEXT("[SN2CMainWindow] OnBatchItemComplete: %s (success=%s, item %d/%d)"),
+		*TagInfo.GraphName, bSuccess ? TEXT("true") : TEXT("false"), ItemIndex + 1, TotalCount);
+
 	if (BatchProgressModal.IsValid())
 	{
 		BatchProgressModal->MarkItemComplete(TagInfo.GraphName, bSuccess);
@@ -548,10 +586,17 @@ void SN2CMainWindow::OnBatchItemComplete(const FN2CTagInfo& TagInfo, const FN2CT
 
 void SN2CMainWindow::OnBatchComplete(const FN2CBatchTranslationResult& Result)
 {
+	// Clear global translation state
+	FN2CEditorIntegration::Get().SetTranslationInProgress(false);
+
 	if (BatchProgressModal.IsValid())
 	{
 		BatchProgressModal->SetResult(Result);
 	}
+
+	// Refresh the tag manager data to update bHasTranslation state on list items
+	// This makes the View button become interactable for newly translated graphs
+	RefreshData();
 
 	// Fire external delegate
 	OnBatchCompleteDelegate.ExecuteIfBound(Result);
@@ -559,9 +604,162 @@ void SN2CMainWindow::OnBatchComplete(const FN2CBatchTranslationResult& Result)
 
 void SN2CMainWindow::OnBatchProgress(int32 CurrentIndex, int32 TotalCount, const FString& GraphName)
 {
+	UE_LOG(LogNodeToCode, Log, TEXT("[SN2CMainWindow] OnBatchProgress: %s (item %d/%d)"),
+		*GraphName, CurrentIndex + 1, TotalCount);
+
 	if (BatchProgressModal.IsValid())
 	{
 		BatchProgressModal->SetProgress(CurrentIndex, TotalCount, GraphName);
+	}
+}
+
+// ==================== Overlay Translation Handling ====================
+
+void SN2CMainWindow::HandleOverlayTranslationRequest(const FGuid& GraphGuid, const FString& GraphName, const FString& BlueprintPath)
+{
+	UE_LOG(LogNodeToCode, Log, TEXT("[SN2CMainWindow] HandleOverlayTranslationRequest: %s (GUID=%s)"),
+		*GraphName, *GraphGuid.ToString());
+
+	// Check if already translating
+	if (bIsSingleTranslationInProgress || UN2CBatchTranslationOrchestrator::Get().IsBatchInProgress())
+	{
+		UE_LOG(LogNodeToCode, Warning, TEXT("[SN2CMainWindow] Translation already in progress, ignoring overlay request"));
+		return;
+	}
+
+	// Set global translation state to block all overlays
+	FN2CEditorIntegration::Get().SetTranslationInProgress(true);
+
+	// Initialize the batch progress modal for a single item
+	TArray<FString> GraphNames;
+	GraphNames.Add(GraphName);
+	if (BatchProgressModal.IsValid())
+	{
+		BatchProgressModal->Initialize(GraphNames);
+	}
+	ShowBatchProgress();
+
+	// Store pending graph info (we need it for the callback)
+	PendingSingleTranslateGraph.GraphGuid = GraphGuid.ToString();
+	PendingSingleTranslateGraph.GraphName = GraphName;
+	PendingSingleTranslateGraph.BlueprintPath = BlueprintPath;
+	bIsSingleTranslationInProgress = true;
+
+	// Load the blueprint and graph
+	FSoftObjectPath BPPath(BlueprintPath);
+	UBlueprint* Blueprint = Cast<UBlueprint>(BPPath.TryLoad());
+	if (!Blueprint)
+	{
+		UE_LOG(LogNodeToCode, Error, TEXT("[SN2CMainWindow] Failed to load Blueprint: %s"), *BlueprintPath);
+		FN2CEditorIntegration::Get().SetTranslationInProgress(false);
+		bIsSingleTranslationInProgress = false;
+		HideBatchProgress();
+		return;
+	}
+
+	UEdGraph* EdGraph = FindGraphByGuid(Blueprint, GraphGuid);
+	if (!EdGraph)
+	{
+		UE_LOG(LogNodeToCode, Error, TEXT("[SN2CMainWindow] Failed to find graph with GUID: %s"), *GraphGuid.ToString());
+		FN2CEditorIntegration::Get().SetTranslationInProgress(false);
+		bIsSingleTranslationInProgress = false;
+		HideBatchProgress();
+		return;
+	}
+
+	// Collect and translate nodes
+	TArray<UK2Node*> CollectedNodes;
+	FN2CEditorIntegration::Get().CollectNodesFromGraph(EdGraph, CollectedNodes);
+
+	FN2CBlueprint N2CBlueprint;
+	FN2CEditorIntegration::Get().TranslateNodesToN2CBlueprint(CollectedNodes, N2CBlueprint);
+
+	FString JsonContent = FN2CEditorIntegration::Get().SerializeN2CBlueprintToJson(N2CBlueprint, false);
+	if (JsonContent.IsEmpty())
+	{
+		UE_LOG(LogNodeToCode, Error, TEXT("[SN2CMainWindow] Failed to serialize graph to JSON"));
+		FN2CEditorIntegration::Get().SetTranslationInProgress(false);
+		bIsSingleTranslationInProgress = false;
+		HideBatchProgress();
+		return;
+	}
+
+	// Update progress modal to show processing
+	if (BatchProgressModal.IsValid())
+	{
+		BatchProgressModal->SetProgress(0, 1, GraphName);
+	}
+
+	// Store weak reference for safe lambda capture
+	TWeakPtr<SN2CMainWindow> WeakSelf = SharedThis(this);
+	FString CapturedGraphName = GraphName;
+
+	// Send to LLM
+	UN2CLLMModule* LLMModule = UN2CLLMModule::Get();
+	if (LLMModule && LLMModule->Initialize())
+	{
+		LLMModule->ProcessN2CJson(JsonContent, FOnLLMResponseReceived::CreateLambda(
+			[WeakSelf, CapturedGraphName](const FString& Response)
+			{
+				// Parse response (can be done on any thread)
+				FN2CTranslationResponse TranslationResponse;
+				bool bSuccess = false;
+
+				TScriptInterface<IN2CLLMService> ActiveService = UN2CLLMModule::Get()->GetActiveService();
+				if (ActiveService.GetInterface())
+				{
+					UN2CResponseParserBase* Parser = ActiveService->GetResponseParser();
+					if (Parser && Parser->ParseLLMResponse(Response, TranslationResponse))
+					{
+						bSuccess = true;
+						UE_LOG(LogNodeToCode, Log, TEXT("[SN2CMainWindow] Overlay translation completed successfully"));
+					}
+				}
+
+				// UI updates must happen on Game Thread
+				AsyncTask(ENamedThreads::GameThread, [WeakSelf, CapturedGraphName, TranslationResponse, bSuccess]()
+				{
+					TSharedPtr<SN2CMainWindow> StrongSelf = WeakSelf.Pin();
+					if (!StrongSelf.IsValid())
+					{
+						// Still need to clear global state even if window is gone
+						FN2CEditorIntegration::Get().SetTranslationInProgress(false);
+						return;
+					}
+
+					// Update progress modal
+					if (StrongSelf->BatchProgressModal.IsValid())
+					{
+						StrongSelf->BatchProgressModal->MarkItemComplete(CapturedGraphName, bSuccess);
+
+						// Create result for the modal
+						FN2CBatchTranslationResult Result;
+						Result.TotalCount = 1;
+						Result.SuccessCount = bSuccess ? 1 : 0;
+						Result.FailureCount = bSuccess ? 0 : 1;
+						Result.TotalTimeSeconds = 0.0f; // Not tracked for single translations
+						if (!bSuccess)
+						{
+							Result.FailedGraphNames.Add(CapturedGraphName);
+						}
+						StrongSelf->BatchProgressModal->SetResult(Result);
+					}
+
+					// Clear global translation state
+					FN2CEditorIntegration::Get().SetTranslationInProgress(false);
+
+					// Call the completion handler
+					StrongSelf->OnSingleTranslationComplete(TranslationResponse, bSuccess);
+				});
+			}
+		));
+	}
+	else
+	{
+		UE_LOG(LogNodeToCode, Error, TEXT("[SN2CMainWindow] Failed to initialize LLM Module"));
+		FN2CEditorIntegration::Get().SetTranslationInProgress(false);
+		bIsSingleTranslationInProgress = false;
+		HideBatchProgress();
 	}
 }
 

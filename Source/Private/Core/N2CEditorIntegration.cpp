@@ -1111,3 +1111,29 @@ void FN2CEditorIntegration::OnActiveTabChanged(TSharedPtr<SDockTab> PreviouslyAc
 
     FN2CLogger::Get().Log(TEXT("OnActiveTabChanged: EXIT"), EN2CLogSeverity::Warning);
 }
+
+void FN2CEditorIntegration::SetTranslationInProgress(bool bInProgress)
+{
+    if (bIsAnyTranslationInProgress != bInProgress)
+    {
+        bIsAnyTranslationInProgress = bInProgress;
+        OnTranslationStateChanged.Broadcast(bInProgress);
+
+        FN2CLogger::Get().Log(
+            FString::Printf(TEXT("Global translation state changed: %s"),
+                bInProgress ? TEXT("IN PROGRESS") : TEXT("IDLE")),
+            EN2CLogSeverity::Info
+        );
+    }
+}
+
+void FN2CEditorIntegration::RequestOverlayTranslation(const FGuid& GraphGuid, const FString& GraphName, const FString& BlueprintPath)
+{
+    FN2CLogger::Get().Log(
+        FString::Printf(TEXT("RequestOverlayTranslation: Graph=%s (GUID=%s)"), *GraphName, *GraphGuid.ToString()),
+        EN2CLogSeverity::Info
+    );
+
+    // Broadcast to any listeners (main window will show progress modal)
+    OnOverlayTranslationRequested.Broadcast(GraphGuid, GraphName, BlueprintPath);
+}

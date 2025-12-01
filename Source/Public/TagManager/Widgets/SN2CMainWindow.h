@@ -103,6 +103,9 @@ private:
 	FDelegateHandle BatchCompleteHandle;
 	FDelegateHandle BatchProgressHandle;
 
+	// Overlay translation request delegate handle
+	FDelegateHandle OverlayTranslationRequestHandle;
+
 	// ==================== Tag Manager Event Handlers ====================
 
 	/** Handle tag selection in tree */
@@ -164,6 +167,11 @@ private:
 
 	/** Called for batch progress updates */
 	void OnBatchProgress(int32 CurrentIndex, int32 TotalCount, const FString& GraphName);
+
+	// ==================== Overlay Translation Handling ====================
+
+	/** Handle translation request from graph overlay */
+	void HandleOverlayTranslationRequest(const FGuid& GraphGuid, const FString& GraphName, const FString& BlueprintPath);
 
 	// ==================== Single Translation Callbacks ====================
 

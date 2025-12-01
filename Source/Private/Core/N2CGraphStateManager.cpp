@@ -535,6 +535,59 @@ bool UN2CGraphStateManager::LoadTranslation(const FGuid& GraphGuid, FN2CGraphTra
 	return true;
 }
 
+bool UN2CGraphStateManager::LoadN2CJson(const FGuid& GraphGuid, FString& OutJsonContent) const
+{
+	const FN2CGraphState* State = FindGraphState(GraphGuid);
+	if (!State || !State->HasTranslation())
+	{
+		FN2CLogger::Get().Log(FString::Printf(TEXT("No translation found for graph %s when loading JSON"),
+			*GraphGuid.ToString()),
+			EN2CLogSeverity::Warning);
+		return false;
+	}
+
+	// Build full path from relative path
+	FString FullPath = FPaths::Combine(FPaths::ProjectDir(), State->Translation.OutputPath);
+
+	// Try multiple JSON filename patterns:
+	// 1. Batch translation format: {GraphName}.json
+	// 2. Individual translation format: N2C_BP_{FolderName}.json
+	TArray<FString> PossibleJsonPaths;
+	PossibleJsonPaths.Add(FPaths::Combine(FullPath, State->GraphName + TEXT(".json")));
+	PossibleJsonPaths.Add(FPaths::Combine(FullPath, TEXT("N2C_BP_") + FPaths::GetBaseFilename(FullPath) + TEXT(".json")));
+
+	FString FoundJsonPath;
+	for (const FString& JsonPath : PossibleJsonPaths)
+	{
+		if (FPaths::FileExists(JsonPath))
+		{
+			FoundJsonPath = JsonPath;
+			break;
+		}
+	}
+
+	if (FoundJsonPath.IsEmpty())
+	{
+		FN2CLogger::Get().Log(FString::Printf(TEXT("JSON file not found for graph %s. Tried paths: %s, %s"),
+			*State->GraphName, *PossibleJsonPaths[0], *PossibleJsonPaths[1]),
+			EN2CLogSeverity::Warning);
+		return false;
+	}
+
+	if (!FFileHelper::LoadFileToString(OutJsonContent, *FoundJsonPath))
+	{
+		FN2CLogger::Get().LogError(FString::Printf(TEXT("Failed to load JSON from: %s"),
+			*FoundJsonPath));
+		return false;
+	}
+
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Loaded N2C JSON for graph %s from %s"),
+		*State->GraphName, *FoundJsonPath),
+		EN2CLogSeverity::Info);
+
+	return true;
+}
+
 // ============================================================================
 // JSON Export State Operations
 // ============================================================================

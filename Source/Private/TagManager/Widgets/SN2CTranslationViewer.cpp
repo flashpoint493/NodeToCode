@@ -5,6 +5,7 @@
 #include "Core/N2CGraphStateManager.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SScaleBox.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SExpandableArea.h"
 #include "Widgets/Text/STextBlock.h"
@@ -13,6 +14,8 @@
 #include "Styling/AppStyle.h"
 #include "Styling/SlateIconFinder.h"
 #include "HAL/PlatformApplicationMisc.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 
 #define LOCTEXT_NAMESPACE "SN2CTranslationViewer"
 
@@ -132,13 +135,21 @@ void SN2CTranslationViewer::Construct(const FArguments& InArgs)
 					[
 						SNew(SButton)
 						.ButtonStyle(FAppStyle::Get(), "Button")
-						.ContentPadding(FMargin(8.0f, 4.0f))
+						.ContentPadding(FMargin(6.0f, 6.0f))
 						.OnClicked(this, &SN2CTranslationViewer::HandleCopyCodeClicked)
 						.ToolTipText(LOCTEXT("CopyCodeTooltip", "Copy code to clipboard"))
 						[
-							SNew(SImage)
-							.Image(FAppStyle::GetBrush("GenericCommands.Copy"))
-							.DesiredSizeOverride(FVector2D(14.0f, 14.0f))
+							SNew(SScaleBox)
+							.Stretch(EStretch::ScaleToFit)
+							[
+								SNew(SBox)
+								.WidthOverride(14.0f)
+								.HeightOverride(14.0f)
+								[
+									SNew(SImage)
+									.Image(FAppStyle::GetBrush("GenericCommands.Copy"))
+								]
+							]
 						]
 					]
 				]
@@ -197,7 +208,7 @@ void SN2CTranslationViewer::Construct(const FArguments& InArgs)
 							// Copy notes button
 							+ SHorizontalBox::Slot()
 							.AutoWidth()
-							.VAlign(VAlign_Bottom)
+							.VAlign(VAlign_Top)
 							.Padding(8.0f, 0.0f, 0.0f, 0.0f)
 							[
 								SNew(SButton)
@@ -206,9 +217,17 @@ void SN2CTranslationViewer::Construct(const FArguments& InArgs)
 								.OnClicked(this, &SN2CTranslationViewer::HandleCopyNotesClicked)
 								.ToolTipText(LOCTEXT("CopyNotesTooltip", "Copy notes to clipboard"))
 								[
-									SNew(SImage)
-									.Image(FAppStyle::GetBrush("GenericCommands.Copy"))
-									.DesiredSizeOverride(FVector2D(14.0f, 14.0f))
+									SNew(SScaleBox)
+									.Stretch(EStretch::ScaleToFit)
+									[
+										SNew(SBox)
+										.WidthOverride(14.0f)
+										.HeightOverride(14.0f)
+										[
+											SNew(SImage)
+											.Image(FAppStyle::GetBrush("GenericCommands.Copy"))
+										]
+									]
 								]
 							]
 						]
@@ -249,7 +268,7 @@ bool SN2CTranslationViewer::LoadTranslation(const FN2CTagInfo& GraphInfo)
 	{
 		// Try to get JSON content as well
 		FString JsonContent;
-		// TODO: Load JSON from state manager if available
+		UN2CGraphStateManager::Get().LoadN2CJson(GraphGuid, JsonContent);
 
 		LoadTranslation(Translation, GraphInfo.GraphName, JsonContent);
 		return true;
@@ -426,6 +445,23 @@ FString SN2CTranslationViewer::GetContentForActiveTab() const
 	}
 	else if (ActiveFileType == TEXT("json"))
 	{
+		// Prettify the JSON for display (don't modify the stored content)
+		if (!CurrentJsonContent.IsEmpty())
+		{
+			TSharedPtr<FJsonValue> JsonValue;
+			TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(CurrentJsonContent);
+			if (FJsonSerializer::Deserialize(Reader, JsonValue) && JsonValue.IsValid())
+			{
+				FString PrettyJson;
+				TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> Writer =
+					TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&PrettyJson);
+				if (FJsonSerializer::Serialize(JsonValue, TEXT(""), Writer))
+				{
+					return PrettyJson;
+				}
+			}
+		}
+		// Fall back to raw content if prettifying fails
 		return CurrentJsonContent;
 	}
 	return FString();

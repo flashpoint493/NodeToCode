@@ -66,6 +66,10 @@ private:
 	// Delegate handles for cleanup
 	FDelegateHandle OnTagAddedHandle;
 	FDelegateHandle OnTagRemovedHandle;
+	FDelegateHandle OnTranslationStateChangedHandle;
+
+	// Global translation state callback
+	void OnGlobalTranslationStateChanged(bool bInProgress);
 
 	// Button click handlers
 	FReply OnCopyJsonClicked();

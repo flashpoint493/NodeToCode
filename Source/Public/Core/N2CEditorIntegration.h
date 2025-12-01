@@ -13,6 +13,18 @@
 // Forward declarations
 class SN2CGraphEditorWrapper;
 class SDockTab;
+class SN2CGraphOverlay;
+
+/**
+ * Delegate for when translation state changes globally
+ */
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnN2CTranslationStateChanged, bool /* bIsTranslating */);
+
+/**
+ * Delegate for when a graph overlay requests translation
+ * The main window can subscribe to show progress modal
+ */
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnN2COverlayTranslationRequested, const FGuid& /* GraphGuid */, const FString& /* GraphName */, const FString& /* BlueprintPath */);
 
 /**
  * @class FN2CEditorIntegration
@@ -103,6 +115,32 @@ public:
      */
     void CleanupStaleWrappers();
 
+    // ==================== Global Translation State ====================
+
+    /**
+     * Check if any translation is currently in progress
+     * This includes both single graph translations and batch translations
+     */
+    bool IsAnyTranslationInProgress() const { return bIsAnyTranslationInProgress; }
+
+    /**
+     * Set the global translation state
+     * Called by overlays, main window, etc. when starting/completing translations
+     */
+    void SetTranslationInProgress(bool bInProgress);
+
+    /**
+     * Request a translation from a graph overlay
+     * This broadcasts to the main window to show progress modal
+     */
+    void RequestOverlayTranslation(const FGuid& GraphGuid, const FString& GraphName, const FString& BlueprintPath);
+
+    /** Delegate fired when global translation state changes */
+    FOnN2CTranslationStateChanged OnTranslationStateChanged;
+
+    /** Delegate fired when a graph overlay requests translation */
+    FOnN2COverlayTranslationRequested OnOverlayTranslationRequested;
+
 private:
     /** Constructor */
     FN2CEditorIntegration() = default;
@@ -132,6 +170,9 @@ private:
 
     /** Delegate handle for tab change subscription */
     FDelegateHandle OnActiveTabChangedHandle;
+
+    /** Global flag tracking if any translation is in progress */
+    bool bIsAnyTranslationInProgress = false;
 
     /** Handle tab activation to wrap new graph tabs */
     void OnActiveTabChanged(TSharedPtr<SDockTab> PreviouslyActive, TSharedPtr<SDockTab> NewlyActivated);

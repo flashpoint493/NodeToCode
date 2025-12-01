@@ -3,8 +3,10 @@
 #include "Core/Widgets/SN2CGraphOverlay.h"
 #include "Core/N2CEditorIntegration.h"
 #include "Core/N2CTagManager.h"
+#include "Core/N2CGraphStateManager.h"
 #include "Utils/N2CLogger.h"
 #include "BlueprintEditor.h"
+#include "TagManager/Models/N2CTagManagerTypes.h"
 
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SBorder.h"
@@ -46,6 +48,13 @@ void SN2CGraphOverlay::Construct(const FArguments& InArgs)
 	OnTagAddedHandle = UN2CTagManager::Get().OnBlueprintTagAdded.AddRaw(this, &SN2CGraphOverlay::OnTagAdded);
 	OnTagRemovedHandle = UN2CTagManager::Get().OnBlueprintTagRemoved.AddRaw(this, &SN2CGraphOverlay::OnTagRemoved);
 	FN2CLogger::Get().Log(TEXT("SN2CGraphOverlay::Construct: Tag event subscriptions done"), EN2CLogSeverity::Warning);
+
+	// Subscribe to global translation state changes
+	OnTranslationStateChangedHandle = FN2CEditorIntegration::Get().OnTranslationStateChanged.AddRaw(
+		this, &SN2CGraphOverlay::OnGlobalTranslationStateChanged);
+
+	// Initialize local state from global state
+	bIsTranslating = FN2CEditorIntegration::Get().IsAnyTranslationInProgress();
 
 	ChildSlot
 	[
@@ -194,6 +203,11 @@ SN2CGraphOverlay::~SN2CGraphOverlay()
 	{
 		UN2CTagManager::Get().OnBlueprintTagRemoved.Remove(OnTagRemovedHandle);
 	}
+	// Unsubscribe from global translation state
+	if (OnTranslationStateChangedHandle.IsValid())
+	{
+		FN2CEditorIntegration::Get().OnTranslationStateChanged.Remove(OnTranslationStateChangedHandle);
+	}
 }
 
 void SN2CGraphOverlay::RefreshTagCount()
@@ -242,8 +256,11 @@ FReply SN2CGraphOverlay::OnCopyJsonClicked()
 
 FReply SN2CGraphOverlay::OnTranslateClicked()
 {
-	if (bIsTranslating)
+	// Check global translation state
+	if (FN2CEditorIntegration::Get().IsAnyTranslationInProgress())
 	{
+		FN2CLogger::Get().Log(TEXT("Translation already in progress globally"),
+			EN2CLogSeverity::Warning, TEXT("SN2CGraphOverlay"));
 		return FReply::Handled();
 	}
 
@@ -259,14 +276,9 @@ FReply SN2CGraphOverlay::OnTranslateClicked()
 		return FReply::Handled();
 	}
 
-	bIsTranslating = true;
-
-	// Use the editor integration to translate
-	FN2CEditorIntegration::Get().TranslateFocusedBlueprintGraph();
-
-	// For now, just reset the state after a delay
-	// In a full implementation, we'd hook into the translation completion callback
-	bIsTranslating = false;
+	// Request translation through the central system
+	// This broadcasts to the main window which will show the progress modal
+	FN2CEditorIntegration::Get().RequestOverlayTranslation(GraphGuid, GraphName, BlueprintPath);
 
 	return FReply::Handled();
 }
@@ -652,6 +664,13 @@ void SN2CGraphOverlay::OnTagRemoved(const FGuid& RemovedGraphGuid, const FString
 	{
 		RefreshTagCount();
 	}
+}
+
+void SN2CGraphOverlay::OnGlobalTranslationStateChanged(bool bInProgress)
+{
+	// Update local state from global state
+	// This ensures all overlays are synchronized
+	bIsTranslating = bInProgress;
 }
 
 EVisibility SN2CGraphOverlay::GetSpinnerVisibility() const

@@ -53,6 +53,9 @@ struct NODETOCODE_API FN2CBatchTranslationItem
 	UPROPERTY()
 	FN2CTranslationResponse TranslationResponse;
 
+	/** Cached JSON payload from serialization (used for saving alongside translation) */
+	FString CachedJsonPayload;
+
 	FN2CBatchTranslationItem() = default;
 };
 

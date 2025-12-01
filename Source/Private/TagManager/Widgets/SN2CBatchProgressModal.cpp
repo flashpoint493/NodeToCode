@@ -8,6 +8,7 @@
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Notifications/SProgressBar.h"
 #include "Styling/AppStyle.h"
+#include "Models/N2CLogging.h"
 
 #define LOCTEXT_NAMESPACE "SN2CBatchProgressModal"
 
@@ -34,10 +35,20 @@ void SN2CBatchProgressModal::Construct(const FArguments& InArgs)
 	TotalItemCount = 0;
 	bIsComplete = false;
 
+	// Calculate minimum width to fit completion text "Complete - X succeeded, Y failed"
+	// Assuming 450px is sufficient for the longest expected text
+	const float MinModalWidth = 450.0f;
+	const float ModalWidth = FMath::Max(InArgs._ModalWidth, MinModalWidth);
+	// Max height for the entire modal (header + body + footer)
+	const float MaxModalHeight = 400.0f;
+	// Max height for the progress list area
+	const float MaxListHeight = 200.0f;
+
 	ChildSlot
 	[
 		SNew(SBox)
-		.WidthOverride(InArgs._ModalWidth)
+		.WidthOverride(ModalWidth)
+		.MaxDesiredHeight(MaxModalHeight)
 		[
 			SNew(SBorder)
 			.BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
@@ -122,12 +133,12 @@ void SN2CBatchProgressModal::Construct(const FArguments& InArgs)
 						]
 					]
 
-					// Progress list
+					// Progress list with max height and scrollbar
 					+ SVerticalBox::Slot()
 					.AutoHeight()
 					[
 						SNew(SBox)
-						.MaxDesiredHeight(140.0f)
+						.MaxDesiredHeight(MaxListHeight)
 						[
 							SNew(SBorder)
 							.BorderImage(FAppStyle::GetBrush("ToolPanel.DarkGroupBorder"))
@@ -245,12 +256,27 @@ void SN2CBatchProgressModal::SetProgress(int32 CurrentIndex, int32 TotalCount, c
 
 void SN2CBatchProgressModal::MarkItemComplete(const FString& GraphName, bool bSuccess)
 {
+	bool bFound = false;
 	for (TSharedPtr<FN2CBatchProgressItem>& Item : ProgressItems)
 	{
 		if (Item->GraphName == GraphName)
 		{
 			Item->Status = bSuccess ? EN2CBatchProgressItemStatus::Completed : EN2CBatchProgressItemStatus::Failed;
+			bFound = true;
+			UE_LOG(LogNodeToCode, Log, TEXT("[SN2CBatchProgressModal] MarkItemComplete: Found '%s', set to %s"),
+				*GraphName, bSuccess ? TEXT("Completed") : TEXT("Failed"));
 			break;
+		}
+	}
+
+	if (!bFound)
+	{
+		UE_LOG(LogNodeToCode, Warning, TEXT("[SN2CBatchProgressModal] MarkItemComplete: Could NOT find '%s' in %d items"),
+			*GraphName, ProgressItems.Num());
+		// Log all item names for debugging
+		for (const TSharedPtr<FN2CBatchProgressItem>& Item : ProgressItems)
+		{
+			UE_LOG(LogNodeToCode, Log, TEXT("  - Item: '%s'"), *Item->GraphName);
 		}
 	}
 
@@ -344,6 +370,9 @@ FReply SN2CBatchProgressModal::HandleCancelClicked()
 
 TSharedRef<ITableRow> SN2CBatchProgressModal::GenerateProgressRow(TSharedPtr<FN2CBatchProgressItem> Item, const TSharedRef<STableViewBase>& OwnerTable)
 {
+	// Capture Item by value (shared pointer) so status updates are reflected
+	TSharedPtr<FN2CBatchProgressItem> ItemPtr = Item;
+
 	return SNew(STableRow<TSharedPtr<FN2CBatchProgressItem>>, OwnerTable)
 		.Padding(FMargin(8.0f, 4.0f))
 		[
@@ -359,8 +388,9 @@ TSharedRef<ITableRow> SN2CBatchProgressModal::GenerateProgressRow(TSharedPtr<FN2
 				.HAlign(HAlign_Center)
 				[
 					SNew(STextBlock)
-					.Text(GetStatusIcon(Item->Status))
-					.ColorAndOpacity(GetStatusColor(Item->Status))
+					// Use attribute binding to dynamically query current status
+					.Text_Lambda([this, ItemPtr]() { return GetStatusIcon(ItemPtr->Status); })
+					.ColorAndOpacity_Lambda([this, ItemPtr]() { return GetStatusColor(ItemPtr->Status); })
 				]
 			]
 			// Graph name
@@ -371,7 +401,8 @@ TSharedRef<ITableRow> SN2CBatchProgressModal::GenerateProgressRow(TSharedPtr<FN2
 				SNew(STextBlock)
 				.Text(FText::FromString(Item->GraphName))
 				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 11))
-				.ColorAndOpacity(GetItemTextColor(Item->Status))
+				// Use attribute binding to dynamically query current status
+				.ColorAndOpacity_Lambda([this, ItemPtr]() { return GetItemTextColor(ItemPtr->Status); })
 			]
 		];
 }

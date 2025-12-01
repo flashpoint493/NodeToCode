@@ -210,6 +210,14 @@ public:
 	 */
 	bool LoadTranslation(const FGuid& GraphGuid, FN2CGraphTranslation& OutTranslation) const;
 
+	/**
+	 * Load the N2C JSON representation of a graph from disk
+	 * @param GraphGuid The GUID of the graph
+	 * @param OutJsonContent The loaded JSON content as a string
+	 * @return True if loaded successfully
+	 */
+	bool LoadN2CJson(const FGuid& GraphGuid, FString& OutJsonContent) const;
+
 	// ========================================================================
 	// JSON Export State Operations
 	// ========================================================================

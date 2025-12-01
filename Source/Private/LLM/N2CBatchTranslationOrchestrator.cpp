@@ -224,6 +224,9 @@ void UN2CBatchTranslationOrchestrator::ProcessNextItem()
 		return;
 	}
 
+	// Cache the JSON payload for saving alongside the translation
+	Item.CachedJsonPayload = JsonPayload;
+
 	// Send to LLM module
 	UN2CLLMModule* LLMModule = UN2CLLMModule::Get();
 	if (LLMModule)
@@ -611,6 +614,18 @@ void UN2CBatchTranslationOrchestrator::SaveItemTranslation(const FN2CBatchTransl
 			{
 				FN2CLogger::Get().LogWarning(
 					FString::Printf(TEXT("Failed to save notes file: %s"), *NotesPath),
+					TEXT("BatchOrchestrator"));
+			}
+		}
+
+		// Save the N2C Blueprint JSON (the serialized graph that was sent to the LLM)
+		if (!Item.CachedJsonPayload.IsEmpty())
+		{
+			FString JsonPath = FPaths::Combine(GraphDir, GraphName + TEXT(".json"));
+			if (!FFileHelper::SaveStringToFile(Item.CachedJsonPayload, *JsonPath))
+			{
+				FN2CLogger::Get().LogWarning(
+					FString::Printf(TEXT("Failed to save JSON file: %s"), *JsonPath),
 					TEXT("BatchOrchestrator"));
 			}
 		}
