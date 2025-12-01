@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
-#include "TagManager/Widgets/SN2CTagManager.h"
-#include "TagManager/Widgets/SN2CTagCategoryTree.h"
-#include "TagManager/Widgets/SN2CTaggedGraphsList.h"
+#include "Core/Widgets/SN2CTagManager.h"
+#include "Core/Widgets/SN2CTagCategoryTree.h"
+#include "Core/Widgets/SN2CTaggedGraphsList.h"
 #include "Core/N2CTagManager.h"
 #include "Core/N2CSettings.h"
 #include "Widgets/Layout/SBorder.h"

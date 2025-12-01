@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
-#include "TagManager/Widgets/N2CTagManagerWidget.h"
-#include "TagManager/Widgets/SN2CTagManager.h"
+#include "Core/Widgets/N2CTagManagerWidget.h"
+#include "Core/Widgets/SN2CTagManager.h"
 
 #define LOCTEXT_NAMESPACE "N2CTagManagerWidget"
 

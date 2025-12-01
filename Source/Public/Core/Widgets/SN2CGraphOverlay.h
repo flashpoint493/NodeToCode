@@ -72,6 +72,7 @@ private:
 	void OnGlobalTranslationStateChanged(bool bInProgress);
 
 	// Button click handlers
+	FReply OnOpenWindowClicked();
 	FReply OnCopyJsonClicked();
 	FReply OnTranslateClicked();
 	FReply OnTagButtonClicked();

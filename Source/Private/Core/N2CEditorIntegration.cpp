@@ -10,7 +10,6 @@
 #include "Core/N2CNodeTranslator.h"
 #include "Core/N2CSerializer.h"
 #include "Core/N2CSettings.h"
-#include "Core/N2CToolbarCommand.h"
 #include "Core/Widgets/SN2CGraphEditorWrapper.h"
 #include "Core/Widgets/SN2CGraphOverlay.h"
 #include "LLM/N2CLLMModule.h"
@@ -231,9 +230,6 @@ void FN2CEditorIntegration::ExecuteCopyJsonForEditor(TWeakPtr<FBlueprintEditor> 
 
 void FN2CEditorIntegration::Initialize()
 {
-    // Register commands
-    FN2CToolbarCommand::Register();
-
     // Register tab spawner
     SN2CEditorWindow::RegisterTabSpawner();
 
@@ -280,9 +276,6 @@ void FN2CEditorIntegration::Shutdown()
 
     // Unregister tab spawner
     SN2CEditorWindow::UnregisterTabSpawner();
-
-    // Clear editor command lists
-    EditorCommandLists.Empty();
 
     // Clear wrapped tabs (legacy)
     WrappedTabs.Empty();
@@ -339,27 +332,7 @@ void FN2CEditorIntegration::HandleAssetEditorOpened(UObject* Asset, IAssetEditor
         // Store the active Blueprint editor
         StoreActiveBlueprintEditor(BlueprintEditorShared);
 
-        // Check if we already have this editor registered
         TWeakPtr<FBlueprintEditor> WeakEditor(BlueprintEditorShared);
-        if (!EditorCommandLists.Contains(WeakEditor))
-        {
-            FString BlueprintPath = OpenedBlueprint->GetPathName();
-
-            FN2CLogger::Get().Log(
-                FString::Printf(TEXT("Registering toolbar for Blueprint Editor: %s"),
-                *BlueprintPath),
-                EN2CLogSeverity::Info
-            );
-
-            RegisterToolbarForEditor(BlueprintEditorShared);
-        }
-        else
-        {
-            FN2CLogger::Get().Log(
-                TEXT("Blueprint Editor already registered"),
-                EN2CLogSeverity::Debug
-            );
-        }
 
         // Schedule deferred wrapping of graph tabs
         // We need to wait for the graph tabs to be created
@@ -389,147 +362,6 @@ void FN2CEditorIntegration::HandleAssetEditorOpened(UObject* Asset, IAssetEditor
     }
 }
 
-
-void FN2CEditorIntegration::RegisterToolbarForEditor(TSharedPtr<FBlueprintEditor> InEditor)
-{
-    FN2CLogger::Get().Log(TEXT("Starting toolbar registration for editor"), EN2CLogSeverity::Info);
-
-    if (!InEditor.IsValid())
-    {
-        FN2CLogger::Get().LogError(TEXT("Invalid editor pointer provided to RegisterToolbarForEditor"));
-        return;
-    }
-
-    // Get Blueprint name for context
-    FString BlueprintName = TEXT("Unknown");
-    if (InEditor->GetBlueprintObj())
-    {
-        BlueprintName = InEditor->GetBlueprintObj()->GetName();
-    }
-
-    // Check if we already have a command list for this editor
-    TWeakPtr<FBlueprintEditor> WeakEditor(InEditor);
-    if (EditorCommandLists.Contains(WeakEditor))
-    {
-        FN2CLogger::Get().Log(
-            FString::Printf(TEXT("Editor already has command list registered: %s"), *BlueprintName),
-            EN2CLogSeverity::Warning
-        );
-        return;
-    }
-
-    // Create command list for this editor
-    TSharedPtr<FUICommandList> CommandList = MakeShareable(new FUICommandList);
-    
-    FN2CLogger::Get().Log(
-        FString::Printf(TEXT("Created command list for Blueprint: %s"), *BlueprintName), 
-        EN2CLogSeverity::Info
-    );
-
-    // Map the Open Window command
-    CommandList->MapAction(
-        FN2CToolbarCommand::Get().OpenWindowCommand,
-        FExecuteAction::CreateLambda([this]()
-        {
-            FGlobalTabmanager::Get()->TryInvokeTab(SN2CEditorWindow::TabId);
-            FN2CLogger::Get().Log(TEXT("Node to Code window opened"), EN2CLogSeverity::Info);
-        }),
-        FCanExecuteAction::CreateLambda([]() { return true; })
-    );
-
-    // Map the Collect Nodes command
-    CommandList->MapAction(
-        FN2CToolbarCommand::Get().CollectNodesCommand,
-        FExecuteAction::CreateLambda([this, WeakEditor, BlueprintName]()
-        {
-            FN2CLogger::Get().Log(
-                FString::Printf(TEXT("Node to Code collection triggered for Blueprint: %s"), *BlueprintName),
-                EN2CLogSeverity::Info
-            );
-            TranslateBlueprintNodesForEditor(WeakEditor);
-        }),
-        FCanExecuteAction::CreateLambda([WeakEditor]()
-        {
-            TSharedPtr<FBlueprintEditor> Editor = WeakEditor.Pin();
-            if (!Editor.IsValid())
-            {
-                return false;
-            }
-            return Editor->GetCurrentMode() == FBlueprintEditorApplicationModes::StandardBlueprintEditorMode;
-        })
-    );
-    
-    // Map the Copy JSON command
-    CommandList->MapAction(
-        FN2CToolbarCommand::Get().CopyJsonCommand,
-        FExecuteAction::CreateLambda([this, WeakEditor, BlueprintName]()
-        {
-            FN2CLogger::Get().Log(
-                FString::Printf(TEXT("Copy Blueprint JSON triggered for Blueprint: %s"), *BlueprintName),
-                EN2CLogSeverity::Info
-            );
-            ExecuteCopyJsonForEditor(WeakEditor);
-        }),
-        FCanExecuteAction::CreateLambda([WeakEditor]()
-        {
-            TSharedPtr<FBlueprintEditor> Editor = WeakEditor.Pin();
-            if (!Editor.IsValid())
-            {
-                return false;
-            }
-            return Editor->GetCurrentMode() == FBlueprintEditorApplicationModes::StandardBlueprintEditorMode;
-        })
-    );
-
-    // Store in our map
-    EditorCommandLists.Add(WeakEditor, CommandList);
-    FN2CLogger::Get().Log(
-        FString::Printf(TEXT("Added command list to map for Blueprint: %s"), *BlueprintName),
-        EN2CLogSeverity::Info
-    );
-
-    // Add toolbar extension
-    TSharedPtr<FExtender> ToolbarExtender = MakeShareable(new FExtender);
-    ToolbarExtender->AddToolBarExtension(
-        "Asset",
-        EExtensionHook::After,
-        CommandList,
-        FToolBarExtensionDelegate::CreateLambda([CommandList](FToolBarBuilder& Builder)
-        {
-            Builder.BeginSection("NodeToCode");
-            
-            // Add dropdown button
-            Builder.AddComboButton(
-                FUIAction(),
-                FOnGetContent::CreateLambda([CommandList]() -> TSharedRef<SWidget>
-                {
-                    FMenuBuilder MenuBuilder(true, CommandList);
-                    
-                    MenuBuilder.AddMenuEntry(FN2CToolbarCommand::Get().OpenWindowCommand);
-                    MenuBuilder.AddMenuEntry(FN2CToolbarCommand::Get().CollectNodesCommand);
-                    MenuBuilder.AddMenuEntry(FN2CToolbarCommand::Get().CopyJsonCommand);
-
-                    return MenuBuilder.MakeWidget();
-                }),
-                NSLOCTEXT("NodeToCode", "NodeToCodeActions", "Node to Code"),
-                NSLOCTEXT("NodeToCode", "NodeToCodeTooltip", "Node to Code Actions"),
-                FSlateIcon("NodeToCodeStyle", "NodeToCode.ToolbarButton")
-            );
-            
-            Builder.EndSection();
-        })
-    );
-
-    // Add the extender to this specific editor
-    InEditor->AddToolbarExtender(ToolbarExtender);
-
-    InEditor->RegenerateMenusAndToolbars();
-    
-    FN2CLogger::Get().Log(
-        FString::Printf(TEXT("Completed toolbar registration for Blueprint: %s"), *BlueprintName), 
-        EN2CLogSeverity::Info
-    );
-}
 
 TArray<FName> FN2CEditorIntegration::GetAvailableThemes(EN2CCodeLanguage Language) const
 {

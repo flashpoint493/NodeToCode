@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
-#include "TagManager/Widgets/SN2CTranslationViewer.h"
+#include "Core/Widgets/SN2CTranslationViewer.h"
 #include "Code Editor/Widgets/SN2CCodeEditor.h"
 #include "Core/N2CGraphStateManager.h"
 #include "Widgets/Layout/SBorder.h"

@@ -153,9 +153,6 @@ public:
     void RegisterBlueprintEditorCallback();
 
 private:
-    /** Map of Blueprint Editor instances to their command lists */
-    TMap<TWeakPtr<FBlueprintEditor>, TSharedPtr<FUICommandList>> EditorCommandLists;
-
     /** The currently active Blueprint editor */
     TWeakPtr<FBlueprintEditor> ActiveBlueprintEditor;
 
@@ -176,9 +173,6 @@ private:
 
     /** Handle tab activation to wrap new graph tabs */
     void OnActiveTabChanged(TSharedPtr<SDockTab> PreviouslyActive, TSharedPtr<SDockTab> NewlyActivated);
-
-    /** Register toolbar for a specific Blueprint Editor */
-    void RegisterToolbarForEditor(TSharedPtr<FBlueprintEditor> InEditor);
 
     /** Execute collect nodes for a specific editor */
     void TranslateBlueprintNodesForEditor(TWeakPtr<FBlueprintEditor> InEditor);

@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
 #include "Core/N2CEditorWindow.h"
-#include "TagManager/Widgets/SN2CMainWindow.h"
+#include "Core/Widgets/SN2CMainWindow.h"
 #include "Utils/N2CLogger.h"
 #include "Widgets/Docking/SDockTab.h"
 

@@ -1,9 +1,9 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
-#include "TagManager/Widgets/SN2CMainWindow.h"
-#include "TagManager/Widgets/SN2CTagManager.h"
-#include "TagManager/Widgets/SN2CTranslationViewer.h"
-#include "TagManager/Widgets/SN2CBatchProgressModal.h"
+#include "Core/Widgets/SN2CMainWindow.h"
+#include "Core/Widgets/SN2CTagManager.h"
+#include "Core/Widgets/SN2CTranslationViewer.h"
+#include "Core/Widgets/SN2CBatchProgressModal.h"
 #include "Core/N2CEditorIntegration.h"
 #include "Core/N2CGraphStateManager.h"
 #include "LLM/N2CLLMModule.h"

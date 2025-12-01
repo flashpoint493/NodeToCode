@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
-#include "TagManager/Widgets/SN2CTagCategoryTree.h"
+#include "Core/Widgets/SN2CTagCategoryTree.h"
 #include "Core/N2CTagManager.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"

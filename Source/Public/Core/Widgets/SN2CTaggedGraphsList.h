@@ -7,7 +7,7 @@
 #include "Widgets/Views/SListView.h"
 #include "Widgets/Views/SHeaderRow.h"
 #include "TagManager/Models/N2CTagManagerTypes.h"
-#include "TagManager/Widgets/SN2CGraphListRow.h"
+#include "Core/Widgets/SN2CGraphListRow.h"
 
 /**
  * Slate widget for displaying tagged graphs in a list/table view

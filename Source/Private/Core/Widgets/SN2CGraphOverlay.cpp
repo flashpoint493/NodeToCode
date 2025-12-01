@@ -2,11 +2,13 @@
 
 #include "Core/Widgets/SN2CGraphOverlay.h"
 #include "Core/N2CEditorIntegration.h"
+#include "Core/N2CEditorWindow.h"
 #include "Core/N2CTagManager.h"
 #include "Core/N2CGraphStateManager.h"
 #include "Utils/N2CLogger.h"
 #include "BlueprintEditor.h"
 #include "TagManager/Models/N2CTagManagerTypes.h"
+#include "Framework/Docking/TabManager.h"
 
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SBorder.h"
@@ -65,11 +67,39 @@ void SN2CGraphOverlay::Construct(const FArguments& InArgs)
 		[
 			SNew(SHorizontalBox)
 
-			// Tag button with count badge
+			// Open Window button
 			+ SHorizontalBox::Slot()
 			.AutoWidth()
 			.VAlign(VAlign_Center)
 			.Padding(0.0f, 0.0f, 4.0f, 0.0f)
+			[
+				SNew(SButton)
+				.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+				.ToolTipText(LOCTEXT("OpenWindowTooltip", "Open NodeToCode Window"))
+				.OnClicked(this, &SN2CGraphOverlay::OnOpenWindowClicked)
+				.ContentPadding(FMargin(4.0f, 2.0f))
+				[
+					SNew(SImage)
+					.Image(FAppStyle::GetBrush("Icons.Layout"))
+				]
+			]
+
+			// Separator
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			.Padding(2.0f, 0.0f)
+			[
+				SNew(SSeparator)
+				.Orientation(Orient_Vertical)
+				.Thickness(1.0f)
+			]
+
+			// Tag button with count badge
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			.Padding(4.0f, 0.0f, 4.0f, 0.0f)
 			[
 				SAssignNew(TagMenuAnchor, SMenuAnchor)
 				.Placement(MenuPlacement_BelowAnchor)
@@ -289,6 +319,17 @@ FReply SN2CGraphOverlay::OnTagButtonClicked()
 	{
 		TagMenuAnchor->SetIsOpen(!TagMenuAnchor->IsOpen());
 	}
+	return FReply::Handled();
+}
+
+FReply SN2CGraphOverlay::OnOpenWindowClicked()
+{
+	// Open the main NodeToCode window using the global tab manager
+	FGlobalTabmanager::Get()->TryInvokeTab(SN2CEditorWindow::TabId);
+
+	FN2CLogger::Get().Log(TEXT("NodeToCode window opened from graph overlay"),
+		EN2CLogSeverity::Info, TEXT("SN2CGraphOverlay"));
+
 	return FReply::Handled();
 }
 

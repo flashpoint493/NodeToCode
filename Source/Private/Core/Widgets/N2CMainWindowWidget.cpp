@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
-#include "TagManager/Widgets/N2CMainWindowWidget.h"
-#include "TagManager/Widgets/SN2CMainWindow.h"
+#include "Core/Widgets/N2CMainWindowWidget.h"
+#include "Core/Widgets/SN2CMainWindow.h"
 
 #define LOCTEXT_NAMESPACE "N2CMainWindowWidget"
 
