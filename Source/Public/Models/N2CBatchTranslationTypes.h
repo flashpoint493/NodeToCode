@@ -105,7 +105,7 @@ struct NODETOCODE_API FN2CBatchTranslationResult
 };
 
 /**
- * Per-item completion delegate with batch context
+ * Per-item completion delegate with batch context (Blueprint-compatible)
  * @param TagInfo The tag info for the completed item
  * @param Response The translation response
  * @param bSuccess Whether the translation was successful
@@ -122,7 +122,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_FiveParams(
 );
 
 /**
- * Batch completion delegate
+ * Batch completion delegate (Blueprint-compatible)
  * @param Result The final batch result with statistics
  */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
@@ -131,7 +131,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 );
 
 /**
- * Progress delegate for UI updates
+ * Progress delegate for UI updates (Blueprint-compatible)
  * @param CurrentIndex The current item index being processed
  * @param TotalCount The total number of items
  * @param CurrentGraphName The name of the graph currently being processed
@@ -141,6 +141,39 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 	int32, CurrentIndex,
 	int32, TotalCount,
 	const FString&, CurrentGraphName
+);
+
+// ==================== Native C++ Delegate Versions ====================
+// These are for C++ code (like Slate widgets) that cannot use UFUNCTIONs
+
+/**
+ * Native per-item completion delegate (C++ only)
+ */
+DECLARE_MULTICAST_DELEGATE_FiveParams(
+	FOnBatchItemTranslationCompleteNative,
+	const FN2CTagInfo& /*TagInfo*/,
+	const FN2CTranslationResponse& /*Response*/,
+	bool /*bSuccess*/,
+	int32 /*ItemIndex*/,
+	int32 /*TotalCount*/
+);
+
+/**
+ * Native batch completion delegate (C++ only)
+ */
+DECLARE_MULTICAST_DELEGATE_OneParam(
+	FOnBatchTranslationCompleteNative,
+	const FN2CBatchTranslationResult& /*Result*/
+);
+
+/**
+ * Native progress delegate (C++ only)
+ */
+DECLARE_MULTICAST_DELEGATE_ThreeParams(
+	FOnBatchTranslationProgressNative,
+	int32 /*CurrentIndex*/,
+	int32 /*TotalCount*/,
+	const FString& /*CurrentGraphName*/
 );
 
 /**

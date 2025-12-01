@@ -80,17 +80,26 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "NodeToCode|Batch Translation")
 	const FN2CBatchTranslationResult& GetCurrentResult() const { return CurrentResult; }
 
-	/** Delegate fired when each item completes translation */
+	/** Delegate fired when each item completes translation (Blueprint-compatible) */
 	UPROPERTY(BlueprintAssignable, Category = "NodeToCode|Batch Translation")
 	FOnBatchItemTranslationComplete OnItemComplete;
 
-	/** Delegate fired when the entire batch completes */
+	/** Delegate fired when the entire batch completes (Blueprint-compatible) */
 	UPROPERTY(BlueprintAssignable, Category = "NodeToCode|Batch Translation")
 	FOnBatchTranslationComplete OnBatchComplete;
 
-	/** Delegate fired for progress updates */
+	/** Delegate fired for progress updates (Blueprint-compatible) */
 	UPROPERTY(BlueprintAssignable, Category = "NodeToCode|Batch Translation")
 	FOnBatchTranslationProgress OnProgress;
+
+	/** Native delegate for item completion (C++ only - use for Slate widgets) */
+	FOnBatchItemTranslationCompleteNative OnItemCompleteNative;
+
+	/** Native delegate for batch completion (C++ only - use for Slate widgets) */
+	FOnBatchTranslationCompleteNative OnBatchCompleteNative;
+
+	/** Native delegate for progress updates (C++ only - use for Slate widgets) */
+	FOnBatchTranslationProgressNative OnProgressNative;
 
 	// ==================== Batch JSON Export (No LLM) ====================
 

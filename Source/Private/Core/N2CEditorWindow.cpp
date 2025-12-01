@@ -1,9 +1,7 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
 #include "Core/N2CEditorWindow.h"
-#include "Core/N2CWidgetContainer.h"
-#include "EditorUtilityWidget.h"
-#include "EditorUtilityWidgetBlueprint.h"
+#include "TagManager/Widgets/SN2CMainWindow.h"
 #include "Utils/N2CLogger.h"
 #include "Widgets/Docking/SDockTab.h"
 
@@ -65,41 +63,13 @@ void SN2CEditorWindow::OnTabClosed(TSharedRef<SDockTab> ClosedTab)
 
 void SN2CEditorWindow::Construct(const FArguments& InArgs)
 {
-    // 1) Load the widget blueprint
-    FString AssetPath = TEXT("/Script/Blutility.EditorUtilityWidgetBlueprint'/NodeToCode/UI/NodeToCodeUI.NodeToCodeUI'");
-    UEditorUtilityWidgetBlueprint* EditorBP = LoadObject<UEditorUtilityWidgetBlueprint>(nullptr, *AssetPath);
-    if (!EditorBP)
-    {
-        FN2CLogger::Get().LogError(
-            FString::Printf(TEXT("Failed to load NodeToCodeUI blueprint at path: %s"), 
-            *AssetPath));
-        return;
-    }
-
-    // 2) Manually create the widget (instead of SpawnAndRegisterTab)
-    UClass* WidgetClass = EditorBP->GeneratedClass;
-    if (!WidgetClass || !WidgetClass->IsChildOf(UEditorUtilityWidget::StaticClass()))
-    {
-        FN2CLogger::Get().LogError(TEXT("Loaded blueprint is not a valid Editor Utility Widget class"));
-        return;
-    }
-
-    // Use our persistent container as the outer
-    UEditorUtilityWidget* EditorWidget = NewObject<UEditorUtilityWidget>(
-        UN2CWidgetContainer::Get(),
-        WidgetClass
-    );
-    if (!EditorWidget)
-    {
-        FN2CLogger::Get().LogError(TEXT("Failed to create Editor Utility Widget instance"));
-        return;
-    }
-
-    // 3) Embed the widget's Slate widget in our Nomad tab
+    // Create the pure Slate main window with all functionality integrated
     ChildSlot
     [
-        EditorWidget->TakeWidget()
+        SAssignNew(MainWindow, SN2CMainWindow)
+        .ShowSearchBar(true)
+        .ShowActionBar(true)
     ];
 
-    FN2CLogger::Get().Log(TEXT("Successfully created and embedded NodeToCodeUI widget"), EN2CLogSeverity::Info);
+    FN2CLogger::Get().Log(TEXT("Successfully created NodeToCode main window (pure Slate)"), EN2CLogSeverity::Info);
 }

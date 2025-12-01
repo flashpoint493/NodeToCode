@@ -6,6 +6,12 @@
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/Docking/SDockTab.h"
 
+class SN2CMainWindow;
+
+/**
+ * Editor window container for NodeToCode
+ * Uses the pure Slate SN2CMainWindow for all UI functionality
+ */
 class SN2CEditorWindow : public SCompoundWidget
 {
 public:
@@ -30,7 +36,13 @@ public:
     /** Get the tab identifier */
     static const FName TabId;
 
+    /** Get the main window widget */
+    TSharedPtr<SN2CMainWindow> GetMainWindow() const { return MainWindow; }
+
 private:
     /** The currently active tab */
     static TWeakPtr<SDockTab> ActiveTab;
+
+    /** The main NodeToCode window widget */
+    TSharedPtr<SN2CMainWindow> MainWindow;
 };

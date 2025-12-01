@@ -193,8 +193,9 @@ void UN2CBatchTranslationOrchestrator::ProcessNextItem()
 	FN2CBatchTranslationItem& Item = BatchItems[CurrentItemIndex];
 	Item.Status = EN2CBatchItemStatus::Processing;
 
-	// Broadcast progress
+	// Broadcast progress (Blueprint and Native)
 	OnProgress.Broadcast(CurrentItemIndex, BatchItems.Num(), Item.TagInfo.GraphName);
+	OnProgressNative.Broadcast(CurrentItemIndex, BatchItems.Num(), Item.TagInfo.GraphName);
 
 	FN2CLogger::Get().Log(
 		FString::Printf(TEXT("Processing item %d/%d: %s"), CurrentItemIndex + 1, BatchItems.Num(), *Item.TagInfo.GraphName),
@@ -214,8 +215,9 @@ void UN2CBatchTranslationOrchestrator::ProcessNextItem()
 			FString::Printf(TEXT("Failed to collect/serialize graph: %s"), *Item.TagInfo.GraphName),
 			TEXT("BatchOrchestrator"));
 
-		// Broadcast item completion with failure
+		// Broadcast item completion with failure (Blueprint and Native)
 		OnItemComplete.Broadcast(Item.TagInfo, Item.TranslationResponse, false, CurrentItemIndex, BatchItems.Num());
+		OnItemCompleteNative.Broadcast(Item.TagInfo, Item.TranslationResponse, false, CurrentItemIndex, BatchItems.Num());
 
 		// Continue to next item
 		ProcessNextItem();
@@ -236,7 +238,9 @@ void UN2CBatchTranslationOrchestrator::ProcessNextItem()
 		CurrentResult.FailureCount++;
 		CurrentResult.FailedGraphNames.Add(Item.TagInfo.GraphName);
 
+		// Broadcast item completion with failure (Blueprint and Native)
 		OnItemComplete.Broadcast(Item.TagInfo, Item.TranslationResponse, false, CurrentItemIndex, BatchItems.Num());
+		OnItemCompleteNative.Broadcast(Item.TagInfo, Item.TranslationResponse, false, CurrentItemIndex, BatchItems.Num());
 		ProcessNextItem();
 	}
 }
@@ -285,8 +289,9 @@ void UN2CBatchTranslationOrchestrator::HandleTranslationResponse(const FN2CTrans
 			TEXT("BatchOrchestrator"));
 	}
 
-	// Broadcast per-item completion
+	// Broadcast per-item completion (Blueprint and Native)
 	OnItemComplete.Broadcast(Item.TagInfo, Response, bSuccess, CurrentItemIndex, BatchItems.Num());
+	OnItemCompleteNative.Broadcast(Item.TagInfo, Response, bSuccess, CurrentItemIndex, BatchItems.Num());
 
 	// Continue to next item
 	ProcessNextItem();
@@ -306,8 +311,9 @@ void UN2CBatchTranslationOrchestrator::FinalizeBatch()
 			CurrentResult.SuccessCount, CurrentResult.FailureCount, CurrentResult.SkippedCount, CurrentResult.TotalTimeSeconds),
 		EN2CLogSeverity::Info, TEXT("BatchOrchestrator"));
 
-	// Broadcast batch completion
+	// Broadcast batch completion (Blueprint and Native)
 	OnBatchComplete.Broadcast(CurrentResult);
+	OnBatchCompleteNative.Broadcast(CurrentResult);
 
 	// Clean up
 	CleanupBatch();
