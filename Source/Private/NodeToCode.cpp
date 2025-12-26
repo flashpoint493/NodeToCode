@@ -19,7 +19,7 @@
 #include "Widgets/Notifications/SNotificationList.h"
 #include "MCP/Server/N2CMcpHttpServerManager.h"
 #include "MCP/Server/N2CSseServer.h"
-#include "Auth/N2COAuthTokenManager.h"
+#include "Auth/N2CAnthropicOAuthTokenManager.h"
 #include "Auth/N2CGoogleOAuthTokenManager.h"
 #include "HAL/IConsoleManager.h"
 #if WITH_EDITOR
@@ -128,35 +128,35 @@ void FNodeToCodeModule::StartupModule()
     );
     FN2CLogger::Get().Log(TEXT("OAuth settings customization registered"), EN2CLogSeverity::Debug);
 
-    // Register OAuth console commands
+    // Register Claude OAuth console commands
     IConsoleManager::Get().RegisterConsoleCommand(
-        TEXT("N2C.OAuth.Login"),
+        TEXT("N2C.OAuth.Claude.Login"),
         TEXT("Opens browser for Claude Pro/Max OAuth login"),
         FConsoleCommandDelegate::CreateLambda([]()
         {
-            UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+            UN2CAnthropicOAuthTokenManager* TokenManager = UN2CAnthropicOAuthTokenManager::Get();
             if (TokenManager)
             {
                 FString AuthUrl = TokenManager->GenerateAuthorizationUrl();
                 FPlatformProcess::LaunchURL(*AuthUrl, nullptr, nullptr);
-                FN2CLogger::Get().Log(TEXT("Opening browser for OAuth authorization. After authorizing, copy provided code and use N2C.OAuth.Submit <code> to complete login."), EN2CLogSeverity::Info);
+                FN2CLogger::Get().Log(TEXT("Opening browser for Claude OAuth authorization. After authorizing, copy provided code and use N2C.OAuth.Claude.Submit <code> to complete login."), EN2CLogSeverity::Info);
             }
         }),
         ECVF_Default
     );
 
     IConsoleManager::Get().RegisterConsoleCommand(
-        TEXT("N2C.OAuth.Submit"),
-        TEXT("Submit OAuth authorization code (format: code#state)"),
+        TEXT("N2C.OAuth.Claude.Submit"),
+        TEXT("Submit Claude OAuth authorization code (format: code#state)"),
         FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
         {
             if (Args.Num() < 1)
             {
-                FN2CLogger::Get().LogError(TEXT("Usage: N2C.OAuth.Submit <code#state>"));
+                FN2CLogger::Get().LogError(TEXT("Usage: N2C.OAuth.Claude.Submit <code#state>"));
                 return;
             }
 
-            UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+            UN2CAnthropicOAuthTokenManager* TokenManager = UN2CAnthropicOAuthTokenManager::Get();
             if (TokenManager)
             {
                 TokenManager->ExchangeCodeForTokens(Args[0],
@@ -164,7 +164,7 @@ void FNodeToCodeModule::StartupModule()
                     {
                         if (bSuccess)
                         {
-                            FN2CLogger::Get().Log(TEXT("OAuth login successful!"), EN2CLogSeverity::Info);
+                            FN2CLogger::Get().Log(TEXT("Claude OAuth login successful!"), EN2CLogSeverity::Info);
                             if (UN2CSettings* PluginSettings = GetMutableDefault<UN2CSettings>())
                             {
                                 PluginSettings->RefreshOAuthStatus();
@@ -172,7 +172,7 @@ void FNodeToCodeModule::StartupModule()
                         }
                         else
                         {
-                            FN2CLogger::Get().LogError(TEXT("OAuth login failed. Check the log for details."));
+                            FN2CLogger::Get().LogError(TEXT("Claude OAuth login failed. Check the log for details."));
                         }
                     }));
             }
@@ -181,11 +181,11 @@ void FNodeToCodeModule::StartupModule()
     );
 
     IConsoleManager::Get().RegisterConsoleCommand(
-        TEXT("N2C.OAuth.Logout"),
+        TEXT("N2C.OAuth.Claude.Logout"),
         TEXT("Log out from Claude Pro/Max OAuth"),
         FConsoleCommandDelegate::CreateLambda([]()
         {
-            UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+            UN2CAnthropicOAuthTokenManager* TokenManager = UN2CAnthropicOAuthTokenManager::Get();
             if (TokenManager)
             {
                 TokenManager->Logout();
@@ -193,42 +193,42 @@ void FNodeToCodeModule::StartupModule()
                 {
                     PluginSettings->RefreshOAuthStatus();
                 }
-                FN2CLogger::Get().Log(TEXT("OAuth logout complete"), EN2CLogSeverity::Info);
+                FN2CLogger::Get().Log(TEXT("Claude OAuth logout complete"), EN2CLogSeverity::Info);
             }
         }),
         ECVF_Default
     );
 
     IConsoleManager::Get().RegisterConsoleCommand(
-        TEXT("N2C.OAuth.Status"),
-        TEXT("Show current OAuth authentication status"),
+        TEXT("N2C.OAuth.Claude.Status"),
+        TEXT("Show current Claude OAuth authentication status"),
         FConsoleCommandDelegate::CreateLambda([]()
         {
-            UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+            UN2CAnthropicOAuthTokenManager* TokenManager = UN2CAnthropicOAuthTokenManager::Get();
             if (TokenManager)
             {
                 if (TokenManager->IsAuthenticated())
                 {
                     FString ExpiryStr = TokenManager->GetExpirationTimeString();
                     bool bExpired = TokenManager->IsTokenExpired();
-                    FN2CLogger::Get().Log(FString::Printf(TEXT("OAuth Status: Connected (expires: %s)%s"),
+                    FN2CLogger::Get().Log(FString::Printf(TEXT("Claude OAuth Status: Connected (expires: %s)%s"),
                         *ExpiryStr, bExpired ? TEXT(" - EXPIRED, will refresh on next request") : TEXT("")), EN2CLogSeverity::Info);
                 }
                 else
                 {
-                    FN2CLogger::Get().Log(TEXT("OAuth Status: Not connected. Use N2C.OAuth.Login to authenticate."), EN2CLogSeverity::Info);
+                    FN2CLogger::Get().Log(TEXT("Claude OAuth Status: Not connected. Use N2C.OAuth.Claude.Login to authenticate."), EN2CLogSeverity::Info);
                 }
             }
         }),
         ECVF_Default
     );
 
-    FN2CLogger::Get().Log(TEXT("OAuth console commands registered (N2C.OAuth.Login, N2C.OAuth.Submit, N2C.OAuth.Logout, N2C.OAuth.Status)"), EN2CLogSeverity::Debug);
+    FN2CLogger::Get().Log(TEXT("Claude OAuth console commands registered (N2C.OAuth.Claude.Login, N2C.OAuth.Claude.Submit, N2C.OAuth.Claude.Logout, N2C.OAuth.Claude.Status)"), EN2CLogSeverity::Debug);
 
-    // Register Google OAuth console commands for Gemini
+    // Register Gemini OAuth console commands
     IConsoleManager::Get().RegisterConsoleCommand(
-        TEXT("N2C.Google.Login"),
-        TEXT("Opens browser for Google OAuth login (for Gemini)"),
+        TEXT("N2C.OAuth.Gemini.Login"),
+        TEXT("Opens browser for Gemini OAuth login"),
         FConsoleCommandDelegate::CreateLambda([]()
         {
             UN2CGoogleOAuthTokenManager* TokenManager = UN2CGoogleOAuthTokenManager::Get();
@@ -236,20 +236,20 @@ void FNodeToCodeModule::StartupModule()
             {
                 FString AuthUrl = TokenManager->GenerateAuthorizationUrl();
                 FPlatformProcess::LaunchURL(*AuthUrl, nullptr, nullptr);
-                FN2CLogger::Get().Log(TEXT("Opening browser for Google OAuth. After authorizing, copy the code from the page and use N2C.Google.Submit <code> to complete login."), EN2CLogSeverity::Info);
+                FN2CLogger::Get().Log(TEXT("Opening browser for Gemini OAuth. After authorizing, copy the code from the page and use N2C.OAuth.Gemini.Submit <code> to complete login."), EN2CLogSeverity::Info);
             }
         }),
         ECVF_Default
     );
 
     IConsoleManager::Get().RegisterConsoleCommand(
-        TEXT("N2C.Google.Submit"),
-        TEXT("Submit Google OAuth authorization code"),
+        TEXT("N2C.OAuth.Gemini.Submit"),
+        TEXT("Submit Gemini OAuth authorization code"),
         FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
         {
             if (Args.Num() < 1)
             {
-                FN2CLogger::Get().LogError(TEXT("Usage: N2C.Google.Submit <code>"));
+                FN2CLogger::Get().LogError(TEXT("Usage: N2C.OAuth.Gemini.Submit <code>"));
                 return;
             }
 
@@ -261,7 +261,7 @@ void FNodeToCodeModule::StartupModule()
                     {
                         if (bSuccess)
                         {
-                            FN2CLogger::Get().Log(TEXT("Google OAuth login successful!"), EN2CLogSeverity::Info);
+                            FN2CLogger::Get().Log(TEXT("Gemini OAuth login successful!"), EN2CLogSeverity::Info);
                             if (UN2CSettings* PluginSettings = GetMutableDefault<UN2CSettings>())
                             {
                                 PluginSettings->RefreshGeminiOAuthStatus();
@@ -269,7 +269,7 @@ void FNodeToCodeModule::StartupModule()
                         }
                         else
                         {
-                            FN2CLogger::Get().LogError(TEXT("Google OAuth login failed. Check the log for details."));
+                            FN2CLogger::Get().LogError(TEXT("Gemini OAuth login failed. Check the log for details."));
                         }
                     }));
             }
@@ -278,8 +278,8 @@ void FNodeToCodeModule::StartupModule()
     );
 
     IConsoleManager::Get().RegisterConsoleCommand(
-        TEXT("N2C.Google.Logout"),
-        TEXT("Log out from Google OAuth (for Gemini)"),
+        TEXT("N2C.OAuth.Gemini.Logout"),
+        TEXT("Log out from Gemini OAuth"),
         FConsoleCommandDelegate::CreateLambda([]()
         {
             UN2CGoogleOAuthTokenManager* TokenManager = UN2CGoogleOAuthTokenManager::Get();
@@ -290,15 +290,15 @@ void FNodeToCodeModule::StartupModule()
                 {
                     PluginSettings->RefreshGeminiOAuthStatus();
                 }
-                FN2CLogger::Get().Log(TEXT("Google OAuth logout complete"), EN2CLogSeverity::Info);
+                FN2CLogger::Get().Log(TEXT("Gemini OAuth logout complete"), EN2CLogSeverity::Info);
             }
         }),
         ECVF_Default
     );
 
     IConsoleManager::Get().RegisterConsoleCommand(
-        TEXT("N2C.Google.Status"),
-        TEXT("Show current Google OAuth authentication status (for Gemini)"),
+        TEXT("N2C.OAuth.Gemini.Status"),
+        TEXT("Show current Gemini OAuth authentication status"),
         FConsoleCommandDelegate::CreateLambda([]()
         {
             UN2CGoogleOAuthTokenManager* TokenManager = UN2CGoogleOAuthTokenManager::Get();
@@ -308,34 +308,34 @@ void FNodeToCodeModule::StartupModule()
                 {
                     FString ExpiryStr = TokenManager->GetExpirationTimeString();
                     bool bExpired = TokenManager->IsTokenExpired();
-                    FN2CLogger::Get().Log(FString::Printf(TEXT("Google OAuth Status: Connected (expires: %s)%s"),
+                    FN2CLogger::Get().Log(FString::Printf(TEXT("Gemini OAuth Status: Connected (expires: %s)%s"),
                         *ExpiryStr, bExpired ? TEXT(" - EXPIRED, will refresh on next request") : TEXT("")), EN2CLogSeverity::Info);
                 }
                 else
                 {
-                    FN2CLogger::Get().Log(TEXT("Google OAuth Status: Not connected. Use N2C.Google.Login to authenticate."), EN2CLogSeverity::Info);
+                    FN2CLogger::Get().Log(TEXT("Gemini OAuth Status: Not connected. Use N2C.OAuth.Gemini.Login to authenticate."), EN2CLogSeverity::Info);
                 }
             }
         }),
         ECVF_Default
     );
 
-    FN2CLogger::Get().Log(TEXT("Google OAuth console commands registered (N2C.Google.Login, N2C.Google.Submit, N2C.Google.Logout, N2C.Google.Status)"), EN2CLogSeverity::Debug);
+    FN2CLogger::Get().Log(TEXT("Gemini OAuth console commands registered (N2C.OAuth.Gemini.Login, N2C.OAuth.Gemini.Submit, N2C.OAuth.Gemini.Logout, N2C.OAuth.Gemini.Status)"), EN2CLogSeverity::Debug);
 }
 
 void FNodeToCodeModule::ShutdownModule()
 {
-    // Unregister OAuth console commands
-    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Login"), false);
-    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Submit"), false);
-    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Logout"), false);
-    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Status"), false);
+    // Unregister Claude OAuth console commands
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Claude.Login"), false);
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Claude.Submit"), false);
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Claude.Logout"), false);
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Claude.Status"), false);
 
-    // Unregister Google OAuth console commands
-    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.Google.Login"), false);
-    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.Google.Submit"), false);
-    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.Google.Logout"), false);
-    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.Google.Status"), false);
+    // Unregister Gemini OAuth console commands
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Gemini.Login"), false);
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Gemini.Submit"), false);
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Gemini.Logout"), false);
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Gemini.Status"), false);
 
     // Unregister OAuth settings customization
     if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))

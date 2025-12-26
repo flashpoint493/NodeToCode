@@ -2,7 +2,7 @@
 
 #include "LLM/Providers/N2CAnthropicService.h"
 
-#include "Auth/N2COAuthTokenManager.h"
+#include "Auth/N2CAnthropicOAuthTokenManager.h"
 #include "Auth/N2COAuthTypes.h"
 #include "Core/N2CSettings.h"
 #include "LLM/N2CSystemPromptManager.h"
@@ -29,7 +29,7 @@ void UN2CAnthropicService::GetProviderHeaders(TMap<FString, FString>& OutHeaders
     if (IsUsingOAuth())
     {
         // OAuth authentication uses Bearer token
-        UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+        UN2CAnthropicOAuthTokenManager* TokenManager = UN2CAnthropicOAuthTokenManager::Get();
         FString AccessToken = TokenManager->GetAccessToken();
         OutHeaders.Add(TEXT("Authorization"), FString::Printf(TEXT("Bearer %s"), *AccessToken));
         OutHeaders.Add(TEXT("anthropic-beta"), FN2COAuthConstants::BetaHeader);

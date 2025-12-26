@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
-#include "Auth/N2COAuthTokenManager.h"
+#include "Auth/N2COAuthTokenManagerBase.h"
 #include "Core/N2CUserSecrets.h"
 #include "Utils/N2CLogger.h"
 
@@ -26,7 +26,7 @@
 // SHA-256 implementation for PKCE challenge generation using Windows BCrypt
 namespace
 {
-	TArray<uint8> ComputeSHA256(const TArray<uint8>& Data)
+	TArray<uint8> ComputeSHA256Base(const TArray<uint8>& Data)
 	{
 		TArray<uint8> Hash;
 		Hash.SetNumUninitialized(32);
@@ -50,21 +50,7 @@ namespace
 	}
 }
 
-// Singleton instance
-UN2COAuthTokenManager* UN2COAuthTokenManager::Instance = nullptr;
-
-UN2COAuthTokenManager* UN2COAuthTokenManager::Get()
-{
-	if (!Instance)
-	{
-		Instance = NewObject<UN2COAuthTokenManager>();
-		Instance->AddToRoot(); // Prevent garbage collection
-		Instance->Initialize();
-	}
-	return Instance;
-}
-
-void UN2COAuthTokenManager::Initialize()
+void UN2COAuthTokenManagerBase::Initialize()
 {
 	// Get or create user secrets
 	UserSecrets = NewObject<UN2CUserSecrets>();
@@ -73,54 +59,65 @@ void UN2COAuthTokenManager::Initialize()
 	// Load existing tokens
 	LoadTokensFromStorage();
 
-	// Schedule refresh if we have valid tokens
+	// If we have valid tokens, schedule refresh and allow provider-specific initialization
 	if (IsAuthenticated() && !IsTokenExpired())
 	{
 		ScheduleTokenRefresh();
+		OnInitializeWithTokens();
 	}
 
-	FN2CLogger::Get().Log(TEXT("OAuth Token Manager initialized"), EN2CLogSeverity::Info);
+	FN2CLogger::Get().Log(
+		FString::Printf(TEXT("%s OAuth Token Manager initialized"), *GetProviderName()),
+		EN2CLogSeverity::Info);
 }
 
-FString UN2COAuthTokenManager::GenerateAuthorizationUrl()
+FString UN2COAuthTokenManagerBase::GenerateAuthorizationUrl()
 {
 	// Generate PKCE values
 	CurrentVerifier = GenerateVerifier();
 	CurrentState = GenerateState();
 	FString Challenge = GenerateChallenge(CurrentVerifier);
 
+	const FN2COAuthProviderConfig& Config = GetProviderConfig();
+
 	// Build authorization URL
 	FString AuthUrl = FString::Printf(
-		TEXT("%s?response_type=code&client_id=%s&redirect_uri=%s&scope=%s&code_challenge=%s&code_challenge_method=S256&state=%s"),
-		*FN2COAuthConstants::AuthEndpoint,
-		*FN2COAuthConstants::ClientId,
-		*FGenericPlatformHttp::UrlEncode(FN2COAuthConstants::RedirectUri),
-		*FGenericPlatformHttp::UrlEncode(FN2COAuthConstants::Scopes),
+		TEXT("%s?response_type=code&client_id=%s&redirect_uri=%s&scope=%s&code_challenge=%s&code_challenge_method=S256&state=%s%s"),
+		*Config.AuthEndpoint,
+		*Config.ClientId,
+		*FGenericPlatformHttp::UrlEncode(Config.RedirectUri),
+		*FGenericPlatformHttp::UrlEncode(Config.Scopes),
 		*Challenge,
-		*CurrentState
+		*CurrentState,
+		*GetAdditionalAuthUrlParams()
 	);
 
-	FN2CLogger::Get().Log(TEXT("Generated OAuth authorization URL"), EN2CLogSeverity::Debug);
+	FN2CLogger::Get().Log(
+		FString::Printf(TEXT("Generated %s OAuth authorization URL"), *GetProviderName()),
+		EN2CLogSeverity::Debug);
 
 	return AuthUrl;
 }
 
-void UN2COAuthTokenManager::ExchangeCodeForTokens(const FString& CodeWithState, const FOnTokenExchangeComplete& OnComplete)
+bool UN2COAuthTokenManagerBase::ParseAuthorizationCode(const FString& Input, FString& OutCode, FString& OutState)
 {
-	// Parse code#state format
+	// Default implementation: input is just the code
+	OutCode = Input;
+	OutState = FString();
+	return !OutCode.IsEmpty();
+}
+
+void UN2COAuthTokenManagerBase::ExchangeCodeForTokensInternal(const FString& CodeInput, TFunction<void(bool)> OnComplete)
+{
+	// Parse the authorization code using provider-specific logic
 	FString Code;
 	FString State;
-
-	int32 HashIndex;
-	if (CodeWithState.FindChar(TEXT('#'), HashIndex))
+	if (!ParseAuthorizationCode(CodeInput, Code, State))
 	{
-		Code = CodeWithState.Left(HashIndex);
-		State = CodeWithState.Mid(HashIndex + 1);
-	}
-	else
-	{
-		// Try just using the whole thing as a code
-		Code = CodeWithState;
+		FN2CLogger::Get().LogError(TEXT("Failed to parse authorization code"));
+		OnError.Broadcast(TEXT("Invalid authorization code format"));
+		if (OnComplete) OnComplete(false);
+		return;
 	}
 
 	// Validate state if provided
@@ -128,7 +125,7 @@ void UN2COAuthTokenManager::ExchangeCodeForTokens(const FString& CodeWithState, 
 	{
 		FN2CLogger::Get().LogError(TEXT("OAuth state mismatch - possible CSRF attack"));
 		OnError.Broadcast(TEXT("Security error: State mismatch. Please try again."));
-		OnComplete.ExecuteIfBound(false);
+		if (OnComplete) OnComplete(false);
 		return;
 	}
 
@@ -136,7 +133,7 @@ void UN2COAuthTokenManager::ExchangeCodeForTokens(const FString& CodeWithState, 
 	{
 		FN2CLogger::Get().LogError(TEXT("OAuth code is empty"));
 		OnError.Broadcast(TEXT("Invalid authorization code"));
-		OnComplete.ExecuteIfBound(false);
+		if (OnComplete) OnComplete(false);
 		return;
 	}
 
@@ -144,116 +141,96 @@ void UN2COAuthTokenManager::ExchangeCodeForTokens(const FString& CodeWithState, 
 	{
 		FN2CLogger::Get().LogError(TEXT("No PKCE verifier found - auth flow may not have been initiated properly"));
 		OnError.Broadcast(TEXT("Authentication error: Please start the login flow again."));
-		OnComplete.ExecuteIfBound(false);
+		if (OnComplete) OnComplete(false);
 		return;
 	}
 
-	// Build token request payload as JSON (state is required by Anthropic's endpoint)
-	TSharedPtr<FJsonObject> PayloadJson = MakeShareable(new FJsonObject);
-	PayloadJson->SetStringField(TEXT("code"), Code);
-	PayloadJson->SetStringField(TEXT("state"), State.IsEmpty() ? CurrentState : State);
-	PayloadJson->SetStringField(TEXT("grant_type"), TEXT("authorization_code"));
-	PayloadJson->SetStringField(TEXT("client_id"), FN2COAuthConstants::ClientId);
-	PayloadJson->SetStringField(TEXT("redirect_uri"), FN2COAuthConstants::RedirectUri);
-	PayloadJson->SetStringField(TEXT("code_verifier"), CurrentVerifier);
+	// Build token request payload using provider-specific formatting
+	FString RequestBody = FormatTokenRequestBody(Code);
+	const FN2COAuthProviderConfig& Config = GetProviderConfig();
 
-	FString PayloadString;
-	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
-		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&PayloadString);
-	FJsonSerializer::Serialize(PayloadJson.ToSharedRef(), Writer);
+	FN2CLogger::Get().Log(
+		FString::Printf(TEXT("Token request to: %s"), *Config.TokenEndpoint),
+		EN2CLogSeverity::Debug);
 
-	FN2CLogger::Get().Log(FString::Printf(TEXT("Token request payload: %s"), *PayloadString), EN2CLogSeverity::Debug);
-	FN2CLogger::Get().Log(FString::Printf(TEXT("Token endpoint: %s"), *FN2COAuthConstants::TokenEndpoint), EN2CLogSeverity::Debug);
-
-	// Create HTTP request (matching OpenCode's minimal headers)
+	// Create HTTP request
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-	Request->SetURL(FN2COAuthConstants::TokenEndpoint);
+	Request->SetURL(Config.TokenEndpoint);
 	Request->SetVerb(TEXT("POST"));
-	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-	Request->SetContentAsString(PayloadString);
+	Request->SetHeader(TEXT("Content-Type"), GetTokenRequestContentType());
+	Request->SetContentAsString(RequestBody);
 
 	// Weak reference for lambda capture
-	TWeakObjectPtr<UN2COAuthTokenManager> WeakThis(this);
+	TWeakObjectPtr<UN2COAuthTokenManagerBase> WeakThis(this);
 
 	Request->OnProcessRequestComplete().BindLambda(
 		[WeakThis, OnComplete](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully)
 		{
-			if (UN2COAuthTokenManager* This = WeakThis.Get())
+			if (UN2COAuthTokenManagerBase* This = WeakThis.Get())
 			{
-				This->HandleTokenResponse(Response, bConnectedSuccessfully,
-					[OnComplete](bool bSuccess)
-					{
-						OnComplete.ExecuteIfBound(bSuccess);
-					});
+				This->HandleTokenResponse(Response, bConnectedSuccessfully, true, OnComplete);
 			}
 		});
 
 	Request->ProcessRequest();
 
-	FN2CLogger::Get().Log(TEXT("Exchanging authorization code for tokens..."), EN2CLogSeverity::Info);
+	FN2CLogger::Get().Log(
+		FString::Printf(TEXT("Exchanging %s authorization code for tokens..."), *GetProviderName()),
+		EN2CLogSeverity::Info);
 }
 
-void UN2COAuthTokenManager::RefreshAccessToken(const FOnTokenRefreshComplete& OnComplete)
+void UN2COAuthTokenManagerBase::RefreshAccessTokenInternal(TFunction<void(bool)> OnComplete)
 {
 	if (CachedTokens.RefreshToken.IsEmpty())
 	{
 		FN2CLogger::Get().LogError(TEXT("No refresh token available"));
 		OnError.Broadcast(TEXT("No refresh token. Please log in again."));
-		OnComplete.ExecuteIfBound(false);
+		if (OnComplete) OnComplete(false);
 		return;
 	}
 
-	// Build refresh request payload as JSON
-	TSharedPtr<FJsonObject> PayloadJson = MakeShareable(new FJsonObject);
-	PayloadJson->SetStringField(TEXT("grant_type"), TEXT("refresh_token"));
-	PayloadJson->SetStringField(TEXT("client_id"), FN2COAuthConstants::ClientId);
-	PayloadJson->SetStringField(TEXT("refresh_token"), CachedTokens.RefreshToken);
+	// Build refresh request payload using provider-specific formatting
+	FString RequestBody = FormatRefreshRequestBody();
+	const FN2COAuthProviderConfig& Config = GetProviderConfig();
 
-	FString PayloadString;
-	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
-		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&PayloadString);
-	FJsonSerializer::Serialize(PayloadJson.ToSharedRef(), Writer);
-
-	// Create HTTP request (matching OpenCode's minimal headers)
+	// Create HTTP request
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-	Request->SetURL(FN2COAuthConstants::TokenEndpoint);
+	Request->SetURL(Config.TokenEndpoint);
 	Request->SetVerb(TEXT("POST"));
-	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-	Request->SetContentAsString(PayloadString);
+	Request->SetHeader(TEXT("Content-Type"), GetTokenRequestContentType());
+	Request->SetContentAsString(RequestBody);
 
 	// Weak reference for lambda capture
-	TWeakObjectPtr<UN2COAuthTokenManager> WeakThis(this);
+	TWeakObjectPtr<UN2COAuthTokenManagerBase> WeakThis(this);
 
 	Request->OnProcessRequestComplete().BindLambda(
 		[WeakThis, OnComplete](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully)
 		{
-			if (UN2COAuthTokenManager* This = WeakThis.Get())
+			if (UN2COAuthTokenManagerBase* This = WeakThis.Get())
 			{
-				This->HandleTokenResponse(Response, bConnectedSuccessfully,
-					[OnComplete](bool bSuccess)
-					{
-						OnComplete.ExecuteIfBound(bSuccess);
-					});
+				This->HandleTokenResponse(Response, bConnectedSuccessfully, false, OnComplete);
 			}
 		});
 
 	Request->ProcessRequest();
 
-	FN2CLogger::Get().Log(TEXT("Refreshing access token..."), EN2CLogSeverity::Info);
+	FN2CLogger::Get().Log(
+		FString::Printf(TEXT("Refreshing %s access token..."), *GetProviderName()),
+		EN2CLogSeverity::Info);
 }
 
-bool UN2COAuthTokenManager::RefreshAccessTokenSync()
+bool UN2COAuthTokenManagerBase::RefreshAccessTokenSync()
 {
 	// Use a blocking approach for synchronous refresh
 	volatile bool bCompleted = false;
 	volatile bool bSuccess = false;
 
-	RefreshAccessToken(FOnTokenRefreshComplete::CreateLambda(
+	RefreshAccessTokenInternal(
 		[&bCompleted, &bSuccess](bool bResult)
 		{
 			bSuccess = bResult;
 			bCompleted = true;
-		}));
+		});
 
 	// Wait for completion (with timeout)
 	const double TimeoutSeconds = 30.0;
@@ -278,7 +255,7 @@ bool UN2COAuthTokenManager::RefreshAccessTokenSync()
 	return bSuccess;
 }
 
-FString UN2COAuthTokenManager::GetAccessToken()
+FString UN2COAuthTokenManagerBase::GetAccessToken()
 {
 	if (!IsAuthenticated())
 	{
@@ -298,12 +275,12 @@ FString UN2COAuthTokenManager::GetAccessToken()
 	return CachedTokens.AccessToken;
 }
 
-bool UN2COAuthTokenManager::IsAuthenticated() const
+bool UN2COAuthTokenManagerBase::IsAuthenticated() const
 {
 	return CachedTokens.HasTokens();
 }
 
-bool UN2COAuthTokenManager::IsTokenExpired() const
+bool UN2COAuthTokenManagerBase::IsTokenExpired() const
 {
 	if (CachedTokens.ExpiresAt.IsEmpty())
 	{
@@ -320,7 +297,7 @@ bool UN2COAuthTokenManager::IsTokenExpired() const
 	return (ExpiryTime - FDateTime::UtcNow()).GetTotalMinutes() < 5.0;
 }
 
-FString UN2COAuthTokenManager::GetExpirationTimeString() const
+FString UN2COAuthTokenManagerBase::GetExpirationTimeString() const
 {
 	if (!IsAuthenticated())
 	{
@@ -336,28 +313,91 @@ FString UN2COAuthTokenManager::GetExpirationTimeString() const
 	return ExpiryTime.ToString();
 }
 
-void UN2COAuthTokenManager::Logout()
+void UN2COAuthTokenManagerBase::Logout()
 {
 	CancelTokenRefresh();
 	CachedTokens.Clear();
 	CurrentVerifier.Empty();
 	CurrentState.Empty();
 
+	// Provider-specific cleanup
+	OnLogoutCleanup();
+
+	// Clear tokens from storage
 	if (UserSecrets)
 	{
-		UserSecrets->ClearOAuthTokens();
+		switch (GetProviderId())
+		{
+		case EN2COAuthProvider::Anthropic:
+			UserSecrets->ClearOAuthTokens();
+			break;
+		case EN2COAuthProvider::Google:
+			UserSecrets->ClearGoogleOAuthTokens();
+			break;
+		}
 	}
 
 	OnAuthStateChanged.Broadcast(false);
 
-	FN2CLogger::Get().Log(TEXT("OAuth logout complete"), EN2CLogSeverity::Info);
+	FN2CLogger::Get().Log(
+		FString::Printf(TEXT("%s OAuth logout complete"), *GetProviderName()),
+		EN2CLogSeverity::Info);
+}
+
+void UN2COAuthTokenManagerBase::OnTokenExchangeSuccess(TFunction<void(bool)> OnComplete)
+{
+	// Default: no post-auth actions needed
+	if (OnComplete)
+	{
+		OnComplete(true);
+	}
+}
+
+void UN2COAuthTokenManagerBase::LoadTokensFromStorage()
+{
+	if (UserSecrets)
+	{
+		switch (GetProviderId())
+		{
+		case EN2COAuthProvider::Anthropic:
+			UserSecrets->GetOAuthTokens(CachedTokens);
+			break;
+		case EN2COAuthProvider::Google:
+			UserSecrets->GetGoogleOAuthTokens(CachedTokens);
+			break;
+		}
+	}
+}
+
+void UN2COAuthTokenManagerBase::SaveTokensToStorage()
+{
+	if (UserSecrets)
+	{
+		switch (GetProviderId())
+		{
+		case EN2COAuthProvider::Anthropic:
+			UserSecrets->SetOAuthTokens(
+				CachedTokens.AccessToken,
+				CachedTokens.RefreshToken,
+				CachedTokens.ExpiresAt,
+				CachedTokens.Scope);
+			break;
+		case EN2COAuthProvider::Google:
+			UserSecrets->SetGoogleOAuthTokens(
+				CachedTokens.AccessToken,
+				CachedTokens.RefreshToken,
+				CachedTokens.ExpiresAt,
+				CachedTokens.Scope);
+			break;
+		}
+	}
 }
 
 // ============================================
 // PKCE Helper Methods
 // ============================================
 
-FString UN2COAuthTokenManager::GenerateVerifier()
+FString UN2COAuthTokenManagerBase::GenerateVerifier()
 {
 	// Generate 32 random bytes
 	TArray<uint8> RandomBytes;
@@ -371,7 +411,7 @@ FString UN2COAuthTokenManager::GenerateVerifier()
 	return Base64UrlEncode(RandomBytes);
 }
 
-FString UN2COAuthTokenManager::GenerateChallenge(const FString& Verifier)
+FString UN2COAuthTokenManagerBase::GenerateChallenge(const FString& Verifier)
 {
 	// Convert verifier to UTF-8 bytes
 	FTCHARToUTF8 VerifierUtf8(*Verifier);
@@ -380,17 +420,17 @@ FString UN2COAuthTokenManager::GenerateChallenge(const FString& Verifier)
 	FMemory::Memcpy(VerifierBytes.GetData(), VerifierUtf8.Get(), VerifierUtf8.Length());
 
 	// SHA-256 hash of verifier
-	TArray<uint8> HashBytes = ComputeSHA256(VerifierBytes);
+	TArray<uint8> HashBytes = ComputeSHA256Base(VerifierBytes);
 
 	return Base64UrlEncode(HashBytes);
 }
 
-FString UN2COAuthTokenManager::GenerateState()
+FString UN2COAuthTokenManagerBase::GenerateState()
 {
 	return FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
 }
 
-FString UN2COAuthTokenManager::Base64UrlEncode(const TArray<uint8>& Bytes)
+FString UN2COAuthTokenManagerBase::Base64UrlEncode(const TArray<uint8>& Bytes)
 {
 	// Standard Base64 encode
 	FString Base64 = FBase64::Encode(Bytes);
@@ -407,28 +447,7 @@ FString UN2COAuthTokenManager::Base64UrlEncode(const TArray<uint8>& Bytes)
 // Token Management
 // ============================================
 
-void UN2COAuthTokenManager::LoadTokensFromStorage()
-{
-	if (UserSecrets)
-	{
-		UserSecrets->GetOAuthTokens(CachedTokens);
-	}
-}
-
-void UN2COAuthTokenManager::SaveTokensToStorage()
-{
-	if (UserSecrets)
-	{
-		UserSecrets->SetOAuthTokens(
-			CachedTokens.AccessToken,
-			CachedTokens.RefreshToken,
-			CachedTokens.ExpiresAt,
-			CachedTokens.Scope
-		);
-	}
-}
-
-void UN2COAuthTokenManager::ScheduleTokenRefresh()
+void UN2COAuthTokenManagerBase::ScheduleTokenRefresh()
 {
 	CancelTokenRefresh();
 
@@ -454,27 +473,29 @@ void UN2COAuthTokenManager::ScheduleTokenRefresh()
 				RefreshTimerHandle,
 				FTimerDelegate::CreateWeakLambda(this, [this]()
 				{
-					RefreshAccessToken(FOnTokenRefreshComplete::CreateLambda([](bool bSuccess)
+					RefreshAccessTokenInternal([this](bool bSuccess)
 					{
 						if (!bSuccess)
 						{
-							FN2CLogger::Get().LogError(TEXT("Automatic token refresh failed"));
+							FN2CLogger::Get().LogError(
+								FString::Printf(TEXT("Automatic %s token refresh failed"), *GetProviderName()));
 						}
-					}));
+					});
 				}),
 				TimeUntilRefresh.GetTotalSeconds(),
 				false
 			);
 
 			FN2CLogger::Get().Log(
-				FString::Printf(TEXT("Token refresh scheduled in %.0f minutes"), TimeUntilRefresh.GetTotalMinutes()),
+				FString::Printf(TEXT("%s token refresh scheduled in %.0f minutes"),
+					*GetProviderName(), TimeUntilRefresh.GetTotalMinutes()),
 				EN2CLogSeverity::Debug
 			);
 		}
 	}
 }
 
-void UN2COAuthTokenManager::CancelTokenRefresh()
+void UN2COAuthTokenManagerBase::CancelTokenRefresh()
 {
 	if (GEngine && GEngine->GetWorld())
 	{
@@ -482,7 +503,7 @@ void UN2COAuthTokenManager::CancelTokenRefresh()
 	}
 }
 
-bool UN2COAuthTokenManager::ParseTokenResponse(const FString& ResponseJson)
+bool UN2COAuthTokenManagerBase::ParseTokenResponse(const FString& ResponseJson)
 {
 	TSharedPtr<FJsonObject> JsonObject;
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResponseJson);
@@ -514,8 +535,8 @@ bool UN2COAuthTokenManager::ParseTokenResponse(const FString& ResponseJson)
 		return false;
 	}
 
-	// Calculate expiry time (default 8 hours if not specified)
-	int32 ExpiresIn = 28800; // 8 hours in seconds
+	// Calculate expiry time (use provider-specific default if not specified)
+	int32 ExpiresIn = GetDefaultTokenExpirySeconds();
 	if (JsonObject->HasField(TEXT("expires_in")))
 	{
 		ExpiresIn = static_cast<int32>(JsonObject->GetNumberField(TEXT("expires_in")));
@@ -535,14 +556,14 @@ bool UN2COAuthTokenManager::ParseTokenResponse(const FString& ResponseJson)
 	return true;
 }
 
-void UN2COAuthTokenManager::HandleTokenResponse(FHttpResponsePtr Response, bool bSuccess,
-	TFunction<void(bool)> OnComplete)
+void UN2COAuthTokenManagerBase::HandleTokenResponse(FHttpResponsePtr Response, bool bSuccess,
+	bool bIsExchange, TFunction<void(bool)> OnComplete)
 {
 	if (!bSuccess || !Response.IsValid())
 	{
 		FN2CLogger::Get().LogError(TEXT("Token request failed - no response"));
 		OnError.Broadcast(TEXT("Network error. Please check your connection."));
-		OnComplete(false);
+		if (OnComplete) OnComplete(false);
 		return;
 	}
 
@@ -571,14 +592,14 @@ void UN2COAuthTokenManager::HandleTokenResponse(FHttpResponsePtr Response, bool 
 			OnError.Broadcast(FString::Printf(TEXT("Authentication failed (HTTP %d)"), ResponseCode));
 		}
 
-		OnComplete(false);
+		if (OnComplete) OnComplete(false);
 		return;
 	}
 
 	// Parse successful response
 	if (!ParseTokenResponse(ResponseContent))
 	{
-		OnComplete(false);
+		if (OnComplete) OnComplete(false);
 		return;
 	}
 
@@ -593,7 +614,17 @@ void UN2COAuthTokenManager::HandleTokenResponse(FHttpResponsePtr Response, bool 
 	// Broadcast success
 	OnAuthStateChanged.Broadcast(true);
 
-	FN2CLogger::Get().Log(TEXT("OAuth authentication successful"), EN2CLogSeverity::Info);
+	FN2CLogger::Get().Log(
+		FString::Printf(TEXT("%s OAuth authentication successful"), *GetProviderName()),
+		EN2CLogSeverity::Info);
 
-	OnComplete(true);
+	// If this was a token exchange, call post-exchange hook
+	if (bIsExchange)
+	{
+		OnTokenExchangeSuccess(OnComplete);
+	}
+	else
+	{
+		if (OnComplete) OnComplete(true);
+	}
 }

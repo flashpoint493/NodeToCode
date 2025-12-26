@@ -2,7 +2,7 @@
 
 #include "UI/N2COAuthSettingsCustomization.h"
 
-#include "Auth/N2COAuthTokenManager.h"
+#include "Auth/N2CAnthropicOAuthTokenManager.h"
 #include "Auth/N2COAuthTypes.h"
 #include "Core/N2CSettings.h"
 #include "DetailCategoryBuilder.h"
@@ -48,7 +48,7 @@ void FN2COAuthSettingsCustomization::CustomizeDetails(IDetailLayoutBuilder& Deta
 
 FReply FN2COAuthSettingsCustomization::OnLoginClicked()
 {
-	UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+	UN2CAnthropicOAuthTokenManager* TokenManager = UN2CAnthropicOAuthTokenManager::Get();
 	if (TokenManager)
 	{
 		FString AuthUrl = TokenManager->GenerateAuthorizationUrl();
@@ -68,7 +68,7 @@ FReply FN2COAuthSettingsCustomization::OnSubmitCodeClicked()
 		return FReply::Handled();
 	}
 
-	UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+	UN2CAnthropicOAuthTokenManager* TokenManager = UN2CAnthropicOAuthTokenManager::Get();
 	if (TokenManager)
 	{
 		// Store weak reference to this for the callback
@@ -103,7 +103,7 @@ FReply FN2COAuthSettingsCustomization::OnSubmitCodeClicked()
 
 FReply FN2COAuthSettingsCustomization::OnLogoutClicked()
 {
-	UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+	UN2CAnthropicOAuthTokenManager* TokenManager = UN2CAnthropicOAuthTokenManager::Get();
 	if (TokenManager)
 	{
 		TokenManager->Logout();
@@ -122,7 +122,7 @@ FReply FN2COAuthSettingsCustomization::OnLogoutClicked()
 
 FText FN2COAuthSettingsCustomization::GetStatusText() const
 {
-	UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+	UN2CAnthropicOAuthTokenManager* TokenManager = UN2CAnthropicOAuthTokenManager::Get();
 	if (TokenManager && TokenManager->IsAuthenticated())
 	{
 		if (TokenManager->IsTokenExpired())
@@ -140,7 +140,7 @@ FText FN2COAuthSettingsCustomization::GetStatusText() const
 
 FSlateColor FN2COAuthSettingsCustomization::GetStatusColor() const
 {
-	UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+	UN2CAnthropicOAuthTokenManager* TokenManager = UN2CAnthropicOAuthTokenManager::Get();
 	if (TokenManager && TokenManager->IsAuthenticated())
 	{
 		if (TokenManager->IsTokenExpired())
@@ -155,7 +155,7 @@ FSlateColor FN2COAuthSettingsCustomization::GetStatusColor() const
 
 bool FN2COAuthSettingsCustomization::IsAuthenticated() const
 {
-	UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+	UN2CAnthropicOAuthTokenManager* TokenManager = UN2CAnthropicOAuthTokenManager::Get();
 	return TokenManager && TokenManager->IsAuthenticated();
 }
 

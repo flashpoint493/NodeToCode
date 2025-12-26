@@ -44,3 +44,31 @@ const FString FN2CGoogleOAuthConstants::RedirectUri = TEXT("https://codeassist.g
 
 // OAuth scopes required for Gemini API access
 const FString FN2CGoogleOAuthConstants::Scopes = TEXT("https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile");
+
+// ============================================
+// Provider Config Factory Methods
+// ============================================
+
+FN2COAuthProviderConfig FN2COAuthProviderConfig::CreateAnthropicConfig()
+{
+	FN2COAuthProviderConfig Config;
+	Config.ClientId = FN2COAuthConstants::ClientId;
+	Config.ClientSecret = FString(); // Anthropic doesn't require client secret
+	Config.AuthEndpoint = FN2COAuthConstants::AuthEndpoint;
+	Config.TokenEndpoint = FN2COAuthConstants::TokenEndpoint;
+	Config.RedirectUri = FN2COAuthConstants::RedirectUri;
+	Config.Scopes = FN2COAuthConstants::Scopes;
+	return Config;
+}
+
+FN2COAuthProviderConfig FN2COAuthProviderConfig::CreateGoogleConfig()
+{
+	FN2COAuthProviderConfig Config;
+	Config.ClientId = FN2CGoogleOAuthConstants::ClientId;
+	Config.ClientSecret = FN2CGoogleOAuthConstants::ClientSecret;
+	Config.AuthEndpoint = FN2CGoogleOAuthConstants::AuthEndpoint;
+	Config.TokenEndpoint = FN2CGoogleOAuthConstants::TokenEndpoint;
+	Config.RedirectUri = FN2CGoogleOAuthConstants::RedirectUri;
+	Config.Scopes = FN2CGoogleOAuthConstants::Scopes;
+	return Config;
+}

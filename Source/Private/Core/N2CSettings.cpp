@@ -2,7 +2,7 @@
 
 #include "Core/N2CSettings.h"
 #include "Core/N2CUserSecrets.h"
-#include "Auth/N2COAuthTokenManager.h"
+#include "Auth/N2CAnthropicOAuthTokenManager.h"
 #include "Auth/N2CGoogleOAuthTokenManager.h"
 #include "Code Editor/Widgets/SN2CCodeEditor.h"
 #include "Async/AsyncWork.h"
@@ -475,7 +475,7 @@ void UN2CSettings::ShowRestartEditorNotification()
 
 void UN2CSettings::RefreshOAuthStatus()
 {
-    UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+    UN2CAnthropicOAuthTokenManager* TokenManager = UN2CAnthropicOAuthTokenManager::Get();
     if (TokenManager && TokenManager->IsAuthenticated())
     {
         if (TokenManager->IsTokenExpired())

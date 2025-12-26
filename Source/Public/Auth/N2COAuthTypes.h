@@ -6,6 +6,18 @@
 #include "N2COAuthTypes.generated.h"
 
 /**
+ * @enum EN2COAuthProvider
+ * @brief Identifies OAuth providers for unified token storage and management
+ */
+UENUM(BlueprintType)
+enum class EN2COAuthProvider : uint8
+{
+	Anthropic   UMETA(DisplayName = "Anthropic (Claude)"),
+	Google      UMETA(DisplayName = "Google (Gemini)"),
+	// Future providers can be added here
+};
+
+/**
  * Delegate broadcast when OAuth authentication state changes.
  * @param bIsAuthenticated - Whether the user is now authenticated
  */
@@ -145,4 +157,48 @@ struct FN2CGoogleOAuthConstants
 
 	/** OAuth scopes required for Gemini API access */
 	static const FString Scopes;
+};
+
+/**
+ * @struct FN2COAuthProviderConfig
+ * @brief Runtime configuration for an OAuth provider
+ *
+ * This struct holds all the configuration values needed for OAuth authentication
+ * with a specific provider. It's used by the base token manager to perform
+ * provider-agnostic OAuth operations.
+ */
+USTRUCT(BlueprintType)
+struct FN2COAuthProviderConfig
+{
+	GENERATED_BODY()
+
+	/** OAuth Client ID */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OAuth")
+	FString ClientId;
+
+	/** OAuth Client Secret (empty if not required) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OAuth")
+	FString ClientSecret;
+
+	/** Authorization endpoint URL */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OAuth")
+	FString AuthEndpoint;
+
+	/** Token exchange endpoint URL */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OAuth")
+	FString TokenEndpoint;
+
+	/** Redirect URI for callback */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OAuth")
+	FString RedirectUri;
+
+	/** OAuth scopes (space-separated) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OAuth")
+	FString Scopes;
+
+	/** Create config from Anthropic constants */
+	static FN2COAuthProviderConfig CreateAnthropicConfig();
+
+	/** Create config from Google constants */
+	static FN2COAuthProviderConfig CreateGoogleConfig();
 };
