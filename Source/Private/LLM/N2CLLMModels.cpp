@@ -17,6 +17,8 @@ const TMap<EN2COpenAIModel, FN2COpenAIPricing> FN2CLLMModelUtils::OpenAIPricing 
 };
 
 const TMap<EN2CGeminiModel, FN2CGeminiPricing> FN2CLLMModelUtils::GeminiPricing = {
+    {EN2CGeminiModel::Gemini_3_Pro_Preview, FN2CGeminiPricing(0.0f, 0.0f)},  // Preview - pricing TBD
+    {EN2CGeminiModel::Gemini_3_Flash_Preview, FN2CGeminiPricing(0.0f, 0.0f)},  // Preview - pricing TBD
     {EN2CGeminiModel::Gemini_2_5_Flash, FN2CGeminiPricing(0.0f, 0.0f)},
     {EN2CGeminiModel::Gemini_2_5_Pro, FN2CGeminiPricing(1.25f, 10.0f)},
     {EN2CGeminiModel::Gemini_Flash_2_0, FN2CGeminiPricing(0.0f, 0.0f)},
@@ -99,6 +101,10 @@ FString FN2CLLMModelUtils::GetGeminiModelValue(EN2CGeminiModel Model)
 {
     switch (Model)
     {
+    case EN2CGeminiModel::Gemini_3_Pro_Preview:
+        return TEXT("gemini-3-pro-preview");
+    case EN2CGeminiModel::Gemini_3_Flash_Preview:
+        return TEXT("gemini-3-flash-preview");
     case EN2CGeminiModel::Gemini_2_5_Flash:
         return TEXT("gemini-2.5-flash-preview-05-20");
     case EN2CGeminiModel::Gemini_2_5_Pro:
@@ -116,7 +122,7 @@ FString FN2CLLMModelUtils::GetGeminiModelValue(EN2CGeminiModel Model)
     case EN2CGeminiModel::Gemini_2_0_FlashThinkingExp:
         return TEXT("gemini-2.0-flash-thinking-exp-01-21");
     default:
-        return TEXT("gemini-2.5-flash-preview-05-20");
+        return TEXT("gemini-3-flash-preview");  // Default to Gemini 3 Flash
     }
 }
 

@@ -89,6 +89,49 @@ public:
     /** Check if OAuth tokens are present */
     bool HasOAuthTokens() const;
 
+    // ============================================
+    // OAuth Tokens (Google/Gemini)
+    // ============================================
+
+    /** OAuth access token for Google/Gemini authentication */
+    UPROPERTY()
+    FString Google_OAuth_AccessToken;
+
+    /** OAuth refresh token for obtaining new access tokens */
+    UPROPERTY()
+    FString Google_OAuth_RefreshToken;
+
+    /** ISO 8601 timestamp when the access token expires */
+    UPROPERTY()
+    FString Google_OAuth_ExpiresAt;
+
+    /** OAuth scopes granted by the authorization */
+    UPROPERTY()
+    FString Google_OAuth_Scope;
+
+    /**
+     * Set Google OAuth tokens from a token exchange response
+     * @param AccessToken - The access token
+     * @param RefreshToken - The refresh token
+     * @param ExpiresAt - ISO 8601 expiration timestamp
+     * @param Scope - Granted scopes
+     */
+    void SetGoogleOAuthTokens(const FString& AccessToken, const FString& RefreshToken,
+                              const FString& ExpiresAt, const FString& Scope);
+
+    /**
+     * Get Google OAuth tokens as a struct
+     * @param OutTokens - Output token struct
+     * @return true if tokens are present
+     */
+    bool GetGoogleOAuthTokens(struct FN2COAuthTokens& OutTokens) const;
+
+    /** Clear all Google OAuth tokens */
+    void ClearGoogleOAuthTokens();
+
+    /** Check if Google OAuth tokens are present */
+    bool HasGoogleOAuthTokens() const;
+
 private:
     /** Ensure the secrets directory exists */
     static void EnsureSecretsDirectoryExists();

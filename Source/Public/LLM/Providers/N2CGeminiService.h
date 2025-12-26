@@ -25,6 +25,9 @@ public:
     virtual EN2CLLMProvider GetProviderType() const override { return EN2CLLMProvider::Gemini; }
     virtual void GetProviderHeaders(TMap<FString, FString>& OutHeaders) const override;
 
+    /** Check if using Google OAuth authentication */
+    bool IsUsingOAuth() const;
+
 protected:
     // Provider-specific implementations
     virtual FString FormatRequestPayload(const FString& UserMessage, const FString& SystemMessage) const override;

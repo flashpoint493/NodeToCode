@@ -32,24 +32,38 @@ bool UN2CGeminiResponseParser::ParseLLMResponse(
         return false;
     }
 
+    // Check if this is a Code Assist API response (wrapped in "response" field)
+    // Code Assist API format: { "response": { "candidates": [...], "usageMetadata": {...} }, "traceId": "..." }
+    TSharedPtr<FJsonObject> ResponseObject = JsonObject;
+    if (JsonObject->HasField(TEXT("response")))
+    {
+        ResponseObject = JsonObject->GetObjectField(TEXT("response"));
+        if (!ResponseObject.IsValid())
+        {
+            FN2CLogger::Get().LogError(TEXT("Failed to extract response object from Code Assist API response"), TEXT("GeminiResponseParser"));
+            return false;
+        }
+        FN2CLogger::Get().Log(TEXT("Detected Code Assist API response format"), EN2CLogSeverity::Debug);
+    }
+
     // Extract message content from Gemini format - this is a special case
     // because Gemini's format is different from other providers
     FString MessageContent;
-    if (!ExtractGeminiMessageContent(JsonObject, MessageContent))
+    if (!ExtractGeminiMessageContent(ResponseObject, MessageContent))
     {
         FN2CLogger::Get().LogError(TEXT("Failed to extract message content from Gemini response"), TEXT("GeminiResponseParser"));
         return false;
     }
 
     // Extract usage information if available
-    const TSharedPtr<FJsonObject> UsageMetadata = JsonObject->GetObjectField(TEXT("usageMetadata"));
+    const TSharedPtr<FJsonObject> UsageMetadata = ResponseObject->GetObjectField(TEXT("usageMetadata"));
     if (UsageMetadata.IsValid())
     {
         int32 PromptTokens = 0;
         int32 CompletionTokens = 0;
         UsageMetadata->TryGetNumberField(TEXT("promptTokenCount"), PromptTokens);
         UsageMetadata->TryGetNumberField(TEXT("candidatesTokenCount"), CompletionTokens);
-        
+
         OutResponse.Usage.InputTokens = PromptTokens;
         OutResponse.Usage.OutputTokens = CompletionTokens;
 

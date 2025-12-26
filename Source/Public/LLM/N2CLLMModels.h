@@ -41,6 +41,8 @@ enum class EN2CAnthropicModel : uint8
 UENUM(BlueprintType)
 enum class EN2CGeminiModel : uint8
 {
+    Gemini_3_Pro_Preview         UMETA(DisplayName = "Gemini 3 Pro Preview", Value = "gemini-3-pro-preview"),
+    Gemini_3_Flash_Preview       UMETA(DisplayName = "Gemini 3 Flash Preview", Value = "gemini-3-flash-preview"),
     Gemini_2_5_Pro            UMETA(DisplayName = "Gemini 2.5 Pro Preview", Value = "gemini-2.5-pro-preview-05-06"),
     Gemini_2_5_Flash          UMETA(DisplayName = "Gemini 2.5 Flash Preview", Value = "gemini-2.5-flash-preview-05-20"),
     Gemini_Flash_2_0             UMETA(DisplayName = "Gemini 2.0 Flash", Value = "gemini-2.0-flash"),

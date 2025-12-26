@@ -3,6 +3,7 @@
 #include "Core/N2CSettings.h"
 #include "Core/N2CUserSecrets.h"
 #include "Auth/N2COAuthTokenManager.h"
+#include "Auth/N2CGoogleOAuthTokenManager.h"
 #include "Code Editor/Widgets/SN2CCodeEditor.h"
 #include "Async/AsyncWork.h"
 #include "PropertyEditorModule.h"
@@ -57,6 +58,7 @@ UN2CSettings::UN2CSettings()
 
     // Initialize OAuth status
     RefreshOAuthStatus();
+    RefreshGeminiOAuthStatus();
 
     // Set tooltip for ReferenceSourceFilePaths
     FProperty* ReferenceFilesProperty = GetClass()->FindPropertyByName(TEXT("ReferenceSourceFilePaths"));
@@ -489,5 +491,26 @@ void UN2CSettings::RefreshOAuthStatus()
     else
     {
         OAuthConnectionStatus = TEXT("Not connected");
+    }
+}
+
+void UN2CSettings::RefreshGeminiOAuthStatus()
+{
+    UN2CGoogleOAuthTokenManager* TokenManager = UN2CGoogleOAuthTokenManager::Get();
+    if (TokenManager && TokenManager->IsAuthenticated())
+    {
+        if (TokenManager->IsTokenExpired())
+        {
+            GeminiOAuthConnectionStatus = TEXT("Token expired - will refresh on next request");
+        }
+        else
+        {
+            GeminiOAuthConnectionStatus = FString::Printf(TEXT("Connected (expires: %s)"),
+                *TokenManager->GetExpirationTimeString());
+        }
+    }
+    else
+    {
+        GeminiOAuthConnectionStatus = TEXT("Not connected");
     }
 }

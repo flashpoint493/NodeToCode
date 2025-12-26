@@ -20,6 +20,7 @@
 #include "MCP/Server/N2CMcpHttpServerManager.h"
 #include "MCP/Server/N2CSseServer.h"
 #include "Auth/N2COAuthTokenManager.h"
+#include "Auth/N2CGoogleOAuthTokenManager.h"
 #include "HAL/IConsoleManager.h"
 #if WITH_EDITOR
 #include "UnrealEdMisc.h"
@@ -223,6 +224,103 @@ void FNodeToCodeModule::StartupModule()
     );
 
     FN2CLogger::Get().Log(TEXT("OAuth console commands registered (N2C.OAuth.Login, N2C.OAuth.Submit, N2C.OAuth.Logout, N2C.OAuth.Status)"), EN2CLogSeverity::Debug);
+
+    // Register Google OAuth console commands for Gemini
+    IConsoleManager::Get().RegisterConsoleCommand(
+        TEXT("N2C.Google.Login"),
+        TEXT("Opens browser for Google OAuth login (for Gemini)"),
+        FConsoleCommandDelegate::CreateLambda([]()
+        {
+            UN2CGoogleOAuthTokenManager* TokenManager = UN2CGoogleOAuthTokenManager::Get();
+            if (TokenManager)
+            {
+                FString AuthUrl = TokenManager->GenerateAuthorizationUrl();
+                FPlatformProcess::LaunchURL(*AuthUrl, nullptr, nullptr);
+                FN2CLogger::Get().Log(TEXT("Opening browser for Google OAuth. After authorizing, copy the code from the page and use N2C.Google.Submit <code> to complete login."), EN2CLogSeverity::Info);
+            }
+        }),
+        ECVF_Default
+    );
+
+    IConsoleManager::Get().RegisterConsoleCommand(
+        TEXT("N2C.Google.Submit"),
+        TEXT("Submit Google OAuth authorization code"),
+        FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+        {
+            if (Args.Num() < 1)
+            {
+                FN2CLogger::Get().LogError(TEXT("Usage: N2C.Google.Submit <code>"));
+                return;
+            }
+
+            UN2CGoogleOAuthTokenManager* TokenManager = UN2CGoogleOAuthTokenManager::Get();
+            if (TokenManager)
+            {
+                TokenManager->ExchangeCodeForTokens(Args[0],
+                    FOnTokenExchangeComplete::CreateLambda([](bool bSuccess)
+                    {
+                        if (bSuccess)
+                        {
+                            FN2CLogger::Get().Log(TEXT("Google OAuth login successful!"), EN2CLogSeverity::Info);
+                            if (UN2CSettings* PluginSettings = GetMutableDefault<UN2CSettings>())
+                            {
+                                PluginSettings->RefreshGeminiOAuthStatus();
+                            }
+                        }
+                        else
+                        {
+                            FN2CLogger::Get().LogError(TEXT("Google OAuth login failed. Check the log for details."));
+                        }
+                    }));
+            }
+        }),
+        ECVF_Default
+    );
+
+    IConsoleManager::Get().RegisterConsoleCommand(
+        TEXT("N2C.Google.Logout"),
+        TEXT("Log out from Google OAuth (for Gemini)"),
+        FConsoleCommandDelegate::CreateLambda([]()
+        {
+            UN2CGoogleOAuthTokenManager* TokenManager = UN2CGoogleOAuthTokenManager::Get();
+            if (TokenManager)
+            {
+                TokenManager->Logout();
+                if (UN2CSettings* PluginSettings = GetMutableDefault<UN2CSettings>())
+                {
+                    PluginSettings->RefreshGeminiOAuthStatus();
+                }
+                FN2CLogger::Get().Log(TEXT("Google OAuth logout complete"), EN2CLogSeverity::Info);
+            }
+        }),
+        ECVF_Default
+    );
+
+    IConsoleManager::Get().RegisterConsoleCommand(
+        TEXT("N2C.Google.Status"),
+        TEXT("Show current Google OAuth authentication status (for Gemini)"),
+        FConsoleCommandDelegate::CreateLambda([]()
+        {
+            UN2CGoogleOAuthTokenManager* TokenManager = UN2CGoogleOAuthTokenManager::Get();
+            if (TokenManager)
+            {
+                if (TokenManager->IsAuthenticated())
+                {
+                    FString ExpiryStr = TokenManager->GetExpirationTimeString();
+                    bool bExpired = TokenManager->IsTokenExpired();
+                    FN2CLogger::Get().Log(FString::Printf(TEXT("Google OAuth Status: Connected (expires: %s)%s"),
+                        *ExpiryStr, bExpired ? TEXT(" - EXPIRED, will refresh on next request") : TEXT("")), EN2CLogSeverity::Info);
+                }
+                else
+                {
+                    FN2CLogger::Get().Log(TEXT("Google OAuth Status: Not connected. Use N2C.Google.Login to authenticate."), EN2CLogSeverity::Info);
+                }
+            }
+        }),
+        ECVF_Default
+    );
+
+    FN2CLogger::Get().Log(TEXT("Google OAuth console commands registered (N2C.Google.Login, N2C.Google.Submit, N2C.Google.Logout, N2C.Google.Status)"), EN2CLogSeverity::Debug);
 }
 
 void FNodeToCodeModule::ShutdownModule()
@@ -232,6 +330,12 @@ void FNodeToCodeModule::ShutdownModule()
     IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Submit"), false);
     IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Logout"), false);
     IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Status"), false);
+
+    // Unregister Google OAuth console commands
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.Google.Login"), false);
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.Google.Submit"), false);
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.Google.Logout"), false);
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.Google.Status"), false);
 
     // Unregister OAuth settings customization
     if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))

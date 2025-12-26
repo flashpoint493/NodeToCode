@@ -22,3 +22,25 @@ const FString FN2COAuthConstants::BetaHeader = TEXT("oauth-2025-04-20,claude-cod
 
 // Required system prompt prefix for OAuth
 const FString FN2COAuthConstants::SystemPromptPrefix = TEXT("You are Claude Code, Anthropic's official CLI for Claude.");
+
+// ============================================
+// Google OAuth Constants (for Gemini)
+// ============================================
+
+// OAuth client ID for gemini-cli
+const FString FN2CGoogleOAuthConstants::ClientId = TEXT("GOOGLE_OAUTH_CLIENT_ID");
+
+// OAuth client secret for gemini-cli
+const FString FN2CGoogleOAuthConstants::ClientSecret = TEXT("GOOGLE_OAUTH_CLIENT_SECRET");
+
+// OAuth authorization endpoint
+const FString FN2CGoogleOAuthConstants::AuthEndpoint = TEXT("https://accounts.google.com/o/oauth2/v2/auth");
+
+// OAuth token exchange endpoint
+const FString FN2CGoogleOAuthConstants::TokenEndpoint = TEXT("https://oauth2.googleapis.com/token");
+
+// OAuth redirect URI (User Code Flow)
+const FString FN2CGoogleOAuthConstants::RedirectUri = TEXT("https://codeassist.google.com/authcode");
+
+// OAuth scopes required for Gemini API access
+const FString FN2CGoogleOAuthConstants::Scopes = TEXT("https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile");

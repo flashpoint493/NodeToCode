@@ -42,6 +42,18 @@ enum class EN2CAnthropicAuthMethod : uint8
 };
 
 /**
+ * Authentication method for Gemini provider.
+ * APIKey uses the traditional API key in URL parameter.
+ * OAuth uses Bearer token from Google account.
+ */
+UENUM(BlueprintType)
+enum class EN2CGeminiAuthMethod : uint8
+{
+	APIKey	UMETA(DisplayName = "API Key"),
+	OAuth	UMETA(DisplayName = "Google Account")
+};
+
+/**
  * @struct FN2COAuthTokens
  * @brief Container for OAuth 2.0 tokens and metadata
  */
@@ -108,4 +120,29 @@ struct FN2COAuthConstants
 
 	/** Required system prompt prefix for OAuth */
 	static const FString SystemPromptPrefix;
+};
+
+/**
+ * @struct FN2CGoogleOAuthConstants
+ * @brief Static OAuth configuration values for Google/Gemini authentication
+ */
+struct FN2CGoogleOAuthConstants
+{
+	/** OAuth client ID for gemini-cli */
+	static const FString ClientId;
+
+	/** OAuth client secret for gemini-cli */
+	static const FString ClientSecret;
+
+	/** OAuth authorization endpoint */
+	static const FString AuthEndpoint;
+
+	/** OAuth token exchange endpoint */
+	static const FString TokenEndpoint;
+
+	/** OAuth redirect URI (User Code Flow) */
+	static const FString RedirectUri;
+
+	/** OAuth scopes required for Gemini API access */
+	static const FString Scopes;
 };

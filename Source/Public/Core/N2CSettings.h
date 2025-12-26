@@ -418,10 +418,20 @@ public:
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Node to Code | LLM Services | Gemini")
     EN2CGeminiModel Gemini_Model = EN2CGeminiModel::Gemini_2_5_Flash;
 
-    /** OpenAI API Key - Stored separately in user secrets */
+    /** Gemini Authentication Method - API Key or Google Account OAuth */
+    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Node to Code | LLM Services | Gemini",
+        meta = (DisplayName = "Authentication Method"))
+    EN2CGeminiAuthMethod GeminiAuthMethod = EN2CGeminiAuthMethod::APIKey;
+
+    /** Gemini API Key - Stored separately in user secrets */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Node to Code | LLM Services | Gemini",
-        meta = (DisplayName = "API Key"))
+        meta = (DisplayName = "API Key", EditCondition = "GeminiAuthMethod == EN2CGeminiAuthMethod::APIKey", EditConditionHides))
     FString Gemini_API_Key_UI;
+
+    /** Gemini OAuth Connection Status - Shows current OAuth authentication state */
+    UPROPERTY(VisibleAnywhere, Transient, Category = "Node to Code | LLM Services | Gemini",
+        meta = (DisplayName = "OAuth Status", EditCondition = "GeminiAuthMethod == EN2CGeminiAuthMethod::OAuth", EditConditionHides))
+    FString GeminiOAuthConnectionStatus = TEXT("Not connected");
 
     /** DeepSeek Model Selection - R1 recommended for most accurate results */
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Node to Code | LLM Services | DeepSeek")
@@ -518,8 +528,14 @@ public:
     /** Check if Anthropic is configured to use OAuth authentication */
     bool IsUsingAnthropicOAuth() const { return AnthropicAuthMethod == EN2CAnthropicAuthMethod::OAuth; }
 
-    /** Refresh the OAuth connection status display */
+    /** Check if Gemini is configured to use OAuth authentication */
+    bool IsUsingGeminiOAuth() const { return GeminiAuthMethod == EN2CGeminiAuthMethod::OAuth; }
+
+    /** Refresh the Anthropic OAuth connection status display */
     void RefreshOAuthStatus();
+
+    /** Refresh the Gemini OAuth connection status display */
+    void RefreshGeminiOAuthStatus();
 
     /** Style themes for C++ code */
     UPROPERTY(Config, EditAnywhere, Category = "Node to Code | Theming | Language Specific Themes",
