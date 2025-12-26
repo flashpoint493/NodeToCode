@@ -31,6 +31,9 @@ public:
     /** Message building */
     void AddSystemMessage(const FString& Content);
     void AddUserMessage(const FString& Content);
+
+    /** OAuth-specific: Add system messages as array of content blocks for Anthropic OAuth */
+    void AddAnthropicOAuthSystemMessages(const FString& OAuthPrefix, const FString& ActualContent);
     
     /** Response format */
     void SetJsonResponseFormat(const TSharedPtr<FJsonObject>& Schema);

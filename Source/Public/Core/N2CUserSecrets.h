@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Auth/N2COAuthTypes.h"
 #include "N2CUserSecrets.generated.h"
 
 /**
@@ -44,7 +45,50 @@ public:
     /** DeepSeek API Key */
     UPROPERTY(EditAnywhere, Category = "Node to Code | API Keys")
     FString DeepSeek_API_Key;
-    
+
+    // ============================================
+    // OAuth Tokens (Claude Pro/Max)
+    // ============================================
+
+    /** OAuth access token for Claude Pro/Max authentication */
+    UPROPERTY()
+    FString Claude_OAuth_AccessToken;
+
+    /** OAuth refresh token for obtaining new access tokens */
+    UPROPERTY()
+    FString Claude_OAuth_RefreshToken;
+
+    /** ISO 8601 timestamp when the access token expires */
+    UPROPERTY()
+    FString Claude_OAuth_ExpiresAt;
+
+    /** OAuth scopes granted by the authorization */
+    UPROPERTY()
+    FString Claude_OAuth_Scope;
+
+    /**
+     * Set OAuth tokens from a token exchange response
+     * @param AccessToken - The access token
+     * @param RefreshToken - The refresh token
+     * @param ExpiresAt - ISO 8601 expiration timestamp
+     * @param Scope - Granted scopes
+     */
+    void SetOAuthTokens(const FString& AccessToken, const FString& RefreshToken,
+                        const FString& ExpiresAt, const FString& Scope);
+
+    /**
+     * Get OAuth tokens as a struct
+     * @param OutTokens - Output token struct
+     * @return true if tokens are present
+     */
+    bool GetOAuthTokens(struct FN2COAuthTokens& OutTokens) const;
+
+    /** Clear all OAuth tokens */
+    void ClearOAuthTokens();
+
+    /** Check if OAuth tokens are present */
+    bool HasOAuthTokens() const;
+
 private:
     /** Ensure the secrets directory exists */
     static void EnsureSecretsDirectoryExists();

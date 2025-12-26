@@ -2,6 +2,7 @@
 
 #include "Core/N2CSettings.h"
 #include "Core/N2CUserSecrets.h"
+#include "Auth/N2COAuthTokenManager.h"
 #include "Code Editor/Widgets/SN2CCodeEditor.h"
 #include "Async/AsyncWork.h"
 #include "PropertyEditorModule.h"
@@ -53,6 +54,9 @@ UN2CSettings::UN2CSettings()
     
     // Initialize token estimate
     EstimatedReferenceTokens = GetReferenceFilesTokenEstimate();
+
+    // Initialize OAuth status
+    RefreshOAuthStatus();
 
     // Set tooltip for ReferenceSourceFilePaths
     FProperty* ReferenceFilesProperty = GetClass()->FindPropertyByName(TEXT("ReferenceSourceFilePaths"));
@@ -167,6 +171,9 @@ void UN2CSettings::InitializePricing()
     OpenAIModelPricing.Add(EN2COpenAIModel::GPT_o1_Preview, FN2COpenAIPricing(15.0f, 60.0f));
     OpenAIModelPricing.Add(EN2COpenAIModel::GPT_o1_Mini, FN2COpenAIPricing(1.1f, 4.4f));
 
+    AnthropicModelPricing.Add(EN2CAnthropicModel::Claude4_5_Opus, FN2CAnthropicPricing(5.0f, 25.0f));
+    AnthropicModelPricing.Add(EN2CAnthropicModel::Claude4_5_Sonnet, FN2CAnthropicPricing(3.0f, 15.0f));
+    AnthropicModelPricing.Add(EN2CAnthropicModel::Claude4_1_Opus, FN2CAnthropicPricing(15.0f, 75.0f));
     AnthropicModelPricing.Add(EN2CAnthropicModel::Claude4_Opus, FN2CAnthropicPricing(15.0f, 75.0f));
     AnthropicModelPricing.Add(EN2CAnthropicModel::Claude4_Sonnet, FN2CAnthropicPricing(3.0f, 15.0f));
     AnthropicModelPricing.Add(EN2CAnthropicModel::Claude3_7_Sonnet, FN2CAnthropicPricing(3.0f, 15.0f));
@@ -463,3 +470,24 @@ void UN2CSettings::ShowRestartEditorNotification()
     #undef LOCTEXT_NAMESPACE
 }
 #endif
+
+void UN2CSettings::RefreshOAuthStatus()
+{
+    UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+    if (TokenManager && TokenManager->IsAuthenticated())
+    {
+        if (TokenManager->IsTokenExpired())
+        {
+            OAuthConnectionStatus = TEXT("Token expired - will refresh on next request");
+        }
+        else
+        {
+            OAuthConnectionStatus = FString::Printf(TEXT("Connected (expires: %s)"),
+                *TokenManager->GetExpirationTimeString());
+        }
+    }
+    else
+    {
+        OAuthConnectionStatus = TEXT("Not connected");
+    }
+}

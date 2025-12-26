@@ -2,6 +2,9 @@
 
 #include "LLM/Providers/N2CAnthropicService.h"
 
+#include "Auth/N2COAuthTokenManager.h"
+#include "Auth/N2COAuthTypes.h"
+#include "Core/N2CSettings.h"
 #include "LLM/N2CSystemPromptManager.h"
 #include "Utils/N2CLogger.h"
 
@@ -23,9 +26,28 @@ void UN2CAnthropicService::GetConfiguration(
 
 void UN2CAnthropicService::GetProviderHeaders(TMap<FString, FString>& OutHeaders) const
 {
-    OutHeaders.Add(TEXT("x-api-key"), Config.ApiKey);
+    if (IsUsingOAuth())
+    {
+        // OAuth authentication uses Bearer token
+        UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+        FString AccessToken = TokenManager->GetAccessToken();
+        OutHeaders.Add(TEXT("Authorization"), FString::Printf(TEXT("Bearer %s"), *AccessToken));
+        OutHeaders.Add(TEXT("anthropic-beta"), FN2COAuthConstants::BetaHeader);
+    }
+    else
+    {
+        // Standard API key authentication
+        OutHeaders.Add(TEXT("x-api-key"), Config.ApiKey);
+    }
+
     OutHeaders.Add(TEXT("anthropic-version"), ApiVersion);
     OutHeaders.Add(TEXT("content-type"), TEXT("application/json"));
+}
+
+bool UN2CAnthropicService::IsUsingOAuth() const
+{
+    const UN2CSettings* Settings = GetDefault<UN2CSettings>();
+    return Settings && Settings->IsUsingAnthropicOAuth();
 }
 
 FString UN2CAnthropicService::FormatRequestPayload(const FString& UserMessage, const FString& SystemMessage) const
@@ -38,19 +60,30 @@ FString UN2CAnthropicService::FormatRequestPayload(const FString& UserMessage, c
     UN2CLLMPayloadBuilder* PayloadBuilder = NewObject<UN2CLLMPayloadBuilder>();
     PayloadBuilder->Initialize(Config.Model);
     PayloadBuilder->ConfigureForAnthropic();
-    
+
     // Set common parameters
     PayloadBuilder->SetTemperature(0.0f);
     PayloadBuilder->SetMaxTokens(16000);
-    
+
     // Try prepending source files to the user message
     FString FinalUserMessage = UserMessage;
     PromptManager->PrependSourceFilesToUserMessage(FinalUserMessage);
-    
-    // Add messages
-    PayloadBuilder->AddSystemMessage(SystemMessage);
+
+    // Add system message - use different format for OAuth vs API key
+    if (IsUsingOAuth())
+    {
+        // OAuth requires system to be an array of content blocks with the prefix as first entry
+        PayloadBuilder->AddAnthropicOAuthSystemMessages(FN2COAuthConstants::SystemPromptPrefix, SystemMessage);
+        FN2CLogger::Get().Log(TEXT("Using OAuth system message format (array of content blocks)"), EN2CLogSeverity::Debug);
+    }
+    else
+    {
+        // Standard API key auth uses string format
+        PayloadBuilder->AddSystemMessage(SystemMessage);
+    }
+
     PayloadBuilder->AddUserMessage(FinalUserMessage);
-    
+
     // Build and return the payload
     return PayloadBuilder->Build();
 }

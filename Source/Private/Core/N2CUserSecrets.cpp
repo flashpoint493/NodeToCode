@@ -71,7 +71,13 @@ void UN2CUserSecrets::LoadSecrets()
     Anthropic_API_Key = JsonObject->GetStringField(TEXT("Anthropic_API_Key"));
     Gemini_API_Key = JsonObject->GetStringField(TEXT("Gemini_API_Key"));
     DeepSeek_API_Key = JsonObject->GetStringField(TEXT("DeepSeek_API_Key"));
-    
+
+    // Extract OAuth tokens (if present)
+    Claude_OAuth_AccessToken = JsonObject->GetStringField(TEXT("Claude_OAuth_AccessToken"));
+    Claude_OAuth_RefreshToken = JsonObject->GetStringField(TEXT("Claude_OAuth_RefreshToken"));
+    Claude_OAuth_ExpiresAt = JsonObject->GetStringField(TEXT("Claude_OAuth_ExpiresAt"));
+    Claude_OAuth_Scope = JsonObject->GetStringField(TEXT("Claude_OAuth_Scope"));
+
     FN2CLogger::Get().Log(
         FString::Printf(TEXT("Successfully loaded secrets from: %s"), *SecretsFilePath),
         EN2CLogSeverity::Info);
@@ -88,7 +94,13 @@ void UN2CUserSecrets::SaveSecrets()
     JsonObject->SetStringField(TEXT("Anthropic_API_Key"), Anthropic_API_Key);
     JsonObject->SetStringField(TEXT("Gemini_API_Key"), Gemini_API_Key);
     JsonObject->SetStringField(TEXT("DeepSeek_API_Key"), DeepSeek_API_Key);
-    
+
+    // Save OAuth tokens
+    JsonObject->SetStringField(TEXT("Claude_OAuth_AccessToken"), Claude_OAuth_AccessToken);
+    JsonObject->SetStringField(TEXT("Claude_OAuth_RefreshToken"), Claude_OAuth_RefreshToken);
+    JsonObject->SetStringField(TEXT("Claude_OAuth_ExpiresAt"), Claude_OAuth_ExpiresAt);
+    JsonObject->SetStringField(TEXT("Claude_OAuth_Scope"), Claude_OAuth_Scope);
+
     // Serialize to string
     FString JsonString;
     TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
@@ -110,4 +122,44 @@ void UN2CUserSecrets::SaveSecrets()
     FN2CLogger::Get().Log(
         FString::Printf(TEXT("Successfully saved secrets to: %s"), *SecretsFilePath),
         EN2CLogSeverity::Info);
+}
+
+void UN2CUserSecrets::SetOAuthTokens(const FString& AccessToken, const FString& RefreshToken,
+                                      const FString& ExpiresAt, const FString& Scope)
+{
+    Claude_OAuth_AccessToken = AccessToken;
+    Claude_OAuth_RefreshToken = RefreshToken;
+    Claude_OAuth_ExpiresAt = ExpiresAt;
+    Claude_OAuth_Scope = Scope;
+
+    SaveSecrets();
+
+    FN2CLogger::Get().Log(TEXT("OAuth tokens saved successfully"), EN2CLogSeverity::Info);
+}
+
+bool UN2CUserSecrets::GetOAuthTokens(FN2COAuthTokens& OutTokens) const
+{
+    OutTokens.AccessToken = Claude_OAuth_AccessToken;
+    OutTokens.RefreshToken = Claude_OAuth_RefreshToken;
+    OutTokens.ExpiresAt = Claude_OAuth_ExpiresAt;
+    OutTokens.Scope = Claude_OAuth_Scope;
+
+    return OutTokens.HasTokens();
+}
+
+void UN2CUserSecrets::ClearOAuthTokens()
+{
+    Claude_OAuth_AccessToken.Empty();
+    Claude_OAuth_RefreshToken.Empty();
+    Claude_OAuth_ExpiresAt.Empty();
+    Claude_OAuth_Scope.Empty();
+
+    SaveSecrets();
+
+    FN2CLogger::Get().Log(TEXT("OAuth tokens cleared"), EN2CLogSeverity::Info);
+}
+
+bool UN2CUserSecrets::HasOAuthTokens() const
+{
+    return !Claude_OAuth_AccessToken.IsEmpty() && !Claude_OAuth_RefreshToken.IsEmpty();
 }

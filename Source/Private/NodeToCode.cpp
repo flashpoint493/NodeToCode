@@ -14,9 +14,13 @@
 #include "Editor/EditorPerformanceSettings.h"
 #include "Models/N2CStyle.h"
 #include "Framework/Notifications/NotificationManager.h"
+#include "PropertyEditorModule.h"
+#include "UI/N2COAuthSettingsCustomization.h"
 #include "Widgets/Notifications/SNotificationList.h"
 #include "MCP/Server/N2CMcpHttpServerManager.h"
 #include "MCP/Server/N2CSseServer.h"
+#include "Auth/N2COAuthTokenManager.h"
+#include "HAL/IConsoleManager.h"
 #if WITH_EDITOR
 #include "UnrealEdMisc.h"
 #endif
@@ -114,14 +118,133 @@ void FNodeToCodeModule::StartupModule()
     {
         FN2CLogger::Get().LogError(FString::Printf(TEXT("Failed to start SSE server on port %d"), SsePort));
     }
+
+    // Register OAuth settings customization
+    FPropertyEditorModule& PropertyModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
+    PropertyModule.RegisterCustomClassLayout(
+        UN2CSettings::StaticClass()->GetFName(),
+        FOnGetDetailCustomizationInstance::CreateStatic(&FN2COAuthSettingsCustomization::MakeInstance)
+    );
+    FN2CLogger::Get().Log(TEXT("OAuth settings customization registered"), EN2CLogSeverity::Debug);
+
+    // Register OAuth console commands
+    IConsoleManager::Get().RegisterConsoleCommand(
+        TEXT("N2C.OAuth.Login"),
+        TEXT("Opens browser for Claude Pro/Max OAuth login"),
+        FConsoleCommandDelegate::CreateLambda([]()
+        {
+            UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+            if (TokenManager)
+            {
+                FString AuthUrl = TokenManager->GenerateAuthorizationUrl();
+                FPlatformProcess::LaunchURL(*AuthUrl, nullptr, nullptr);
+                FN2CLogger::Get().Log(TEXT("Opening browser for OAuth authorization. After authorizing, copy provided code and use N2C.OAuth.Submit <code> to complete login."), EN2CLogSeverity::Info);
+            }
+        }),
+        ECVF_Default
+    );
+
+    IConsoleManager::Get().RegisterConsoleCommand(
+        TEXT("N2C.OAuth.Submit"),
+        TEXT("Submit OAuth authorization code (format: code#state)"),
+        FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+        {
+            if (Args.Num() < 1)
+            {
+                FN2CLogger::Get().LogError(TEXT("Usage: N2C.OAuth.Submit <code#state>"));
+                return;
+            }
+
+            UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+            if (TokenManager)
+            {
+                TokenManager->ExchangeCodeForTokens(Args[0],
+                    FOnTokenExchangeComplete::CreateLambda([](bool bSuccess)
+                    {
+                        if (bSuccess)
+                        {
+                            FN2CLogger::Get().Log(TEXT("OAuth login successful!"), EN2CLogSeverity::Info);
+                            if (UN2CSettings* PluginSettings = GetMutableDefault<UN2CSettings>())
+                            {
+                                PluginSettings->RefreshOAuthStatus();
+                            }
+                        }
+                        else
+                        {
+                            FN2CLogger::Get().LogError(TEXT("OAuth login failed. Check the log for details."));
+                        }
+                    }));
+            }
+        }),
+        ECVF_Default
+    );
+
+    IConsoleManager::Get().RegisterConsoleCommand(
+        TEXT("N2C.OAuth.Logout"),
+        TEXT("Log out from Claude Pro/Max OAuth"),
+        FConsoleCommandDelegate::CreateLambda([]()
+        {
+            UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+            if (TokenManager)
+            {
+                TokenManager->Logout();
+                if (UN2CSettings* PluginSettings = GetMutableDefault<UN2CSettings>())
+                {
+                    PluginSettings->RefreshOAuthStatus();
+                }
+                FN2CLogger::Get().Log(TEXT("OAuth logout complete"), EN2CLogSeverity::Info);
+            }
+        }),
+        ECVF_Default
+    );
+
+    IConsoleManager::Get().RegisterConsoleCommand(
+        TEXT("N2C.OAuth.Status"),
+        TEXT("Show current OAuth authentication status"),
+        FConsoleCommandDelegate::CreateLambda([]()
+        {
+            UN2COAuthTokenManager* TokenManager = UN2COAuthTokenManager::Get();
+            if (TokenManager)
+            {
+                if (TokenManager->IsAuthenticated())
+                {
+                    FString ExpiryStr = TokenManager->GetExpirationTimeString();
+                    bool bExpired = TokenManager->IsTokenExpired();
+                    FN2CLogger::Get().Log(FString::Printf(TEXT("OAuth Status: Connected (expires: %s)%s"),
+                        *ExpiryStr, bExpired ? TEXT(" - EXPIRED, will refresh on next request") : TEXT("")), EN2CLogSeverity::Info);
+                }
+                else
+                {
+                    FN2CLogger::Get().Log(TEXT("OAuth Status: Not connected. Use N2C.OAuth.Login to authenticate."), EN2CLogSeverity::Info);
+                }
+            }
+        }),
+        ECVF_Default
+    );
+
+    FN2CLogger::Get().Log(TEXT("OAuth console commands registered (N2C.OAuth.Login, N2C.OAuth.Submit, N2C.OAuth.Logout, N2C.OAuth.Status)"), EN2CLogSeverity::Debug);
 }
 
 void FNodeToCodeModule::ShutdownModule()
 {
+    // Unregister OAuth console commands
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Login"), false);
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Submit"), false);
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Logout"), false);
+    IConsoleManager::Get().UnregisterConsoleObject(TEXT("N2C.OAuth.Status"), false);
+
+    // Unregister OAuth settings customization
+    if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))
+    {
+        FPropertyEditorModule& PropertyModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
+        PropertyModule.UnregisterCustomClassLayout(UN2CSettings::StaticClass()->GetFName());
+        FN2CLogger::Get().Log(TEXT("OAuth settings customization unregistered"), EN2CLogSeverity::Debug);
+    }
+
     // Stop SSE server
     NodeToCodeSseServer::StopSseServer();
     FN2CLogger::Get().Log(TEXT("SSE server stopped"), EN2CLogSeverity::Info);
-    
+
     // Stop MCP HTTP server
     FN2CMcpHttpServerManager::Get().StopServer();
     FN2CLogger::Get().Log(TEXT("MCP HTTP server stopped"), EN2CLogSeverity::Info);

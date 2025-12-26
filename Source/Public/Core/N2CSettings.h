@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "N2CUserSecrets.h"
+#include "Auth/N2COAuthTypes.h"
 #include "Code Editor/Models/N2CCodeLanguage.h"
 #include "Engine/DeveloperSettings.h"
 #include "LLM/N2CLLMModels.h"
@@ -385,14 +386,24 @@ public:
     UPROPERTY(Transient)
     mutable UN2CUserSecrets* UserSecrets;
 
-    /** Anthropic Model Selection - Sonnet 4 recommended*/
+    /** Anthropic Model Selection - Sonnet 4.5 recommended for best quality/cost balance */
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Node to Code | LLM Services | Anthropic")
-    EN2CAnthropicModel AnthropicModel = EN2CAnthropicModel::Claude4_Sonnet;
+    EN2CAnthropicModel AnthropicModel = EN2CAnthropicModel::Claude4_5_Sonnet;
     
+    /** Anthropic Authentication Method - API Key or Claude Pro/Max OAuth */
+    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Node to Code | LLM Services | Anthropic",
+        meta = (DisplayName = "Authentication Method"))
+    EN2CAnthropicAuthMethod AnthropicAuthMethod = EN2CAnthropicAuthMethod::APIKey;
+
     /** Anthropic API Key - Stored separately in user secrets */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Node to Code | LLM Services | Anthropic",
-        meta = (DisplayName = "API Key"))
+        meta = (DisplayName = "API Key", EditCondition = "AnthropicAuthMethod == EN2CAnthropicAuthMethod::APIKey", EditConditionHides))
     FString Anthropic_API_Key_UI;
+
+    /** OAuth Connection Status - Shows current OAuth authentication state */
+    UPROPERTY(VisibleAnywhere, Transient, Category = "Node to Code | LLM Services | Anthropic",
+        meta = (DisplayName = "OAuth Status", EditCondition = "AnthropicAuthMethod == EN2CAnthropicAuthMethod::OAuth", EditConditionHides))
+    FString OAuthConnectionStatus = TEXT("Not connected");
 
     /** OpenAI Model Selection - o3-mini recommended for impressive results for a great price, o1 recommended for most thorough results (but quite expensive) */
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Node to Code | LLM Services | OpenAI")
@@ -503,6 +514,12 @@ public:
 
     /** Get the minimum severity level for logging */
     EN2CLogSeverity GetMinLogSeverity() const { return MinSeverity; }
+
+    /** Check if Anthropic is configured to use OAuth authentication */
+    bool IsUsingAnthropicOAuth() const { return AnthropicAuthMethod == EN2CAnthropicAuthMethod::OAuth; }
+
+    /** Refresh the OAuth connection status display */
+    void RefreshOAuthStatus();
 
     /** Style themes for C++ code */
     UPROPERTY(Config, EditAnywhere, Category = "Node to Code | Theming | Language Specific Themes",
