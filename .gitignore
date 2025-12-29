@@ -88,7 +88,8 @@ CLAUDE.md
 /.claude
 /.idea
 .mcp.json
-*.sh
+/build.sh
 *.ps1
 /BuildLogs
 /Documentation
+nul
