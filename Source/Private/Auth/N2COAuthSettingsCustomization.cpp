@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
 
-#include "UI/N2COAuthSettingsCustomization.h"
+#include "Auth/N2COAuthSettingsCustomization.h"
 
 #include "Auth/N2CAnthropicOAuthTokenManager.h"
 #include "Auth/N2COAuthTypes.h"

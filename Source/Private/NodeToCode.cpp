@@ -15,7 +15,7 @@
 #include "Models/N2CStyle.h"
 #include "Framework/Notifications/NotificationManager.h"
 #include "PropertyEditorModule.h"
-#include "UI/N2COAuthSettingsCustomization.h"
+#include "Auth/N2COAuthSettingsCustomization.h"
 #include "Widgets/Notifications/SNotificationList.h"
 #include "MCP/Server/N2CMcpHttpServerManager.h"
 #include "MCP/Server/N2CSseServer.h"
