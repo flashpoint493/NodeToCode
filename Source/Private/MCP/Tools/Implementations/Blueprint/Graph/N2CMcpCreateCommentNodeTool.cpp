@@ -146,11 +146,11 @@ FMcpToolCallResult FN2CMcpCreateCommentNodeTool::Execute(const TSharedPtr<FJsonO
         // Associate nodes with comment
         AssociateNodesWithComment(CommentNode, NodesToComment);
         
-        // Mark Blueprint as modified
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(FocusedBlueprint);
+        // Compile Blueprint synchronously to ensure preview actors are properly updated
+        FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(FocusedBlueprint);
         
-        // Refresh BlueprintActionDatabase
-        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+        // Schedule deferred refresh of BlueprintActionDatabase
+        FN2CMcpBlueprintUtils::DeferredRefreshBlueprintActionDatabase();
         
         // Show notification
         FNotificationInfo Info(FText::Format(

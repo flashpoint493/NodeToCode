@@ -215,9 +215,11 @@ FMcpToolCallResult FN2CMcpCreateVariableTool::Execute(const TSharedPtr<FJsonObje
 		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultString);
 		FJsonSerializer::Serialize(ResultJsonObj.ToSharedRef(), Writer); // Use ResultJsonObj
 
-        // Refresh BlueprintActionDatabase
-        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
-        
+        // Schedule deferred refresh of BlueprintActionDatabase
+        // This prevents crashes when preview actors exist in transient worlds
+        // by allowing the engine to complete internal updates first
+        FN2CMcpBlueprintUtils::DeferredRefreshBlueprintActionDatabase();
+
 		return FMcpToolCallResult::CreateTextResult(ResultString);
 	});
 }
@@ -239,14 +241,14 @@ FName FN2CMcpCreateVariableTool::CreateVariable(UBlueprint* Blueprint, const FSt
 			FBlueprintEditorUtils::SetBlueprintVariableCategory(
 				Blueprint, UniqueName, nullptr, FText::FromString(Category), true);
 		}
-		
-		// Mark Blueprint as modified
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-		
+
+		// Compile Blueprint synchronously to ensure preview actors are properly updated
+		FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(Blueprint);
+
 		FN2CLogger::Get().Log(FString::Printf(
-			TEXT("Created variable '%s' in Blueprint '%s'"), 
+			TEXT("Created variable '%s' in Blueprint '%s'"),
 			*UniqueName.ToString(), *Blueprint->GetName()), EN2CLogSeverity::Info);
-		
+
 		return UniqueName;
 	}
 	

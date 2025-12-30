@@ -127,8 +127,8 @@ FMcpToolCallResult FN2CMcpCreateSetMemberVariableNode::Execute(const TSharedPtr<
             }
         }
         
-        // Mark Blueprint as modified
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ActiveBlueprint);
+        // Compile Blueprint synchronously to ensure preview actors are properly updated
+        FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(ActiveBlueprint);
         
         // Show notification
         FNotificationInfo Info(FText::Format(
@@ -147,8 +147,8 @@ FMcpToolCallResult FN2CMcpCreateSetMemberVariableNode::Execute(const TSharedPtr<
         TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultJson);
         FJsonSerializer::Serialize(Result.ToSharedRef(), Writer);
 
-        // Refresh BlueprintActionDatabase
-        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+        // Schedule deferred refresh of BlueprintActionDatabase
+        FN2CMcpBlueprintUtils::DeferredRefreshBlueprintActionDatabase();
         
         return FMcpToolCallResult::CreateTextResult(ResultJson);
     });

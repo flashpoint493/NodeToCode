@@ -33,8 +33,21 @@ public:
      * Refreshes the Blueprint Action Database.
      * Call this after operations that might alter the available Blueprint actions
      * to prevent editor context menu freezes.
+     *
+     * WARNING: Calling this immediately after MarkBlueprintAsStructurallyModified can cause
+     * crashes if preview actors exist in transient worlds. Consider using DeferredRefreshBlueprintActionDatabase instead.
      */
     static void RefreshBlueprintActionDatabase();
+
+    /**
+     * Schedules a deferred refresh of the Blueprint Action Database.
+     * This is safer to call after Blueprint modifications as it allows the engine
+     * to complete internal updates (like refreshing preview actors) before triggering
+     * the database refresh.
+     *
+     * @param DelayFrames Number of frames to delay before refreshing (default: 2)
+     */
+    static void DeferredRefreshBlueprintActionDatabase(int32 DelayFrames = 2);
 
     /**
      * Resolves a UBlueprint from an optional asset path.
@@ -63,6 +76,17 @@ public:
      * @return True if the editor was successfully opened or focused, false otherwise.
      */
     static bool OpenBlueprintEditor(UBlueprint* Blueprint, TSharedPtr<IBlueprintEditor>& OutEditor, FString& OutErrorMsg);
+
+    /**
+     * Marks a Blueprint as structurally modified and compiles it synchronously.
+     * This is a safer alternative to FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified
+     * which queues deferred compilation. Deferred compilation can cause crashes when Slate
+     * UI updates occur before the compile finishes, leaving preview actors in a "DEADCLASS" state.
+     *
+     * @param Blueprint The Blueprint to mark as modified and compile.
+     * @param bSkipGarbageCollection If true, skips garbage collection during compilation for better performance.
+     */
+    static void MarkBlueprintAsModifiedAndCompile(UBlueprint* Blueprint, bool bSkipGarbageCollection = true);
 
     /**
      * Compiles a Blueprint and returns compilation results.

@@ -139,8 +139,8 @@ FMcpToolCallResult FN2CMcpAddBlueprintNodeTool::Execute(const TSharedPtr<FJsonOb
     
     // Result = FMcpToolCallResult::CreateTextResult(ResultJson); // This was assigning to the outer scope Result
 
-    // Refresh BlueprintActionDatabase
-    FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+    // Schedule deferred refresh of BlueprintActionDatabase
+    FN2CMcpBlueprintUtils::DeferredRefreshBlueprintActionDatabase();
     
     return FMcpToolCallResult::CreateTextResult(ResultJson); // Return the result from the lambda
 }
@@ -314,8 +314,8 @@ bool FN2CMcpAddBlueprintNodeTool::FindAndSpawnNode(
     static int32 SpawnedNodeCounter = 0;
     OutNodeId = FString::Printf(TEXT("SpawnedNode_%d"), ++SpawnedNodeCounter);
     
-    // Mark the Blueprint as modified
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+    // Compile Blueprint synchronously to ensure preview actors are properly updated
+    FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(Blueprint);
     
     // If it's a K2Node, we could return additional information
     if (UK2Node* K2Node = Cast<UK2Node>(SpawnedNode))

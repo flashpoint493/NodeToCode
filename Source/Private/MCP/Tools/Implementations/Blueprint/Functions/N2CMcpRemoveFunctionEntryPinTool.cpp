@@ -168,8 +168,8 @@ FMcpToolCallResult FN2CMcpRemoveFunctionEntryPinTool::Execute(const TSharedPtr<F
 		// Update all function call sites
 		FN2CMcpFunctionPinUtils::UpdateFunctionCallSites(FocusedGraph, Blueprint);
 
-		// Mark Blueprint as modified
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+		// Compile Blueprint synchronously to ensure preview actors are properly updated
+		FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(Blueprint);
 
 		FN2CLogger::Get().Log(FString::Printf(TEXT("RemoveFunctionEntryPin: Successfully removed pin '%s' from function '%s'"), 
 			*PinName, *FocusedGraph->GetName()), EN2CLogSeverity::Debug);

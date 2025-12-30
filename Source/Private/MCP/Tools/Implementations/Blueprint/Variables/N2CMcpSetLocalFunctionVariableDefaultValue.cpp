@@ -101,16 +101,15 @@ FMcpToolCallResult FN2CMcpSetLocalFunctionVariableDefaultValue::Execute(const TS
         // Update the function variable cache to ensure the default value is properly applied
         FunctionEntryNode->RefreshFunctionVariableCache();
         
-        // Mark the Blueprint as modified
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(FocusedBlueprint);
-        
-        // Compile the Blueprint to validate the new default value
-        int32 ErrorCount = 0;
+        // Compile Blueprint synchronously to ensure preview actors are properly updated
+        FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(FocusedBlueprint);
+
+        // Get compilation status (already compiled by MarkBlueprintAsModifiedAndCompile)
+        int32 ErrorCount = FocusedBlueprint->Status == BS_Error ? 1 : 0;
         int32 WarningCount = 0;
         float CompilationTime = 0.0f;
-        bool bCompileSuccess = FN2CMcpBlueprintUtils::CompileBlueprint(
-            FocusedBlueprint, true, ErrorCount, WarningCount, CompilationTime);
-        
+        bool bCompileSuccess = (ErrorCount == 0);
+
         // Build the result JSON
         TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
         

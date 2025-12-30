@@ -181,8 +181,8 @@ FMcpToolCallResult FN2CMcpDeleteBlueprintFunctionTool::Execute(const TSharedPtr<
 		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
 		FJsonSerializer::Serialize(Result.ToSharedRef(), Writer);
 
-        // Refresh BlueprintActionDatabase
-        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+        // Schedule deferred refresh of BlueprintActionDatabase
+        FN2CMcpBlueprintUtils::DeferredRefreshBlueprintActionDatabase();
         
 		return FMcpToolCallResult::CreateTextResult(JsonString);
 	});
@@ -363,8 +363,8 @@ bool FN2CMcpDeleteBlueprintFunctionTool::DeleteFunctionGraph(UBlueprint* Bluepri
 	// Remove the graph using FBlueprintEditorUtils
 	FBlueprintEditorUtils::RemoveGraph(Blueprint, FunctionGraph);
 	
-	// Mark Blueprint as needing recompilation
-	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+	// Compile Blueprint synchronously to ensure preview actors are properly updated
+	FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(Blueprint);
 	
 	return true;
 }

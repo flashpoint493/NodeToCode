@@ -168,7 +168,8 @@ FMcpToolCallResult FN2CMcpAddFunctionReturnPinTool::Execute(const TSharedPtr<FJs
 		if (Blueprint)
 		{
 			FN2CMcpFunctionPinUtils::UpdateFunctionCallSites(FocusedGraph, Blueprint);
-			FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+			// Compile Blueprint synchronously to ensure preview actors are properly updated
+			FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(Blueprint);
 		}
 
 		// Show notification

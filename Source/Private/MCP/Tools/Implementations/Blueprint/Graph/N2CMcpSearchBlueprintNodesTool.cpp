@@ -221,8 +221,8 @@ FMcpToolCallResult FN2CMcpSearchBlueprintNodesTool::Execute(const TSharedPtr<FJs
     
         FN2CLogger::Get().Log(FString::Printf(TEXT("Blueprint node search completed. Found %d results"), ResultCount), EN2CLogSeverity::Info);
 
-        // Refresh BlueprintActionDatabase
-        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+        // Schedule deferred refresh of BlueprintActionDatabase
+        FN2CMcpBlueprintUtils::DeferredRefreshBlueprintActionDatabase();
         
         return FMcpToolCallResult::CreateTextResult(ResultJsonString); // Return the result from the lambda
     });

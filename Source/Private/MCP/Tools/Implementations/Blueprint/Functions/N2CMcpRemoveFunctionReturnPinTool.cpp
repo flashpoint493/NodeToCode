@@ -102,8 +102,8 @@ FMcpToolCallResult FN2CMcpRemoveFunctionReturnPinTool::Execute(const TSharedPtr<
 		// Update all function call sites
 		FN2CMcpFunctionPinUtils::UpdateFunctionCallSites(FocusedGraph, Blueprint);
 
-		// Mark Blueprint as modified
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+		// Compile Blueprint synchronously to ensure preview actors are properly updated
+		FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(Blueprint);
 
 		// Show notification
 		FNotificationInfo Info(FText::Format(

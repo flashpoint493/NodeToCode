@@ -116,8 +116,8 @@ FMcpToolCallResult FN2CMcpCreateSetLocalFunctionVariableNode::Execute(const TSha
             }
         }
         
-        // Mark the Blueprint as modified
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(FocusedBlueprint);
+        // Compile Blueprint synchronously to ensure preview actors are properly updated
+        FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(FocusedBlueprint);
         
         // Build the result JSON
         TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);

@@ -268,8 +268,8 @@ FMcpToolCallResult FN2CMcpConnectPinsTool::Execute(const TSharedPtr<FJsonObject>
 		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
 		FJsonSerializer::Serialize(ResultJson.ToSharedRef(), Writer);
 
-        // Refresh BlueprintActionDatabase
-        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+        // Schedule deferred refresh of BlueprintActionDatabase
+        FN2CMcpBlueprintUtils::DeferredRefreshBlueprintActionDatabase();
         
 		return FMcpToolCallResult::CreateTextResult(JsonString);
 	});
@@ -632,7 +632,8 @@ FN2CMcpConnectPinsTool::FConnectionResult FN2CMcpConnectPinsTool::ProcessConnect
 	if (bConnectionMade)
 	{
 		Result.bSuccess = true;
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+		// Compile Blueprint synchronously to ensure preview actors are properly updated
+		FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(Blueprint);
 		
 		// Log success
 		FString LogMessage = FString::Printf(

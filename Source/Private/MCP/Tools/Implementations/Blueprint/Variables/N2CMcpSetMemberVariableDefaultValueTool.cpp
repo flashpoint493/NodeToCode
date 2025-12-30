@@ -142,8 +142,8 @@ FMcpToolCallResult FN2CMcpSetMemberVariableDefaultValueTool::Execute(const TShar
             EN2CLogSeverity::Info
         );
 
-        // Refresh BlueprintActionDatabase
-        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+        // Schedule deferred refresh of BlueprintActionDatabase
+        FN2CMcpBlueprintUtils::DeferredRefreshBlueprintActionDatabase();
         
         return FMcpToolCallResult::CreateTextResult(ResultString);
     });
@@ -264,8 +264,8 @@ bool FN2CMcpSetMemberVariableDefaultValueTool::ApplyDefaultValue(
     // Set the new default value
     VarDesc.DefaultValue = DefaultValue;
     
-    // Mark the Blueprint as modified
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+    // Compile Blueprint synchronously to ensure preview actors are properly updated
+    FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(Blueprint);
     
     // Refresh variables to ensure the change is applied
     FBlueprintEditorUtils::RefreshVariables(Blueprint);

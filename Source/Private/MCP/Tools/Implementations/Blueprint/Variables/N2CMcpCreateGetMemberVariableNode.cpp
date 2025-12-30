@@ -108,8 +108,8 @@ FMcpToolCallResult FN2CMcpCreateGetMemberVariableNode::Execute(const TSharedPtr<
             return FMcpToolCallResult::CreateErrorResult(TEXT("Failed to create Get node"));
         }
         
-        // Mark Blueprint as modified
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ActiveBlueprint);
+        // Compile Blueprint synchronously to ensure preview actors are properly updated
+        FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(ActiveBlueprint);
         
         // Show notification
         FNotificationInfo Info(FText::Format(
@@ -128,8 +128,8 @@ FMcpToolCallResult FN2CMcpCreateGetMemberVariableNode::Execute(const TSharedPtr<
         TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultJson);
         FJsonSerializer::Serialize(Result.ToSharedRef(), Writer);
 
-        // Refresh BlueprintActionDatabase
-        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+        // Schedule deferred refresh of BlueprintActionDatabase
+        FN2CMcpBlueprintUtils::DeferredRefreshBlueprintActionDatabase();
         
         return FMcpToolCallResult::CreateTextResult(ResultJson);
     });

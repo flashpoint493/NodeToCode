@@ -186,15 +186,14 @@ FMcpToolCallResult FN2CMcpDeleteComponentInActorTool::Execute(const TSharedPtr<F
             return FMcpToolCallResult::CreateErrorResult(ErrorMsg);
         }
 
-        // Mark Blueprint as modified
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        // Compile Blueprint synchronously to ensure preview actors are properly updated
+        FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(Blueprint);
 
-        // Compile the Blueprint
-        int32 ErrorCount = 0;
+        // Check compilation status
+        int32 ErrorCount = Blueprint->Status == BS_Error ? 1 : 0;
         int32 WarningCount = 0;
         float CompilationTime = 0.0f;
-        bool bCompileSuccess = FN2CMcpBlueprintUtils::CompileBlueprint(Blueprint, true, 
-            ErrorCount, WarningCount, CompilationTime);
+        bool bCompileSuccess = (ErrorCount == 0);
 
         // Add compilation status
         TSharedPtr<FJsonObject> CompilationStatus = MakeShareable(new FJsonObject);

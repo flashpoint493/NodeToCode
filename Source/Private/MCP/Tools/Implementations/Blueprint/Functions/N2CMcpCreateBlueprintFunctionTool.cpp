@@ -238,8 +238,8 @@ FMcpToolCallResult FN2CMcpCreateBlueprintFunctionTool::Execute(const TSharedPtr<
 		// Get or create function GUID
 		FGuid FunctionGuid = GetOrCreateFunctionGuid(FunctionGraph);
 		
-		// Mark Blueprint as modified
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(TargetBlueprint);
+		// Compile Blueprint synchronously to ensure preview actors are properly updated
+		FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(TargetBlueprint);
 		
 		// Open the function in the editor
 		OpenFunctionInEditor(TargetBlueprint, FunctionGraph);
@@ -260,8 +260,8 @@ FMcpToolCallResult FN2CMcpCreateBlueprintFunctionTool::Execute(const TSharedPtr<
 		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultString);
 		FJsonSerializer::Serialize(ResultJsonObj.ToSharedRef(), Writer); // Use ResultJsonObj
 
-        // Refresh BlueprintActionDatabase
-        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+        // Schedule deferred refresh of BlueprintActionDatabase
+        FN2CMcpBlueprintUtils::DeferredRefreshBlueprintActionDatabase();
         
 		return FMcpToolCallResult::CreateTextResult(ResultString);
 	});

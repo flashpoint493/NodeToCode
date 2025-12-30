@@ -14,6 +14,7 @@
 #include "BlueprintActionDatabase.h" // For FBlueprintActionDatabase
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/CompilerResultsLog.h"
+#include "Containers/Ticker.h" // For FTSTicker
 
 UBlueprint* FN2CMcpBlueprintUtils::ResolveBlueprint(const FString& OptionalBlueprintPath, FString& OutErrorMsg)
 {
@@ -178,6 +179,67 @@ void FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase()
     }
 }
 
+void FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(UBlueprint* Blueprint, bool bSkipGarbageCollection)
+{
+    if (!Blueprint)
+    {
+        FN2CLogger::Get().LogError(TEXT("FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile"),
+            TEXT("Cannot mark null Blueprint as modified"));
+        return;
+    }
+
+    // Compile Blueprint synchronously to ensure preview actors are properly updated
+    // Using FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified causes crashes because
+    // it queues deferred compilation, but Slate UI updates on the next frame try to access
+    // preview actors that are in an invalid "DEADCLASS" state
+    EBlueprintCompileOptions CompileOptions = bSkipGarbageCollection
+        ? EBlueprintCompileOptions::SkipGarbageCollection
+        : EBlueprintCompileOptions::None;
+
+    FKismetEditorUtilities::CompileBlueprint(Blueprint, CompileOptions);
+
+    FN2CLogger::Get().Log(
+        FString::Printf(TEXT("Blueprint '%s' marked as modified and compiled synchronously"), *Blueprint->GetName()),
+        EN2CLogSeverity::Debug
+    );
+}
+
+void FN2CMcpBlueprintUtils::DeferredRefreshBlueprintActionDatabase(int32 DelayFrames)
+{
+    // Use a shared counter to track remaining frames
+    TSharedRef<int32> RemainingFrames = MakeShared<int32>(FMath::Max(1, DelayFrames));
+
+    // Schedule the deferred refresh using a ticker
+    FTSTicker::GetCoreTicker().AddTicker(
+        FTickerDelegate::CreateLambda([RemainingFrames](float DeltaTime) -> bool
+        {
+            (*RemainingFrames)--;
+
+            if (*RemainingFrames <= 0)
+            {
+                // Time to refresh - ensure we're on the game thread
+                if (IsInGameThread())
+                {
+                    if (FBlueprintActionDatabase* ActionDB = FBlueprintActionDatabase::TryGet())
+                    {
+                        FN2CLogger::Get().Log(TEXT("Executing deferred BlueprintActionDatabase refresh."), EN2CLogSeverity::Debug);
+                        ActionDB->RefreshAll();
+                        FN2CLogger::Get().Log(TEXT("Deferred BlueprintActionDatabase refresh completed."), EN2CLogSeverity::Debug);
+                    }
+                }
+                return false; // Remove the ticker
+            }
+            return true; // Continue ticking
+        }),
+        0.0f // Tick every frame
+    );
+
+    FN2CLogger::Get().Log(
+        FString::Printf(TEXT("Scheduled deferred BlueprintActionDatabase refresh in %d frame(s)."), DelayFrames),
+        EN2CLogSeverity::Debug
+    );
+}
+
 bool FN2CMcpBlueprintUtils::CompileBlueprint(UBlueprint* Blueprint, bool bSkipGarbageCollection, 
     int32& OutErrorCount, int32& OutWarningCount, float& OutCompilationTime,
     TArray<TSharedPtr<FN2CCompilerMessage>>* OutMessages)
@@ -289,8 +351,8 @@ bool FN2CMcpBlueprintUtils::CompileBlueprint(UBlueprint* Blueprint, bool bSkipGa
         );
     }
     
-    // Refresh Blueprint action database after compilation
-    RefreshBlueprintActionDatabase();
+    // Schedule deferred refresh of Blueprint action database after compilation
+    DeferredRefreshBlueprintActionDatabase();
     
     // Return true if compilation succeeded (no errors), false if there were errors
     return bSuccess && (OutErrorCount == 0);

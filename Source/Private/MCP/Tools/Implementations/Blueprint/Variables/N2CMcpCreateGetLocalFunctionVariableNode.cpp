@@ -107,11 +107,11 @@ FMcpToolCallResult FN2CMcpCreateGetLocalFunctionVariableNode::Execute(const TSha
         // Reconstruct the node to create its pins and ensure proper setup
         GetNode->ReconstructNode();
         
-        // Mark the Blueprint as modified
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(FocusedBlueprint);
+        // Compile Blueprint synchronously to ensure preview actors are properly updated
+        FN2CMcpBlueprintUtils::MarkBlueprintAsModifiedAndCompile(FocusedBlueprint);
         
-        // Refresh BlueprintActionDatabase
-        FN2CMcpBlueprintUtils::RefreshBlueprintActionDatabase();
+        // Schedule deferred refresh of BlueprintActionDatabase
+        FN2CMcpBlueprintUtils::DeferredRefreshBlueprintActionDatabase();
         
         // Show notification
         FNotificationInfo Info(FText::Format(
