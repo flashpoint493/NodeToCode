@@ -297,6 +297,12 @@ void UN2CSettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyChanged
             ShowRestartEditorNotification();
         }
 
+        // Show restart notification when bEnablePythonScriptOnlyMode changes
+        if (PropertyName == GET_MEMBER_NAME_CHECKED(UN2CSettings, bEnablePythonScriptOnlyMode))
+        {
+            ShowRestartEditorNotification();
+        }
+
         // Check for both array changes and changes to FilePath within the struct                                                                                                                         
         const bool bIsFilePathChange = PropertyName == GET_MEMBER_NAME_CHECKED(FFilePath, FilePath);                                                                                              
         const bool bIsArrayChange = PropertyName == GET_MEMBER_NAME_CHECKED(UN2CSettings, ReferenceSourceFilePaths);

@@ -422,9 +422,32 @@ void FN2CMcpHttpServerManager::RegisterMcpTools()
 {
 	FN2CLogger::Get().Log(TEXT("Registering NodeToCode MCP tools"), EN2CLogSeverity::Info);
 
-	// Check the dynamic tool discovery setting
 	const UN2CSettings* Settings = GetDefault<UN2CSettings>();
-	if (Settings && Settings->bEnableDynamicToolDiscovery)
+
+	// Check Python script-only mode first (takes priority)
+	if (Settings && Settings->bEnablePythonScriptOnlyMode)
+	{
+		// Register only essential tools for Python script-only mode
+		TArray<FString> EssentialTools = {
+			TEXT("run-python"),
+			TEXT("translate-focused-blueprint"),
+			TEXT("get-available-llm-providers"),
+			TEXT("get-available-translation-targets"),
+			TEXT("get-translation-output-directory"),
+			// Script management tools
+			TEXT("list-python-scripts"),
+			TEXT("search-python-scripts"),
+			TEXT("get-python-script"),
+			TEXT("get-script-functions"),  // Token-efficient function signature discovery
+			TEXT("save-python-script"),
+			TEXT("delete-python-script")
+		};
+
+		FN2CMcpToolManager::Get().RegisterToolsByName(EssentialTools);
+		FN2CLogger::Get().Log(TEXT("Python script-only mode enabled - registered essential tools only"), EN2CLogSeverity::Info);
+	}
+	// Check the dynamic tool discovery setting
+	else if (Settings && Settings->bEnableDynamicToolDiscovery)
 	{
 		// Set the default toolset (only assess-needed-tools)
 		FN2CMcpToolManager::Get().SetDefaultToolSet();
@@ -436,7 +459,7 @@ void FN2CMcpHttpServerManager::RegisterMcpTools()
 		FN2CMcpToolManager::Get().RegisterAllToolsExceptAssess();
 		FN2CLogger::Get().Log(TEXT("Dynamic tool discovery disabled - registered all tools"), EN2CLogSeverity::Info);
 	}
-	
+
 	FN2CLogger::Get().Log(TEXT("MCP tools registered successfully"), EN2CLogSeverity::Info);
 }
 
@@ -536,16 +559,30 @@ void FN2CMcpHttpServerManager::RegisterMcpPrompts()
 	{
 		FN2CMcpRefactorPrompt TempPrompt;
 		FMcpPromptDefinition RefactorDef = TempPrompt.GetDefinition();
-		
+
 		auto Handler = FMcpPromptGetDelegate::CreateLambda([](const FMcpPromptArguments& Arguments) -> FMcpPromptResult
 		{
 			FN2CMcpRefactorPrompt Prompt;
 			return Prompt.GetPrompt(Arguments);
 		});
-		
+
 		FN2CMcpPromptManager::Get().RegisterPrompt(RefactorDef, Handler, true);
 	}
-	
+
+	// Register python-scripting prompt (Context7 + Script Management)
+	{
+		FN2CMcpPythonScriptingPrompt TempPrompt;
+		FMcpPromptDefinition PythonScriptingDef = TempPrompt.GetDefinition();
+
+		auto Handler = FMcpPromptGetDelegate::CreateLambda([](const FMcpPromptArguments& Arguments) -> FMcpPromptResult
+		{
+			FN2CMcpPythonScriptingPrompt Prompt;
+			return Prompt.GetPrompt(Arguments);
+		});
+
+		FN2CMcpPromptManager::Get().RegisterPrompt(PythonScriptingDef, Handler, false);
+	}
+
 	FN2CLogger::Get().Log(TEXT("MCP prompts registered successfully"), EN2CLogSeverity::Info);
 }
 

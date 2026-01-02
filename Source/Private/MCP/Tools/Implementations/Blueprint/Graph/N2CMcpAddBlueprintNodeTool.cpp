@@ -219,7 +219,7 @@ bool FN2CMcpAddBlueprintNodeTool::FindAndSpawnNode(
     
     for (int32 i = 0; i < MenuBuilder.GetNumActions(); ++i)
     {
-        FGraphActionListBuilderBase::ActionGroup& Action = MenuBuilder.GetAction(i);
+        FGraphActionListBuilderBase::ActionGroup Action = MenuBuilder.GetAction(i);
         const FString& ActionSearchText = Action.GetSearchTextForFirstAction();
         FString LowerSearchText = ActionSearchText.ToLower();
         
@@ -255,7 +255,7 @@ bool FN2CMcpAddBlueprintNodeTool::FindAndSpawnNode(
     
     for (int32 Index : MatchingActionIndices)
     {
-        FGraphActionListBuilderBase::ActionGroup& Action = MenuBuilder.GetAction(Index);
+        FGraphActionListBuilderBase::ActionGroup Action = MenuBuilder.GetAction(Index);
         FString CurrentActionId = Action.GetSearchTextForFirstAction();
         
         // Compare using the converted identifier
@@ -274,8 +274,8 @@ bool FN2CMcpAddBlueprintNodeTool::FindAndSpawnNode(
     }
     
     // Get the matching action
-    FGraphActionListBuilderBase::ActionGroup& MatchedAction = MenuBuilder.GetAction(ExactMatchIndex);
-    
+    FGraphActionListBuilderBase::ActionGroup MatchedAction = MenuBuilder.GetAction(ExactMatchIndex);
+
     if (MatchedAction.Actions.Num() == 0)
     {
         OutError = TEXT("Matched action has no executable actions");

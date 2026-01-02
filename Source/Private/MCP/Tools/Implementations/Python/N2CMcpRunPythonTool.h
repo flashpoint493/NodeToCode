@@ -1,0 +1,51 @@
+// Copyright (c) 2025 Nick McClure (Protospatial). All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "MCP/Tools/N2CMcpToolBase.h"
+
+/**
+ * MCP tool for executing Python scripts in Unreal Engine's Python environment.
+ *
+ * This tool provides access to the nodetocode Python module for Blueprint manipulation.
+ * Scripts can set a 'result' variable to return structured data to the caller.
+ *
+ * Example usage:
+ *   import nodetocode as n2c
+ *   bp = n2c.get_focused_blueprint()
+ *   result = {"blueprint": bp}
+ */
+class FN2CMcpRunPythonTool : public FN2CMcpToolBase
+{
+public:
+	virtual FMcpToolDefinition GetDefinition() const override;
+	virtual FMcpToolCallResult Execute(const TSharedPtr<FJsonObject>& Arguments) override;
+
+	// Python execution needs Game Thread for UE API access
+	virtual bool RequiresGameThread() const override { return true; }
+
+private:
+	/**
+	 * Wraps user script with result capture boilerplate.
+	 * Captures 'result' variable and stdout for return to caller.
+	 * @param UserScript The raw Python code to execute
+	 * @return Wrapped script with JSON result capture
+	 */
+	FString WrapScriptWithResultCapture(const FString& UserScript) const;
+
+	/**
+	 * Extracts the JSON result from captured stdout.
+	 * Looks for the __n2c_marker__ pattern to find our result JSON.
+	 * @param CapturedOutput The full stdout from Python execution
+	 * @param OutResultJson The extracted JSON result object
+	 * @return true if JSON was successfully extracted and parsed
+	 */
+	bool ExtractResultFromOutput(const FString& CapturedOutput, TSharedPtr<FJsonObject>& OutResultJson) const;
+
+	/** Default timeout in seconds for Python execution */
+	static constexpr float DefaultTimeoutSeconds = 60.0f;
+
+	/** Maximum allowed timeout in seconds */
+	static constexpr float MaxTimeoutSeconds = 300.0f;
+};

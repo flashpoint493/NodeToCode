@@ -73,6 +73,13 @@ public:
 	/** Register all available tools except assess-needed-tools */
 	void RegisterAllToolsExceptAssess();
 
+	/**
+	 * Register only specific tools by name (for Python script-only mode).
+	 * This clears existing tools and registers only the specified ones.
+	 * @param ToolNames Array of tool names to register
+	 */
+	void RegisterToolsByName(const TArray<FString>& ToolNames);
+
 	/** Clear all registered tools */
 	void ClearAllTools();
 

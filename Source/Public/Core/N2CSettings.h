@@ -502,14 +502,24 @@ public:
         meta=(DisplayName="Server Port", ClampMin="1024", ClampMax="65535", UIMin="1024", UIMax="65535"))
     int32 McpServerPort = 27000;
     
-    /** Enable dynamic tool discovery for MCP server. When enabled, only assess-needed-tools will be available initially. 
-     * This feature requires MCP clients that support discovery (e.g., VSCode, Cline). 
+    /** Enable dynamic tool discovery for MCP server. When enabled, only assess-needed-tools will be available initially.
+     * This feature requires MCP clients that support discovery (e.g., VSCode, Cline).
      * Note: Changing this setting requires an editor restart to take effect. */
     UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Node to Code | MCP Server",
-        meta=(DisplayName="Enable Dynamic Tool Discovery", 
+        meta=(DisplayName="Enable Dynamic Tool Discovery",
               ToolTip="Enable dynamic tool discovery for MCP server. When enabled, only assess-needed-tools will be available initially. This feature requires MCP clients that support discovery (e.g., VSCode, Cline). Note: Changing this setting requires an editor restart to take effect."))
     bool bEnableDynamicToolDiscovery = false;
-    
+
+    /** Enable Python script-only mode. When enabled, most C++ MCP tools are disabled
+     * and LLMs use Python scripts via run-python instead. Only essential tools remain:
+     * run-python, translate-focused-blueprint, get-available-llm-providers,
+     * get-available-translation-targets, get-translation-output-directory, and script management tools.
+     * Note: Changing this setting requires an editor restart to take effect. */
+    UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Node to Code | MCP Server",
+        meta=(DisplayName="Enable Python Script-Only Mode",
+              ToolTip="When enabled, most C++ tools are disabled. LLMs use Python scripts via run-python instead. Essential tools remain: run-python, translate-focused-blueprint, get-available-llm-providers. Requires editor restart."))
+    bool bEnablePythonScriptOnlyMode = false;
+
     /** Get the API key for the selected provider */
     FString GetActiveApiKey() const;
 

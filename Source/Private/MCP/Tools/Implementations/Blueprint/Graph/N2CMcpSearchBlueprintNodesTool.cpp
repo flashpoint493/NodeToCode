@@ -185,7 +185,7 @@ FMcpToolCallResult FN2CMcpSearchBlueprintNodesTool::Execute(const TSharedPtr<FJs
     
         for (int32 i = 0; i < MenuBuilder.GetNumActions() && ResultCount < MaxResults; ++i)
         {
-            FGraphActionListBuilderBase::ActionGroup& Action = MenuBuilder.GetAction(i);
+            FGraphActionListBuilderBase::ActionGroup Action = MenuBuilder.GetAction(i);
             const FString& ActionSearchText = Action.GetSearchTextForFirstAction();
             FString LowerSearchText = ActionSearchText.ToLower();
         

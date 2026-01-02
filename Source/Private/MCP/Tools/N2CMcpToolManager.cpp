@@ -167,8 +167,42 @@ void FN2CMcpToolManager::RegisterAllToolsExceptAssess()
 			RegisterTool(Tool);
 		}
 	}
-	
+
 	FN2CLogger::Get().Log(FString::Printf(TEXT("Registered all tools except assess-needed-tools. Total tools: %d"), RegisteredTools.Num()), EN2CLogSeverity::Info);
+}
+
+void FN2CMcpToolManager::RegisterToolsByName(const TArray<FString>& ToolNames)
+{
+	FScopeLock Lock(&ToolsLock);
+
+	RegisteredTools.Empty();
+	const auto& AllTools = FN2CMcpToolRegistry::Get().GetTools();
+
+	int32 RegisteredCount = 0;
+	for (const auto& Tool : AllTools)
+	{
+		if (Tool.IsValid())
+		{
+			const FString& ToolName = Tool->GetDefinition().Name;
+			if (ToolNames.Contains(ToolName))
+			{
+				RegisterTool(Tool);
+				RegisteredCount++;
+			}
+		}
+	}
+
+	FN2CLogger::Get().Log(FString::Printf(TEXT("Registered %d/%d requested tools for Python script-only mode"),
+		RegisteredCount, ToolNames.Num()), EN2CLogSeverity::Info);
+
+	// Log any tools that weren't found
+	for (const FString& RequestedName : ToolNames)
+	{
+		if (!RegisteredTools.Contains(RequestedName))
+		{
+			FN2CLogger::Get().LogWarning(FString::Printf(TEXT("Requested tool '%s' not found in registry"), *RequestedName));
+		}
+	}
 }
 
 void FN2CMcpToolManager::ClearAllTools()

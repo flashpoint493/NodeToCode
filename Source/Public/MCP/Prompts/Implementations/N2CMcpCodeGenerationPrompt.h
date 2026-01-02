@@ -89,15 +89,28 @@ protected:
 		{
 			return Function();
 		}
-		
+
 		TPromise<ResultType> Promise;
 		TFuture<ResultType> Future = Promise.GetFuture();
-		
+
 		AsyncTask(ENamedThreads::GameThread, [Function = MoveTemp(Function), Promise = MoveTemp(Promise)]() mutable
 		{
 			Promise.SetValue(Function());
 		});
-		
+
 		return Future.Get();
 	}
+};
+
+/**
+ * MCP Prompt for writing Unreal Engine Python scripts with Context7 documentation lookup.
+ * Enforces usage of Context7 MCP to look up the unreal-python-stubhub library documentation
+ * and ensures proper usage of the script management tools for saving/reusing scripts.
+ */
+class NODETOCODE_API FN2CMcpPythonScriptingPrompt : public IN2CMcpPrompt
+{
+public:
+	virtual FMcpPromptDefinition GetDefinition() const override;
+	virtual FMcpPromptResult GetPrompt(const FMcpPromptArguments& Arguments) override;
+	virtual bool RequiresGameThread() const override { return false; }
 };

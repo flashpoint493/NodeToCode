@@ -53,7 +53,9 @@ public class NodeToCode : ModuleRules
 				"EditorWidgets",          // For editor widgets
 				"AssetRegistry",          // For asset path resolution
 				"ContentBrowserData",     // For content browser data subsystem
-				"DesktopPlatform"         // For folder browser dialog in Tag Manager
+				"DesktopPlatform",        // For folder browser dialog in Tag Manager
+				"PythonScriptPlugin",     // For Python script execution in Code Mode
+				"EditorScriptingUtilities" // For EditorAssetLibrary in Python bridge
 			}
 		);
 
