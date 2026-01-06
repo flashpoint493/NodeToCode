@@ -1,9 +1,80 @@
 {
   "version": "1.0",
-  "scripts": {},
-  "categories": ["general"],
+  "scripts": {
+    "asset_iterator": {
+      "path": "core/asset_iterator.py",
+      "description": "Find and iterate over assets by type, path, or filter criteria",
+      "tags": ["assets", "discovery", "search", "iteration", "core"],
+      "category": "core",
+      "parameters": []
+    },
+    "blueprint_factory": {
+      "path": "core/blueprint_factory.py",
+      "description": "Create Blueprints from any parent class with proper setup",
+      "tags": ["blueprint", "creation", "factory", "core"],
+      "category": "core",
+      "parameters": []
+    },
+    "variable_batch_creator": {
+      "path": "core/variable_batch_creator.py",
+      "description": "Add multiple member variables to Blueprints with type support",
+      "tags": ["blueprint", "variables", "batch", "types", "core"],
+      "category": "core",
+      "parameters": []
+    },
+    "function_scaffolder": {
+      "path": "core/function_scaffolder.py",
+      "description": "Add function graphs to Blueprints with configuration options",
+      "tags": ["blueprint", "functions", "graphs", "scaffolding", "core"],
+      "category": "core",
+      "parameters": []
+    },
+    "component_adder": {
+      "path": "core/component_adder.py",
+      "description": "Add and manage components in Actor Blueprints",
+      "tags": ["blueprint", "components", "actors", "core"],
+      "category": "core",
+      "parameters": []
+    },
+    "project_folder_scaffold": {
+      "path": "utilities/project_folder_scaffold.py",
+      "description": "Create standardized project folder structures from templates",
+      "tags": ["folders", "organization", "templates", "utilities"],
+      "category": "utilities",
+      "parameters": []
+    },
+    "asset_duplicator": {
+      "path": "utilities/asset_duplicator.py",
+      "description": "Clone and duplicate assets with renaming and batch support",
+      "tags": ["assets", "duplication", "cloning", "batch", "utilities"],
+      "category": "utilities",
+      "parameters": []
+    },
+    "asset_validator": {
+      "path": "utilities/asset_validator.py",
+      "description": "Validate assets against naming conventions and compilation rules",
+      "tags": ["validation", "naming", "conventions", "blueprints", "utilities"],
+      "category": "utilities",
+      "parameters": []
+    },
+    "datatable_populator": {
+      "path": "data/datatable_populator.py",
+      "description": "Populate and export DataTables from JSON and CSV data",
+      "tags": ["datatables", "json", "csv", "data", "import", "export"],
+      "category": "data",
+      "parameters": []
+    },
+    "utility_widget_launcher": {
+      "path": "ui/utility_widget_launcher.py",
+      "description": "Launch and manage Editor Utility Widgets programmatically",
+      "tags": ["ui", "widgets", "editor", "tools", "euw"],
+      "category": "ui",
+      "parameters": []
+    }
+  },
+  "categories": ["core", "utilities", "data", "ui"],
   "stats": {
-    "total_scripts": 0,
-    "last_updated": "2025-01-01T00:00:00Z"
+    "total_scripts": 10,
+    "last_updated": "2026-01-06T00:00:00Z"
   }
 }
