@@ -471,7 +471,7 @@ curl -X POST http://localhost:27000/mcp \
 #### Related Projects
 
 *   **NodeToCode MCP Bridge**: Python stdio-to-HTTP bridge for MCP clients
-    *   Location: `Plugins/NodeToCode/nodetocode_bridge.py`
+    *   Location: `Content/Python/mcp_bridge/nodetocode_bridge.py`
     *   Enables Claude for Desktop and other MCP client integration
     *   Handles protocol translation and session management
 
@@ -479,7 +479,7 @@ curl -X POST http://localhost:27000/mcp \
 
 The NodeToCode MCP Bridge is a Python script that bridges MCP clients with the NodeToCode plugin's HTTP server:
 
-*   **Location**: `Plugins/NodeToCode/nodetocode_bridge.py`
+*   **Location**: `Content/Python/mcp_bridge/nodetocode_bridge.py`
 *   **Purpose**: Stdio-to-HTTP bridge for MCP protocol
 *   **Key Features**:
     *   Reads JSON-RPC messages from stdin (from MCP clients like Claude)
