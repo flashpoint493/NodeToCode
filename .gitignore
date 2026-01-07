@@ -95,7 +95,8 @@ __pycache__/
 /Config
 /Development
 .aider*
-CLAUDE.md
+# Agent instructions (CLAUDE.md is local-only, AGENTS.md is tracked)
+**/CLAUDE.md
 /.claude
 /.idea
 .mcp.json
