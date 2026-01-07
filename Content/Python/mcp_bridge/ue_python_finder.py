@@ -1,4 +1,4 @@
-"""
+r"""
 UE Python Finder
 
 Finds Unreal Engine's bundled Python installation using the same methods
@@ -154,6 +154,68 @@ def get_python_path_for_ue_install(install_path: str, debug: bool = False) -> Op
         return python_path
 
     log_debug(f"Python not found at: {python_path}", debug)
+    return None
+
+
+def get_source_path_for_ue_install(install_path: str, debug: bool = False) -> Optional[str]:
+    """
+    Get the Engine/Source path for a given UE installation.
+    """
+    source_path = os.path.join(install_path, 'Engine', 'Source')
+    if os.path.isdir(source_path):
+        log_debug(f"Found Source at: {source_path}", debug)
+        return source_path
+
+    log_debug(f"Source not found at: {source_path}", debug)
+    return None
+
+
+def find_ue_source(prefer_newest: bool = True, debug: bool = False) -> Optional[str]:
+    """
+    Find UE Engine/Source path.
+
+    Args:
+        prefer_newest: If True, prefer the newest UE version. If False, prefer oldest.
+        debug: Enable debug logging.
+
+    Returns:
+        Path to Engine/Source directory, or None if not found.
+    """
+    all_installations = []
+
+    # Gather installations from all sources
+    all_installations.extend(get_ue_installs_from_registry(debug))
+    all_installations.extend(get_ue_installs_from_launcher(debug))
+
+    # Remove duplicates (by install path)
+    seen_paths = set()
+    unique_installations = []
+    for version, path in all_installations:
+        normalized_path = os.path.normpath(path).lower()
+        if normalized_path not in seen_paths:
+            seen_paths.add(normalized_path)
+            unique_installations.append((version, path))
+
+    if not unique_installations:
+        log_debug("No UE installations found via registry or launcher", debug)
+        return None
+
+    # Sort by version
+    unique_installations.sort(
+        key=lambda x: parse_ue_version(x[0]),
+        reverse=prefer_newest
+    )
+
+    log_debug(f"Found {len(unique_installations)} UE installation(s)", debug)
+
+    # Find first installation with valid Source directory
+    for version, install_path in unique_installations:
+        source_path = get_source_path_for_ue_install(install_path, debug)
+        if source_path:
+            log_debug(f"Selected: {version} ({install_path})", debug)
+            return source_path
+
+    log_debug("No UE installation has valid Source directory", debug)
     return None
 
 

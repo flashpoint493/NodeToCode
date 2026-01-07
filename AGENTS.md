@@ -1,23 +1,22 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents when working with code in this repository.
 
 # NodeToCode Unreal Engine 5 Plugin: Development Guide
 
 # CRITICAL - START
 
-## @Development/Organization/notion-overview.md
-
-This document acts as the central overview of the Protospatial Notion workspace which will be the ever-evolving planning/organization/documentation area for both you and myself to make sure that we're always keeping track of tasks, objectives, and goals.
-Always refer to the notion overview document at the beginning of a conversation so that you understand its structure, purpose, and how to navigate Notion workspace using the notionApi tool.
-
 ## Understanding NodeToCode's MCP Server Tools
 
-@Source/Private/MCP/Tools/README.md
+@Source/Private/MCP/Tools/AGENTS.md
 
 ## Unreal Engine Source Path
 
-G:\UE\UE_5.4\Engine\Source : This is where source files for Unreal Engine 5 can be found and searched through for research purposes. NEVER try to modify files here.
+Run `Content/Scripts/detect-ue-path.sh` (Mac/Linux) or `Content\Scripts\detect-ue-path.bat` (Windows) to detect your UE installation and update this file.
+
+UE_SOURCE_PATH: <!-- RUN DETECT SCRIPT TO POPULATE -->
+
+This is where source files for Unreal Engine 5 can be found and searched through for research purposes. NEVER try to modify files here.
 
 ## TESTING COMPILATION
 
@@ -457,7 +456,7 @@ curl -X POST http://localhost:27000/mcp \
 
 #### Implementation Documentation
 
-*   **Tool Development Guide**: `Source/Private/MCP/Tools/README.md`
+*   **Tool Development Guide**: `Source/Private/MCP/Tools/AGENTS.md`
     *   Creating new tools with step-by-step instructions
     *   Helper function reference
     *   Best practices for Game Thread handling
