@@ -705,15 +705,27 @@ void FN2CNodeTranslator::ProcessNodePins(UK2Node* Node, FN2CNodeDefinition& OutN
 
         FN2CPinDefinition PinDef;
         
-        // Generate and map pin ID (using local counter for this node)
-        FString PinID = GeneratePinID(OutNodeDef.InputPins.Num() + OutNodeDef.OutputPins.Num());
-        PinIDMap.Add(Pin->PinId, PinID);
+        // Check if this pin has already been mapped (to avoid duplicate IDs)
+        FString* ExistingPinID = PinIDMap.Find(Pin->PinId);
+        FString PinID;
+        if (ExistingPinID)
+        {
+            // Reuse existing pin ID to avoid duplicates
+            PinID = *ExistingPinID;
+            FN2CLogger::Get().Log(FString::Printf(TEXT("ProcessNodePins: Reusing existing Pin ID %s for Pin GUID %s (Pin Name: %s, Node: %s)"), 
+                *PinID, *Pin->PinId.ToString(), *Pin->GetDisplayName().ToString(), 
+                *Node->GetNodeTitle(ENodeTitleType::ListView).ToString()), EN2CLogSeverity::Debug);
+        }
+        else
+        {
+            // Generate and map new pin ID
+            PinID = GeneratePinID(OutNodeDef.InputPins.Num() + OutNodeDef.OutputPins.Num());
+            PinIDMap.Add(Pin->PinId, PinID);
+            FN2CLogger::Get().Log(FString::Printf(TEXT("ProcessNodePins: Mapped Pin GUID %s to ID %s (Pin Name: %s, Node: %s)"), 
+                *Pin->PinId.ToString(), *PinID, *Pin->GetDisplayName().ToString(), 
+                *Node->GetNodeTitle(ENodeTitleType::ListView).ToString()), EN2CLogSeverity::Debug);
+        }
         PinDef.ID = PinID;
-        
-        // Debug logging for pin mapping
-        FN2CLogger::Get().Log(FString::Printf(TEXT("ProcessNodePins: Mapped Pin GUID %s to ID %s (Pin Name: %s, Node: %s)"), 
-            *Pin->PinId.ToString(), *PinID, *Pin->GetDisplayName().ToString(), 
-            *Node->GetNodeTitle(ENodeTitleType::ListView).ToString()), EN2CLogSeverity::Debug);
         
         // Set pin name
         PinDef.Name = Pin->GetDisplayName().ToString();

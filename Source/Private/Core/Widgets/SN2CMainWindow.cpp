@@ -438,6 +438,17 @@ void SN2CMainWindow::TranslateSingleGraph(const FN2CTagInfo& Graph)
 	UN2CLLMModule* LLMModule = UN2CLLMModule::Get();
 	if (LLMModule)
 	{
+		// Initialize LLM module if not already initialized
+		if (!LLMModule->IsInitialized())
+		{
+			if (!LLMModule->Initialize())
+			{
+				FN2CLogger::Get().LogError(TEXT("Failed to initialize LLM Module for single graph translation"));
+				bIsSingleTranslationInProgress = false;
+				return;
+			}
+		}
+
 		// Store weak reference for safe lambda capture
 		TWeakPtr<SN2CMainWindow> WeakSelf = SharedThis(this);
 
@@ -449,6 +460,11 @@ void SN2CMainWindow::TranslateSingleGraph(const FN2CTagInfo& Graph)
 				// The actual handling is done through that delegate if we need it
 			}
 		));
+	}
+	else
+	{
+		FN2CLogger::Get().LogError(TEXT("LLM Module not available for single graph translation"));
+		bIsSingleTranslationInProgress = false;
 	}
 }
 

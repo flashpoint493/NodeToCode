@@ -222,16 +222,11 @@ TSharedPtr<FJsonObject> FN2CSerializer::PinToJsonObject(const FN2CPinDefinition&
 {
     TSharedPtr<FJsonObject> JsonObject = MakeShared<FJsonObject>();
 
-    // Required fields
+    // Required fields - always include type field for proper deserialization
     JsonObject->SetStringField(TEXT("id"), Pin.ID);
     JsonObject->SetStringField(TEXT("name"), Pin.Name);
-    
-    // Only add type if not Exec
-    if (Pin.Type != EN2CPinType::Exec)
-    {
-        JsonObject->SetStringField(TEXT("type"), 
-            StaticEnum<EN2CPinType>()->GetNameStringByValue(static_cast<int64>(Pin.Type)));
-    }
+    JsonObject->SetStringField(TEXT("type"), 
+        StaticEnum<EN2CPinType>()->GetNameStringByValue(static_cast<int64>(Pin.Type)));
     
     // Optional fields - only add if non-empty
     if (!Pin.SubType.IsEmpty())
