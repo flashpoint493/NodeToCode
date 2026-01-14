@@ -4,6 +4,7 @@
 #include "MCP/Utils/N2CMcpArgumentParser.h"
 #include "MCP/Utils/N2CMcpTypeResolver.h"
 #include "MCP/Utils/N2CMcpFunctionPinUtils.h"
+#include "MCP/Utils/N2CMcpBlueprintUtils.h"
 #include "MCP/Tools/N2CMcpToolRegistry.h"
 #include "MCP/Tools/N2CMcpToolTypes.h"
 #include "Core/N2CEditorIntegration.h"
